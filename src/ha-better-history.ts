@@ -15,8 +15,14 @@ import {
 } from "./render/chart.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
-import type { HistorySeries } from "./data/history.js";
-import type { HomeAssistant } from "./types/ha.js";
+import type { HistorySeries, HistorySource } from "./data/history.js";
+import type { HassEntity, HomeAssistant } from "./types/ha.js";
+import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
+import {
+  preloadEntityPickerComponents,
+  entityPickerAvailable,
+  renderEntityPicker
+} from "./ui/entity-picker.js";
 
 interface ChartRenderCache {
   seriesRef: HistorySeries[];
@@ -45,12 +51,115 @@ export class HaBetterHistory extends LitElement {
 
   @state() private _resolved?: ResolvedConfig;
   @state() private _hiddenSeriesIds: string[] = [];
+  @state() private _rangeStart?: Date;
+  @state() private _rangeEnd?: Date;
+  @state() private _datePickerReady = false;
+  @state() private _entityComponentsReady = false;
+
+  @state() private _attributeMenuOpen = false;
+  @state() private _selectedEntityId?: string;
+  @state() private _path: string[] = [];
+  @state() private _selectedSources: HistorySource[] = [];
+  @state() private _customEntityIds: string[] = [];
+  @state() private _customEntityInput = "";
+  @state() private _entityPickerOpen = false;
+  private _isMouseOutsideEntityPicker = false;
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
   private _chartRenderCache?: ChartRenderCache;
 
+  connectedCallback(): void {
+    super.connectedCallback();
+
+    document.addEventListener("click", this._handleDocumentClick);
+
+    if (this.showDatePicker) {
+      preloadDatePicker().then(() => {
+        this._datePickerReady = datePickerAvailable();
+        this.requestUpdate();
+      });
+    }
+
+    if (this.showEntityPicker) {
+      preloadEntityPickerComponents().then(() => {
+        this._entityComponentsReady = entityPickerAvailable();
+        this.requestUpdate();
+      });
+    }
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    document.removeEventListener("click", this._handleDocumentClick);
+  }
+
+  private _effectiveStartDate(): Date {
+    return this._rangeStart ?? this.startDate ?? this.config?.startDate ?? new Date(Date.now() - (this.config?.hours ?? this.hours ?? 24) * 3600000);
+  }
+
+  private _effectiveEndDate(): Date {
+    return this._rangeEnd ?? this.endDate ?? this.config?.endDate ?? new Date();
+  }
+
+  private _pickerEntities(): HassEntity[] {
+    if (!this.hass) return [];
+
+    const configEntityIds = this.config?.defaultEntities ?? [];
+
+    return [...configEntityIds, ...this._customEntityIds]
+      .filter((entityId) => typeof entityId === "string" && entityId !== "")
+      .filter((entityId, index, entityIds) => entityIds.indexOf(entityId) === index)
+      .map((entityId) => this.hass?.states[entityId])
+      .filter((entity): entity is HassEntity => entity !== undefined);
+  }
+
+  private _fetchSources(): HistorySource[] {
+    const sources: HistorySource[] = [];
+    const seen = new Set<string>();
+
+    if (this._resolved) {
+      for (const s of this._resolved.series) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          sources.push(resolvedSeriesToSource(s));
+        }
+      }
+    }
+
+    for (const s of this._selectedSources) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        sources.push(s);
+      }
+    }
+
+    return sources;
+  }
+
+  private _isDefaultSource(source: HistorySource): boolean {
+    return (this._resolved?.series ?? []).some((s) => s.id === source.id);
+  }
+
   protected willUpdate(changed: PropertyValues): void {
+    if (changed.has("showDatePicker") && this.showDatePicker && !this._datePickerReady) {
+      preloadDatePicker().then(() => {
+        this._datePickerReady = datePickerAvailable();
+        this.requestUpdate();
+      });
+    }
+
+    if (changed.has("showEntityPicker") && this.showEntityPicker && !this._entityComponentsReady) {
+      preloadEntityPickerComponents().then(() => {
+        this._entityComponentsReady = entityPickerAvailable();
+        this.requestUpdate();
+      });
+    }
+
+    if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
+      this._positionEntityMenu();
+    }
+
     const watch = ["hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
 
     if (watch.some((p) => changed.has(p))) {
@@ -58,8 +167,8 @@ export class HaBetterHistory extends LitElement {
         config: this.config,
         entities: this.entities,
         hours: this.hours,
-        startDate: this.startDate,
-        endDate: this.endDate,
+        startDate: this._effectiveStartDate(),
+        endDate: this._effectiveEndDate(),
         showDatePicker: this.showDatePicker,
         showEntityPicker: this.showEntityPicker,
         showLegend: this.showLegend,
@@ -72,11 +181,26 @@ export class HaBetterHistory extends LitElement {
 
       this._data.fetch(
         this.hass,
-        this._resolved.series.map(resolvedSeriesToSource),
+        this._fetchSources(),
         this._resolved.startDate,
         this._resolved.endDate
       );
     }
+  }
+
+  private _onDateRangeChanged(startDate: Date, endDate: Date): void {
+    this._rangeStart = startDate;
+    this._rangeEnd = endDate;
+
+    this.dispatchEvent(
+      new CustomEvent("range-changed", {
+        detail: { startDate, endDate },
+        bubbles: true,
+        composed: true
+      })
+    );
+
+    void this.requestUpdate();
   }
 
   private _buildRenderSeries(): RenderableSeries[] {
@@ -122,7 +246,7 @@ export class HaBetterHistory extends LitElement {
     const all = this._buildRenderSeries();
     const visible = all.filter((s) => !this._hiddenSeriesIds.includes(s.id));
     const timeBounds = { start: startTime, end: Math.max(endTime, startTime + 1) };
-    const data = buildChartData(visible, timeBounds);
+    const data = buildChartData(visible, timeBounds, this._resolved?.disableClimateOverlay ?? false);
 
     this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, data };
 
@@ -199,6 +323,16 @@ export class HaBetterHistory extends LitElement {
     );
   }
 
+  private _renderDatePicker(): TemplateResult | typeof nothing {
+    if (!this._resolved?.showDatePicker || !this._datePickerReady) return nothing;
+
+    return renderDatePicker(
+      this._resolved.startDate,
+      this._resolved.endDate,
+      (startDate, endDate) => this._onDateRangeChanged(startDate, endDate)
+    );
+  }
+
   private _renderChart(): TemplateResult {
     const lang = this._resolved?.language;
 
@@ -242,6 +376,9 @@ export class HaBetterHistory extends LitElement {
                 <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${chartData.plotBottom}></line>
                 <line class="axis" x1=${PLOT_LEFT} y1=${chartData.plotBottom} x2=${PLOT_RIGHT} y2=${chartData.plotBottom}></line>
                 ${this._renderScaleLabels(chartData)}
+                ${chartData.heatingAreas.map(
+                  (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
+                )}
                 ${chartData.numericLines.map(
                   (line) => svg`<polyline class="line" points=${line.points} stroke=${line.color}></polyline>`
                 )}
@@ -264,9 +401,165 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
+  private _renderEntityPickerUI(): TemplateResult | typeof nothing {
+    if (!this._resolved?.showEntityPicker || !this._entityComponentsReady) return nothing;
+
+    return renderEntityPicker({
+      hass: this.hass,
+      language: this.language,
+      menuOpen: this._attributeMenuOpen,
+      entityPickerOpen: this._entityPickerOpen,
+      selectedEntityId: this._selectedEntityId,
+      path: this._path,
+      selectedSources: this._selectedSources,
+      resolved: this._resolved,
+      entities: this._pickerEntities(),
+      customEntityInput: this._customEntityInput,
+      positionMenu: () => this._positionEntityMenu(),
+      onToggleMenu: () => this._toggleAttributeMenu(),
+      onSelectEntity: (entityId) => this._selectEntity(entityId),
+      onEntityPickerChanged: (entityId) => this._onEntityPickerChanged(entityId),
+      onEntityPickerOpened: () => this._onEntityPickerOpened(),
+      onEntityPickerClosed: () => this._onEntityPickerClosed(),
+      onEntityPickerFocusOut: () => this._onEntityPickerFocusOut(),
+      onSourceAdded: (source) => this._addSource(source),
+      onSourceRemoved: (sourceId) => this._removeSource(sourceId),
+      onBreadcrumbClick: (path) => { this._path = path; },
+      onCloseMenu: () => this._closeAttributeMenu(),
+    });
+  }
+
   render(): TemplateResult {
     const width = this._resolved?.width ?? "100%";
 
-    return html`<div style="width:${width};position:relative;">${this._renderChart()}</div>`;
+    return html`
+      <div style="width:${width};position:relative;">
+        ${this._renderDatePicker()}
+        ${this._renderEntityPickerUI()}
+        ${this._renderChart()}
+      </div>
+    `;
+  }
+
+  private _positionEntityMenu(): void {
+    const trigger = this.renderRoot?.querySelector(".entity-trigger") as HTMLElement | null;
+    const menu = this.renderRoot?.querySelector(".entity-menu") as HTMLElement | null;
+    if (!trigger || !menu) return;
+
+    menu.style.top = "0";
+    menu.style.left = "0";
+    menu.style.right = "";
+    menu.style.width = "";
+    const originRect = menu.getBoundingClientRect();
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const host = this.renderRoot?.firstElementChild as HTMLElement | null;
+    const bottomLimit = (host?.getBoundingClientRect().bottom ?? window.innerHeight) - 8;
+    const available = bottomLimit - triggerRect.bottom - 8;
+
+    menu.style.maxHeight = `${Math.min(Math.max(available, 120), 420)}px`;
+    menu.style.top = `${triggerRect.bottom - originRect.top + 6}px`;
+
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      menu.style.left = `${triggerRect.left - originRect.left}px`;
+    } else {
+      menu.style.left = `${16 - originRect.left}px`;
+      menu.style.width = "calc(100vw - 32px)";
+    }
+  }
+
+  private _toggleAttributeMenu(): void {
+    this._attributeMenuOpen = !this._attributeMenuOpen;
+  }
+
+  private _closeAttributeMenu(): void {
+    this._attributeMenuOpen = false;
+    this._isMouseOutsideEntityPicker = false;
+    this._entityPickerOpen = false;
+  }
+
+  private _selectEntity(entityId: string): void {
+    this._selectedEntityId = entityId;
+    this._path = [];
+    this._attributeMenuOpen = true;
+  }
+
+  private _onEntityPickerChanged(entityId: string): void {
+    const knownIds = new Set(this._pickerEntities().map((entity) => entity.entity_id));
+
+    if (!knownIds.has(entityId)) {
+      this._customEntityIds = [...this._customEntityIds, entityId];
+    }
+
+    this._selectedEntityId = entityId;
+    this._path = [];
+    this._customEntityInput = "";
+    this._isMouseOutsideEntityPicker = false;
+  }
+
+  private _onEntityPickerOpened(): void {
+    this._entityPickerOpen = true;
+  }
+
+  private _onEntityPickerFocusOut(): void {
+    this._entityPickerOpen = false;
+    if (this._isMouseOutsideEntityPicker) {
+      this._closeAttributeMenu();
+    }
+  }
+
+  private _onEntityPickerClosed(): void {
+    this._entityPickerOpen = false;
+    if (this._isMouseOutsideEntityPicker) {
+      this._closeAttributeMenu();
+    }
+  }
+
+  private _handleDocumentClick = (event: Event): void => {
+    if (!this._attributeMenuOpen || this._entityPickerOpen) return;
+    const picker = this.renderRoot?.querySelector(".entity-picker");
+    if (!picker || !event.composedPath().includes(picker)) {
+      this._closeAttributeMenu();
+    }
+  };
+
+  private _addSource(source: HistorySource): void {
+    if (this._selectedSources.some((selected) => selected.id === source.id)) {
+      return;
+    }
+
+    this._selectedSources = [...this._selectedSources, source];
+    this._attributeMenuOpen = window.matchMedia("(hover: hover) and (pointer: fine)").matches ? this._attributeMenuOpen : false;
+
+    this.dispatchEvent(
+      new CustomEvent("series-added", {
+        detail: { source },
+        bubbles: true,
+        composed: true
+      })
+    );
+
+    void this.requestUpdate();
+  }
+
+  private _removeSource(sourceId: string): void {
+    const source = this._selectedSources.find((s) => s.id === sourceId);
+
+    if (!source || this._isDefaultSource(source)) {
+      return;
+    }
+
+    this._selectedSources = this._selectedSources.filter((s) => s.id !== sourceId);
+    this._hiddenSeriesIds = this._hiddenSeriesIds.filter((hs) => hs !== sourceId);
+
+    this.dispatchEvent(
+      new CustomEvent("series-removed", {
+        detail: { sourceId },
+        bubbles: true,
+        composed: true
+      })
+    );
+
+    void this.requestUpdate();
   }
 }

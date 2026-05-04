@@ -1,6 +1,7 @@
 import { PALETTE } from "./colors.js";
 import { numericScalesFor, plotBottomFor, type NumericScale } from "./scales.js";
 import { displayNumericPoints } from "./downsample.js";
+import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
 import type { HistoryPoint } from "../data/history.js";
 import type { HistoryValueType } from "../data/value-type.js";
 
@@ -51,6 +52,7 @@ export interface ChartRenderData {
   chartHeight: number;
   numericLines: NumericLineRenderData[];
   segments: SegmentRenderData[];
+  heatingAreas: HeatingAreaRenderData[];
   yAxisLabels: YAxisLabelRenderData[];
 }
 
@@ -182,7 +184,8 @@ function buildYAxisLabels(scales: NumericScale[]): YAxisLabelRenderData[] {
 
 export function buildChartData(
   visibleSeries: RenderableSeries[],
-  timeBounds: { start: number; end: number }
+  timeBounds: { start: number; end: number },
+  disableClimateOverlay = false
 ): ChartRenderData {
   const numericScales = numericScalesFor(visibleSeries);
   const plotBottom = plotBottomFor(numericScales.length);
@@ -196,6 +199,7 @@ export function buildChartData(
     chartHeight: chartHeightFor(plotBottom, segmentCount),
     numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds),
     segments: buildSegments(visibleSeries, plotBottom, timeBounds),
+    heatingAreas: disableClimateOverlay ? [] : buildClimateHeatingAreas(visibleSeries, numericScales, timeBounds),
     yAxisLabels: buildYAxisLabels(numericScales)
   };
 }
