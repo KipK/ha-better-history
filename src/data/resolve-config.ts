@@ -18,6 +18,10 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
 const DEFAULT_HOURS = 24;
 const PALETTE = ["#ff9800", "#42a5f5", "#66bb6a", "#ec407a", "#ab47bc", "#26a69a"];
 
+function truncateDate(d: Date): Date {
+  return new Date(Math.floor(d.getTime() / 1000) * 1000);
+}
+
 function paletteColor(index: number): string {
   return PALETTE[index % PALETTE.length];
 }
@@ -159,8 +163,8 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   }
 
   return {
-    startDate,
-    endDate,
+    startDate: truncateDate(startDate),
+    endDate: truncateDate(endDate),
     showDatePicker: config?.showDatePicker ?? opts.showDatePicker ?? false,
     showEntityPicker: config?.showEntityPicker ?? opts.showEntityPicker ?? false,
     showLegend: config?.showLegend ?? opts.showLegend ?? true,

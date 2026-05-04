@@ -30,9 +30,9 @@ export class DataController implements ReactiveController {
     if (!hass || sources.length === 0) {
       this.series = [];
       this.loading = false;
-      this.error = "";
+      this.error = hass ? "No sources provided" : "No hass object";
+      console.warn("[ha-better-history] DataController.fetch skipped:", this.error);
       this.host.requestUpdate();
-
       return;
     }
 
@@ -40,16 +40,22 @@ export class DataController implements ReactiveController {
 
     this.loading = true;
     this.error = "";
-    this.host.requestUpdate();
+
+    console.log("[ha-better-history] DataController.fetch started:", { sourceCount: sources.length, sourceIds: sources.map(s => s.id), start: start.toISOString(), end: end.toISOString(), requestId: id });
 
     fetchHistory(hass, sources, start, end).then((series) => {
-      if (id !== this._requestId) return;
+      if (id !== this._requestId) {
+        console.log("[ha-better-history] DataController.fetch completed (stale), requestId:", id);
+        return;
+      }
+      console.log("[ha-better-history] DataController.fetch completed:", { seriesCount: series.length, totalPoints: series.reduce((sum, s) => sum + s.points.length, 0) });
       this.series = series;
       this.loading = false;
       this.host.requestUpdate();
     }).catch((err: unknown) => {
       if (id !== this._requestId) return;
       this.error = err instanceof Error ? err.message : String(err);
+      console.error("[ha-better-history] DataController.fetch failed:", this.error);
       this.series = [];
       this.loading = false;
       this.host.requestUpdate();

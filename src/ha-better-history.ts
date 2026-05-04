@@ -73,20 +73,6 @@ export class HaBetterHistory extends LitElement {
     super.connectedCallback();
 
     document.addEventListener("click", this._handleDocumentClick);
-
-    if (this.showDatePicker) {
-      preloadDatePicker().then(() => {
-        this._datePickerReady = datePickerAvailable();
-        this.requestUpdate();
-      });
-    }
-
-    if (this.showEntityPicker) {
-      preloadEntityPickerComponents().then(() => {
-        this._entityComponentsReady = entityPickerAvailable();
-        this.requestUpdate();
-      });
-    }
   }
 
   disconnectedCallback(): void {
@@ -141,29 +127,23 @@ export class HaBetterHistory extends LitElement {
     return (this._resolved?.series ?? []).some((s) => s.id === source.id);
   }
 
+  private _lastFetchKey = "";
+  private _lastHassResolveTime = 0;
+
   protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("showDatePicker") && this.showDatePicker && !this._datePickerReady) {
-      preloadDatePicker().then(() => {
-        this._datePickerReady = datePickerAvailable();
-        this.requestUpdate();
-      });
-    }
-
-    if (changed.has("showEntityPicker") && this.showEntityPicker && !this._entityComponentsReady) {
-      preloadEntityPickerComponents().then(() => {
-        this._entityComponentsReady = entityPickerAvailable();
-        this.requestUpdate();
-      });
-    }
-
-    if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
-      this._positionEntityMenu();
-    }
-
     const watch = ["hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
 
     if (watch.some((p) => changed.has(p))) {
-      this._resolved = resolveConfig({
+      const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
+
+      if (hassOnly) {
+        const now = Date.now();
+        const rounded = Math.floor(now / 1000) * 1000;
+        if (rounded === this._lastHassResolveTime && this._lastFetchKey) return;
+        this._lastHassResolveTime = rounded;
+      }
+
+      const resolved = resolveConfig({
         config: this.config,
         entities: this.entities,
         hours: this.hours,
@@ -179,12 +159,38 @@ export class HaBetterHistory extends LitElement {
         hass: this.hass
       });
 
-      this._data.fetch(
-        this.hass,
-        this._fetchSources(),
-        this._resolved.startDate,
-        this._resolved.endDate
-      );
+      this._resolved = resolved;
+
+      if (!this._rangeStart && !this._rangeEnd) {
+        this._rangeStart = resolved.startDate;
+        this._rangeEnd = resolved.endDate;
+      }
+
+      const sources = this._fetchSources();
+      const fetchKey = `${sources.map((s) => s.id).sort().join("|")}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
+
+      if (fetchKey !== this._lastFetchKey) {
+        this._lastFetchKey = fetchKey;
+        this._data.fetch(this.hass, sources, resolved.startDate, resolved.endDate);
+      }
+
+      if (resolved.showDatePicker && !this._datePickerReady) {
+        preloadDatePicker().then(() => {
+          this._datePickerReady = datePickerAvailable();
+          this.requestUpdate();
+        });
+      }
+
+      if (resolved.showEntityPicker && !this._entityComponentsReady) {
+        preloadEntityPickerComponents().then(() => {
+          this._entityComponentsReady = entityPickerAvailable();
+          this.requestUpdate();
+        });
+      }
+    }
+
+    if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
+      this._positionEntityMenu();
     }
   }
 
