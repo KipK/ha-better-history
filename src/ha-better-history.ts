@@ -131,7 +131,7 @@ export class HaBetterHistory extends LitElement {
   private _lastHassResolveTime = 0;
 
   protected willUpdate(changed: PropertyValues): void {
-    const watch = ["hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
+    const watch = ["_rangeStart", "_rangeEnd", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
