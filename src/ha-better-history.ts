@@ -351,7 +351,16 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="empty">${localize(lang, "no_series")}</div>`;
     }
 
-    if (!this._data.loading && this._data.series.length === 0) {
+    if (this._data.loading) {
+      const spinnerAvailable = customElements.get("ha-spinner") !== undefined;
+      return html`<div class="chart-loading">
+        ${spinnerAvailable
+          ? html`<ha-spinner size="medium"></ha-spinner>`
+          : html`<span>${localize(lang, "loading")}</span>`}
+      </div>`;
+    }
+
+    if (this._data.series.length === 0) {
       return html`<div class="empty">${localize(lang, "empty")}</div>`;
     }
 
@@ -400,9 +409,6 @@ export class HaBetterHistory extends LitElement {
                 : nothing}
             `
           : html`<div class="empty">${localize(lang, "empty")}</div>`}
-        ${this._data.loading
-          ? html`<div class="chart-loading-overlay"><span class="chart-loading-label">${localize(lang, "loading")}</span></div>`
-          : nothing}
       </div>
       ${this._renderLegend()}
     `;

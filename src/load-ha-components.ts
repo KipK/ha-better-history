@@ -6,7 +6,8 @@ const HA_COMPONENTS = [
   "ha-entity-picker",
   "ha-md-list",
   "ha-md-list-item",
-  "ha-input-chip"
+  "ha-input-chip",
+  "ha-spinner"
 ];
 
 let loadPromise: Promise<void> | undefined;

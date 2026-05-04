@@ -11,6 +11,14 @@ export const chartStyles = css`
     overflow-y: auto;
   }
 
+  .chart-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 40px 0;
+  }
+
   svg {
     width: 100%;
     display: block;
