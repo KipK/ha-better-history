@@ -81,6 +81,47 @@ export const chartStyles = css`
     opacity: 0.88;
   }
 
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+  }
+
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .legend-item[hidden-series] {
+    opacity: 0.38;
+  }
+
+  .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+  }
+
+  .legend-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+  }
+
   .empty,
   .error {
     padding: 20px;

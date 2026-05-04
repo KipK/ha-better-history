@@ -5,12 +5,10 @@ import { resolveConfig, resolvedSeriesToSource } from "./data/resolve-config.js"
 import { localize } from "./localize/localize.js";
 import {
   buildChartData,
-  scaleFor,
   CHART_WIDTH,
   PLOT_LEFT,
   PLOT_RIGHT,
   PLOT_TOP,
-  PLOT_WIDTH,
   type ChartRenderData,
   type RenderableSeries
 } from "./render/chart.js";
@@ -160,6 +158,45 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
+  private _renderLegend(): TemplateResult | typeof nothing {
+    if (!this._resolved?.showLegend || this._resolved.series.length === 0) return nothing;
+
+    return html`
+      <div class="legend">
+        ${this._resolved.series.map((s) => {
+          const hidden = this._hiddenSeriesIds.includes(s.id);
+          const swatchStyle =
+            s.valueType !== "number"
+              ? `background:color-mix(in srgb,${s.color} 30%,transparent);border:1px solid ${s.color};`
+              : `background:${s.color};`;
+
+          return html`
+            <button class="legend-item" ?hidden-series=${hidden} @click=${() => this._toggleSeries(s.id)}>
+              <span class="swatch" style=${swatchStyle}></span>
+              <span class="legend-label">${s.label}</span>
+            </button>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private _toggleSeries(id: string): void {
+    const nowHidden = !this._hiddenSeriesIds.includes(id);
+
+    this._hiddenSeriesIds = nowHidden
+      ? [...this._hiddenSeriesIds, id]
+      : this._hiddenSeriesIds.filter((h) => h !== id);
+
+    this.dispatchEvent(
+      new CustomEvent("series-toggled", {
+        detail: { id, hidden: nowHidden },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   private _renderChart(): TemplateResult {
     const lang = this._resolved?.language;
 
@@ -204,44 +241,13 @@ export class HaBetterHistory extends LitElement {
           ? html`<div class="chart-loading-overlay"><span class="chart-loading-label">${localize(lang, "loading")}</span></div>`
           : nothing}
       </div>
+      ${this._renderLegend()}
     `;
   }
 
   render(): TemplateResult {
     const width = this._resolved?.width ?? "100%";
 
-    return html`
-      <div style="width:${width};position:relative;">
-        ${this._renderChart()}
-      </div>
-    `;
-  }
-
-  // Exposed for legend (step 5) and tooltip (step 6).
-  toggleSeries(id: string): void {
-    this._hiddenSeriesIds = this._hiddenSeriesIds.includes(id)
-      ? this._hiddenSeriesIds.filter((h) => h !== id)
-      : [...this._hiddenSeriesIds, id];
-    this.dispatchEvent(new CustomEvent("series-toggled", { detail: { id, hidden: this._hiddenSeriesIds.includes(id) }, bubbles: true, composed: true }));
-  }
-
-  scaleForSeries(id: string): ReturnType<typeof scaleFor> {
-    return scaleFor({ id } as RenderableSeries, this._chartData().numericScales);
-  }
-
-  get timeBounds(): { start: number; end: number } {
-    return this._chartData().timeBounds;
-  }
-
-  get plotWidth(): number {
-    return PLOT_WIDTH;
-  }
-
-  get plotLeft(): number {
-    return PLOT_LEFT;
-  }
-
-  get chartWidth(): number {
-    return CHART_WIDTH;
+    return html`<div style="width:${width};position:relative;">${this._renderChart()}</div>`;
   }
 }
