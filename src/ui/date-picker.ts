@@ -17,23 +17,25 @@ export function renderDatePicker(
   onChange: (startDate: Date, endDate: Date) => void
 ): TemplateResult {
   return html`
-    <ha-date-range-picker
-      .hass=${hass}
-      .startDate=${startDate}
-      .endDate=${endDate}
-      time-picker
-      @value-changed=${(event: CustomEvent) => {
-        const detail = event.detail as {
-          value?: { startDate?: unknown; endDate?: unknown };
-          startDate?: unknown;
-          endDate?: unknown;
-        };
-        const start = detail.value?.startDate ?? detail.startDate;
-        const end = detail.value?.endDate ?? detail.endDate;
-        if (start instanceof Date && end instanceof Date) {
-          onChange(start, end);
-        }
-      }}
-    ></ha-date-range-picker>
+    <div class="date-picker-wrapper">
+      <ha-date-range-picker
+        .hass=${hass}
+        .startDate=${startDate}
+        .endDate=${endDate}
+        time-picker
+        @value-changed=${(event: CustomEvent) => {
+          const detail = event.detail as {
+            value?: { startDate?: unknown; endDate?: unknown };
+            startDate?: unknown;
+            endDate?: unknown;
+          };
+          const start = detail.value?.startDate ?? detail.startDate;
+          const end = detail.value?.endDate ?? detail.endDate;
+          if (start instanceof Date && end instanceof Date) {
+            onChange(start, end);
+          }
+        }}
+      ></ha-date-range-picker>
+    </div>
   `;
 }

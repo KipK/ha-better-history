@@ -191,6 +191,32 @@ export const chartStyles = css`
     color: #ff6b6b;
   }
 
+  .controls-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .controls-bar .entity-picker {
+    margin-bottom: 0;
+  }
+
+  .controls-bar .entity-selected-row {
+    margin-bottom: 0;
+  }
+
+  .date-picker-wrapper {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .date-picker-wrapper ha-date-range-picker {
+    display: block;
+  }
+
   .entity-picker {
     position: relative;
     width: 170px;

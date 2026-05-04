@@ -45,6 +45,7 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-entity-picker" }) showEntityPicker = false;
   @property({ type: Boolean, attribute: "show-legend" }) showLegend = true;
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
+  @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
   @property() width?: string;
   @property() height?: string;
   @property() language?: string;
@@ -188,7 +189,9 @@ export class HaBetterHistory extends LitElement {
         });
       }
     }
+  }
 
+  protected updated(changed: PropertyValues): void {
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
@@ -446,9 +449,13 @@ export class HaBetterHistory extends LitElement {
     const width = this._resolved?.width ?? "100%";
 
     return html`
-      <div style="width:${width};position:relative;">
-        ${this._renderDatePicker()}
-        ${this._renderEntityPickerUI()}
+      <div style="width:${width};">
+        ${this.showControls
+          ? html`<div class="controls-bar">
+              ${this._renderDatePicker()}
+              ${this._renderEntityPickerUI()}
+            </div>`
+          : nothing}
         ${this._renderChart()}
       </div>
     `;
