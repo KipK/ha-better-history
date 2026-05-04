@@ -327,6 +327,7 @@ export class HaBetterHistory extends LitElement {
     if (!this._resolved?.showDatePicker || !this._datePickerReady) return nothing;
 
     return renderDatePicker(
+      this.hass,
       this._resolved.startDate,
       this._resolved.endDate,
       (startDate, endDate) => this._onDateRangeChanged(startDate, endDate)

@@ -18,6 +18,14 @@ interface HassStates {
 }
 
 const STATES: HassStates = {};
+let HA_CONFIG: {
+  time_zone?: string;
+  unit_system?: { temperature?: string };
+  version?: string;
+  components?: string[];
+  latitude?: number;
+  longitude?: number;
+} = {};
 
 function wsUrl(): string {
   const url = new URL(HA_URL);
@@ -137,7 +145,13 @@ export async function connect(): Promise<void> {
 
 function subscribeStates(): Promise<void> {
   send({ type: "subscribe_events", event_type: "state_changed" }).catch(console.error);
-  return send({ type: "get_states" }).then((states) => {
+
+  const configPromise = send({ type: "get_config" }).then((config) => {
+    HA_CONFIG = (config as typeof HA_CONFIG) || {};
+    console.log("[ha-connector] Config loaded:", HA_CONFIG.time_zone);
+  }).catch(console.error);
+
+  const statesPromise = send({ type: "get_states" }).then((states) => {
     if (Array.isArray(states)) {
       for (const state of states as HassStates[string][]) {
         if (state?.entity_id) STATES[state.entity_id] = state;
@@ -145,13 +159,24 @@ function subscribeStates(): Promise<void> {
     }
     console.log("[ha-connector] Loaded", Object.keys(STATES).length, "states");
   });
+
+  return Promise.all([configPromise, statesPromise]).then(() => {});
 }
 
 export function getHass() {
   return {
     states: STATES,
     language: "en",
-    locale: { language: "en" },
+    locale: {
+      language: "en",
+      time_zone: HA_CONFIG.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    config: {
+      time_zone: HA_CONFIG.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    localize(key: string) {
+      return key.split(".").pop() || key;
+    },
     callWS<T = unknown>(message: Record<string, unknown>): Promise<T> {
       return send(message as WsMessage) as Promise<T>;
     },

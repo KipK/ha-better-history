@@ -1,5 +1,6 @@
 import { html, type TemplateResult } from "lit";
 import { ensureDateRangePicker } from "../load-ha-components.js";
+import type { HomeAssistant } from "../types/ha.js";
 
 export function datePickerAvailable(): boolean {
   return customElements.get("ha-date-range-picker") !== undefined;
@@ -10,12 +11,14 @@ export async function preloadDatePicker(): Promise<void> {
 }
 
 export function renderDatePicker(
+  hass: HomeAssistant | undefined,
   startDate: Date,
   endDate: Date,
   onChange: (startDate: Date, endDate: Date) => void
 ): TemplateResult {
   return html`
     <ha-date-range-picker
+      .hass=${hass}
       .startDate=${startDate}
       .endDate=${endDate}
       time-picker
