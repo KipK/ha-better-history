@@ -3,3 +3,4 @@ dist
 tmp/
 plans/
 dev_tests/
+.env

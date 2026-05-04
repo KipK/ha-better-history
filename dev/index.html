@@ -7,12 +7,25 @@
     <style>
       body { margin: 24px; font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
       h2 { color: #aaa; font-size: 13px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+      .mode-badge {
+        display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+        margin-left: 8px; vertical-align: middle;
+      }
+      .mode-live  { background: #4caf50; color: #fff; }
+      .mode-mock  { background: #ff9800; color: #fff; }
+      .mode-error { background: #f44336; color: #fff; }
       ha-better-history { display: block; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-bottom: 24px; background: #16213e; }
+      .error-banner { background: #3d1515; color: #ff6b6b; padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
     </style>
   </head>
   <body>
-    <h1 style="font-size:18px;margin-bottom:4px">ha-better-history dev</h1>
-    <p style="color:#888;font-size:13px;margin-top:0">Synthetic data — no real HA connection</p>
+    <h1 style="font-size:18px;margin-bottom:4px">ha-better-history dev
+      <span id="mode-badge" class="mode-badge mode-mock">MOCK</span>
+    </h1>
+    <p style="color:#888;font-size:13px;margin-top:0">
+      Set <code>VITE_HA_URL</code> and <code>VITE_HA_TOKEN</code> in <code>.env</code> for live HA data.
+    </p>
+    <div id="error-banner" class="error-banner" hidden></div>
 
     <h2>1 — entities shortcut (temperature + humidity)</h2>
     <ha-better-history id="c1"></ha-better-history>
@@ -20,188 +33,18 @@
     <h2>2 — explicit series with scaleGroup</h2>
     <ha-better-history id="c2"></ha-better-history>
 
-    <h2>3 — no config / no entities (empty state)</h2>
-    <ha-better-history id="c3"></ha-better-history>
+    <h2>3 — with date picker</h2>
+    <ha-better-history id="c3" show-date-picker></ha-better-history>
 
-    <h2>4 — with date picker</h2>
-    <ha-better-history id="c4" show-date-picker></ha-better-history>
+    <h2>4 — with entity picker</h2>
+    <ha-better-history id="c4" show-entity-picker></ha-better-history>
 
-    <h2>5 — with entity picker</h2>
-    <ha-better-history id="c5" show-entity-picker></ha-better-history>
+    <h2>5 — climate heating overlay</h2>
+    <ha-better-history id="c5"></ha-better-history>
 
-    <h2>6 — climate heating overlay</h2>
+    <h2>6 — scaleMode: manual</h2>
     <ha-better-history id="c6"></ha-better-history>
 
-    <h2>7 — scaleMode: manual</h2>
-    <ha-better-history id="c7"></ha-better-history>
-
-    <script type="module">
-      import "../src/define.ts";
-
-      const NOW = Date.now();
-      const H24 = 24 * 3600 * 1000;
-
-      function sine(entityId, unit, min, max, periodMs, offset = 0) {
-        const points = [];
-        const steps = 120;
-        for (let i = 0; i <= steps; i++) {
-          const t = NOW - H24 + (i / steps) * H24;
-          const v = min + ((Math.sin((t / periodMs) * 2 * Math.PI + offset) + 1) / 2) * (max - min);
-          points.push({ lu: t / 1000, s: v.toFixed(2), a: { unit_of_measurement: unit } });
-        }
-        return { [entityId]: points };
-      }
-
-      function states(entityId, values, durationMs) {
-        const points = [];
-        let t = NOW - H24;
-        for (let i = 0; i < 40; i++) {
-          const v = values[i % values.length];
-          points.push({ lu: t / 1000, s: v });
-          t += durationMs + (Math.random() - 0.5) * durationMs * 0.4;
-        }
-        return { [entityId]: points };
-      }
-
-      function makeHass(historyData, hassStates = {}) {
-        return {
-          states: hassStates,
-          locale: { language: "en" },
-          callWS(msg) {
-            if (msg.type === "history/history_during_period") {
-              const result = {};
-              for (const id of msg.entity_ids) {
-                if (historyData[id]) result[id] = historyData[id];
-              }
-              return Promise.resolve(result);
-            }
-            return Promise.resolve({});
-          },
-          callService: () => Promise.resolve()
-        };
-      }
-
-      // ── Chart 1 : entities shortcut ───────────────────────────────────────────
-      const data1 = {
-        ...sine("sensor.temperature", "°C", 18, 24, 3 * 3600 * 1000),
-        ...sine("sensor.humidity", "%", 40, 65, 5 * 3600 * 1000, 1.2),
-      };
-      const c1 = document.getElementById("c1");
-      c1.hass = makeHass(data1, {
-        "sensor.temperature": { entity_id: "sensor.temperature", state: "21.5", attributes: { friendly_name: "Temperature", unit_of_measurement: "°C" } },
-        "sensor.humidity":    { entity_id: "sensor.humidity",    state: "55",   attributes: { friendly_name: "Humidity",    unit_of_measurement: "%" } },
-      });
-      c1.entities = ["sensor.temperature", "sensor.humidity"];
-
-      // ── Chart 2 : explicit series with scaleGroup ─────────────────────────────
-      const data2 = {
-        ...sine("climate.living", "°C", 19, 22, 4 * 3600 * 1000),
-        ...sine("sensor.outdoor_temp", "°C", 5, 14, 8 * 3600 * 1000, 0.7),
-        ...states("binary_sensor.window", ["on", "off"], 45 * 60 * 1000),
-      };
-      const c2 = document.getElementById("c2");
-      c2.hass = makeHass(data2, {
-        "climate.living":        { entity_id: "climate.living",        state: "heat",  attributes: { friendly_name: "Living room", current_temperature: 20.1, unit_of_measurement: "°C" } },
-        "sensor.outdoor_temp":   { entity_id: "sensor.outdoor_temp",   state: "9.3",   attributes: { friendly_name: "Outdoor temp", unit_of_measurement: "°C" } },
-        "binary_sensor.window":  { entity_id: "binary_sensor.window",  state: "off",   attributes: { friendly_name: "Window" } },
-      });
-      c2.config = {
-        series: [
-          { entity: "climate.living",       attribute: "current_temperature", label: "Indoor",  color: "#42a5f5", scaleGroup: "temp" },
-          { entity: "sensor.outdoor_temp",                                    label: "Outdoor", color: "#66bb6a", scaleGroup: "temp" },
-          { entity: "binary_sensor.window",                                   label: "Window open" },
-        ],
-      };
-
-      // ── Chart 3 : empty ───────────────────────────────────────────────────────
-      const c3 = document.getElementById("c3");
-      c3.hass = makeHass({});
-
-      // ── Chart 4 : with date picker ───────────────────────────────────────────
-      const data4 = {
-        ...sine("sensor.power", "W", 0, 2000, 2 * 3600 * 1000),
-      };
-      const c4 = document.getElementById("c4");
-      c4.hass = makeHass(data4, {
-        "sensor.power": { entity_id: "sensor.power", state: "1050", attributes: { friendly_name: "Power", unit_of_measurement: "W" } },
-      });
-      c4.entities = ["sensor.power"];
-
-      // ── Chart 5 : with entity picker ─────────────────────────────────────────
-      const data5 = {
-        ...sine("sensor.energy", "kWh", 0, 10, 6 * 3600 * 1000),
-      };
-      const c5 = document.getElementById("c5");
-      c5.hass = makeHass(data5, {
-        "sensor.energy": { entity_id: "sensor.energy", state: "4.2", attributes: { friendly_name: "Energy", unit_of_measurement: "kWh" } },
-        "sensor.temperature": { entity_id: "sensor.temperature", state: "21.5", attributes: { friendly_name: "Temperature", unit_of_measurement: "°C" } },
-      });
-      c5.config = {
-        defaultEntities: ["sensor.energy", "sensor.temperature"],
-        series: [{ entity: "sensor.energy", label: "Energy" }]
-      };
-
-      // ── Chart 6 : climate heating overlay ────────────────────────────────────
-      function heatingStates() {
-        const points = [];
-        const steps = 120;
-        const periodMs = 3 * 3600 * 1000;
-        for (let i = 0; i <= steps; i++) {
-          const t = NOW - H24 + (i / steps) * H24;
-          const temp = 19 + ((Math.sin((t / periodMs) * 2 * Math.PI) + 1) / 2) * 4;
-          const heating = Math.sin((t / periodMs) * 2 * Math.PI) > 0;
-          points.push({
-            lu: t / 1000,
-            s: heating ? "heating" : "idle",
-            a: { current_temperature: temp, hvac_action: heating ? "heating" : "idle" },
-          });
-        }
-        return { "climate.room": points };
-      }
-      const heatingHistory = heatingStates();
-      const c6 = document.getElementById("c6");
-      c6.hass = {
-        states: {
-          "climate.room": { entity_id: "climate.room", state: "heat", attributes: {
-            friendly_name: "Living room",
-            current_temperature: 20.5,
-            temperature: 21,
-            hvac_action: "heating",
-          } },
-        },
-        locale: { language: "en" },
-        callWS(msg) {
-          if (msg.type === "history/history_during_period") {
-            const result = {};
-            for (const id of msg.entity_ids) {
-              if (heatingHistory[id]) result[id] = heatingHistory[id];
-            }
-            return Promise.resolve(result);
-          }
-          return Promise.resolve({});
-        },
-        callService: () => Promise.resolve()
-      };
-      c6.config = {
-        series: [
-          { entity: "climate.room", attribute: "current_temperature", label: "Current temp", color: "#42a5f5" },
-          { entity: "climate.room", attribute: "hvac_action", label: "State", color: "#ab47bc" },
-        ],
-      };
-
-      // ── Chart 7 : scaleMode manual ───────────────────────────────────────────
-      const data7 = {
-        ...sine("sensor.pressure", "hPa", 980, 1030, 12 * 3600 * 1000),
-      };
-      const c7 = document.getElementById("c7");
-      c7.hass = makeHass(data7, {
-        "sensor.pressure": { entity_id: "sensor.pressure", state: "1013", attributes: { friendly_name: "Pressure", unit_of_measurement: "hPa" } },
-      });
-      c7.config = {
-        series: [
-          { entity: "sensor.pressure", label: "Pressure", scaleMode: "manual", scaleMin: 960, scaleMax: 1040 },
-        ],
-      };
-    </script>
+    <script type="module" src="./main.ts"></script>
   </body>
 </html>

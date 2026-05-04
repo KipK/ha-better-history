@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
+import path from "node:path";
 
 export default defineConfig({
-  root: "dev",
+  envDir: path.resolve(__dirname),
   server: {
-    fs: {
-      allow: [".."]
-    }
+    host: true,
+    open: "/dev/index.html"
   }
 });
