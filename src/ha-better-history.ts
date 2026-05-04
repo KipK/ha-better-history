@@ -1,6 +1,7 @@
 import { LitElement, html, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import { DataController } from "./controllers/data-controller.js";
+import { TooltipController } from "./controllers/tooltip-controller.js";
 import { resolveConfig, resolvedSeriesToSource } from "./data/resolve-config.js";
 import { localize } from "./localize/localize.js";
 import {
@@ -46,6 +47,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _hiddenSeriesIds: string[] = [];
 
   private readonly _data = new DataController(this);
+  private readonly _tooltip = new TooltipController(this);
   private _chartRenderCache?: ChartRenderCache;
 
   protected willUpdate(changed: PropertyValues): void {
@@ -214,6 +216,17 @@ export class HaBetterHistory extends LitElement {
 
     const chartData = this._chartData();
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
+    const showTooltip = this._resolved.showTooltip;
+
+    if (hasData && showTooltip) {
+      this._tooltip.sync(
+        this._resolved.series,
+        this._data.series,
+        this._hiddenSeriesIds,
+        chartData.chartHeight,
+        chartData.timeBounds
+      );
+    }
 
     return html`
       <div class="chart-surface" style="height:${this._resolved.height ?? "auto"}">
@@ -223,6 +236,8 @@ export class HaBetterHistory extends LitElement {
                 viewBox="0 0 ${CHART_WIDTH} ${chartData.chartHeight}"
                 height="${chartData.chartHeight}"
                 preserveAspectRatio="none"
+                @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
+                @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
                 <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${chartData.plotBottom}></line>
                 <line class="axis" x1=${PLOT_LEFT} y1=${chartData.plotBottom} x2=${PLOT_RIGHT} y2=${chartData.plotBottom}></line>
@@ -233,8 +248,12 @@ export class HaBetterHistory extends LitElement {
                 ${chartData.segments.map(
                   (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
                 )}
+                ${showTooltip ? this._tooltip.renderGuide(chartData.plotBottom) : nothing}
               </svg>
               ${this._renderYAxisLabels(chartData)}
+              ${showTooltip
+                ? html`<div class="chart-tooltip-clip" style="height:${chartData.chartHeight}px">${this._tooltip.renderTooltip(chartData.chartHeight)}</div>`
+                : nothing}
             `
           : html`<div class="empty">${localize(lang, "empty")}</div>`}
         ${this._data.loading

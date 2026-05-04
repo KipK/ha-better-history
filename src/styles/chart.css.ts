@@ -122,6 +122,50 @@ export const chartStyles = css`
     max-width: 160px;
   }
 
+  .tooltip {
+    position: absolute;
+    z-index: 2;
+    min-width: 170px;
+    width: max-content;
+    max-width: min(300px, calc(100% - 16px));
+    padding: 8px;
+    border-radius: var(--better-history-radius, 8px);
+    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, #000 12%);
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    box-shadow: 0 8px 20px rgb(0 0 0 / 28%);
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    font-size: 12px;
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+
+  .tooltip-time {
+    margin-bottom: 6px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-size: 11px;
+  }
+
+  .tooltip-row {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+  }
+
+  .tooltip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tooltip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
   .empty,
   .error {
     padding: 20px;
