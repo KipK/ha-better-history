@@ -19,7 +19,7 @@
   "files": ["dist"],
   "sideEffects": ["dist/define.js"],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "dev": "vite --config vite.config.dev.ts"
   },
