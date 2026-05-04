@@ -69,7 +69,9 @@ export async function connect(): Promise<void> {
       const raw = event.data as string;
       const msg = JSON.parse(raw) as WsMessage & { id?: number; result?: unknown; error?: { message: string }; message?: string };
 
-      console.log("[ha-connector] ←", msg.type, msg.message ?? "");
+      if (msg.type === "auth_required" || msg.type === "auth_ok" || msg.type === "auth_invalid") {
+        console.log("[ha-connector] ←", msg.type, (msg as { message?: string }).message ?? "");
+      }
 
       if (msg.type === "auth_required") {
         console.log("[ha-connector] → auth (token:", HA_TOKEN.slice(0, 20) + "...)");
@@ -79,8 +81,11 @@ export async function connect(): Promise<void> {
 
       if (msg.type === "auth_ok") {
         clearTimeout(timeoutId);
-        subscribeStates();
-        resolve();
+        subscribeStates().then(() => {
+          resolve();
+        }).catch((err) => {
+          reject(new Error(`Failed to load states: ${err}`));
+        });
         return;
       }
 
@@ -130,15 +135,16 @@ export async function connect(): Promise<void> {
   return authPromise;
 }
 
-function subscribeStates(): void {
+function subscribeStates(): Promise<void> {
   send({ type: "subscribe_events", event_type: "state_changed" }).catch(console.error);
-  send({ type: "get_states" }).then((states) => {
+  return send({ type: "get_states" }).then((states) => {
     if (Array.isArray(states)) {
       for (const state of states as HassStates[string][]) {
         if (state?.entity_id) STATES[state.entity_id] = state;
       }
     }
-  }).catch(console.error);
+    console.log("[ha-connector] Loaded", Object.keys(STATES).length, "states");
+  });
 }
 
 export function getHass() {

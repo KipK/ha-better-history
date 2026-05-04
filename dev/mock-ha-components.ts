@@ -9,23 +9,36 @@ mockStyles.replaceSync(`
   input, select { font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #555; border-radius: 6px; background: #2a2a3e; color: #e0e0e0; }
 `);
 
+function _dateToInput(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 class MockDateRangePicker extends HTMLElement {
   static observedAttributes = ["start-date", "end-date"];
   private _start?: HTMLInputElement;
   private _end?: HTMLInputElement;
+  private _pendingStart?: Date;
+  private _pendingEnd?: Date;
 
   get startDate(): Date | undefined {
-    return this._start?.valueAsDate ?? undefined;
+    return this._start?.value ? new Date(this._start.value) : undefined;
   }
   set startDate(d: Date | undefined) {
-    if (d && this._start) this._start.valueAsDate = d;
+    if (d) {
+      this._pendingStart = d;
+      if (this._start) this._start.value = _dateToInput(d);
+    }
   }
 
   get endDate(): Date | undefined {
-    return this._end?.valueAsDate ?? undefined;
+    return this._end?.value ? new Date(this._end.value) : undefined;
   }
   set endDate(d: Date | undefined) {
-    if (d && this._end) this._end.valueAsDate = d;
+    if (d) {
+      this._pendingEnd = d;
+      if (this._end) this._end.value = _dateToInput(d);
+    }
   }
 
   connectedCallback() {
@@ -41,10 +54,23 @@ class MockDateRangePicker extends HTMLElement {
     this._start = this.shadowRoot!.getElementById("start") as HTMLInputElement;
     this._end   = this.shadowRoot!.getElementById("end") as HTMLInputElement;
 
+    if (this._pendingStart !== undefined) {
+      this._start.value = _dateToInput(this._pendingStart);
+      this._pendingStart = undefined;
+    }
+    if (this._pendingEnd !== undefined) {
+      this._end.value = _dateToInput(this._pendingEnd);
+      this._pendingEnd = undefined;
+    }
+
     const emit = () => {
       this.dispatchEvent(new CustomEvent("value-changed", {
-        detail: { value: { startDate: this._start?.valueAsDate, endDate: this._end?.valueAsDate } },
-        bubbles: true, composed: true,
+        detail: { value: {
+          startDate: this._start ? new Date(this._start.value) : undefined,
+          endDate: this._end ? new Date(this._end.value) : undefined
+        } },
+        bubbles: true,
+        composed: true
       }));
     };
     this._start!.addEventListener("change", emit);
