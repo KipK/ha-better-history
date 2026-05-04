@@ -1,0 +1,33 @@
+{
+  "name": "ha-better-history",
+  "version": "0.1.0",
+  "description": "Standalone web component for Home Assistant history charts.",
+  "type": "module",
+  "private": true,
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./define": {
+      "import": "./dist/define.js"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": ["dist/define.js"],
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kipk/load-ha-components": "^1.0.3",
+    "lit": "^3.3.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^8.0.10"
+  }
+}
