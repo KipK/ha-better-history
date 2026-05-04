@@ -2,7 +2,12 @@ import { html, nothing, svg, type TemplateResult, type SVGTemplateResult } from 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { CHART_WIDTH, PLOT_LEFT, PLOT_WIDTH } from "../render/chart.js";
 import type { HistorySeries } from "../data/history.js";
-import type { ResolvedSeries } from "../types/config.js";
+
+export interface SyncedSeries {
+  id: string;
+  label: string;
+  color: string;
+}
 
 export interface TooltipValue {
   label: string;
@@ -58,7 +63,7 @@ export class TooltipController implements ReactiveController {
 
   /** Call each render cycle to keep chart dimensions + series data up to date. */
   sync(
-    resolved: ResolvedSeries[],
+    series: SyncedSeries[],
     fetched: HistorySeries[],
     hiddenIds: string[],
     chartHeight: number,
@@ -66,11 +71,11 @@ export class TooltipController implements ReactiveController {
   ): void {
     this._chartHeight = chartHeight;
     this._timeBounds = timeBounds;
-    this._rebuildCache(resolved, fetched, hiddenIds);
+    this._rebuildCache(series, fetched, hiddenIds);
   }
 
   private _rebuildCache(
-    resolved: ResolvedSeries[],
+    series: SyncedSeries[],
     fetched: HistorySeries[],
     hiddenIds: string[]
   ): void {
@@ -81,12 +86,12 @@ export class TooltipController implements ReactiveController {
     this._fetchedRef = fetched;
     this._cacheKey = key;
 
-    this._series = resolved
-      .filter((r) => !hiddenIds.includes(r.id))
-      .flatMap((r) => {
-        const f = fetched.find((s) => s.source.id === r.id);
+    this._series = series
+      .filter((s) => !hiddenIds.includes(s.id))
+      .flatMap((s) => {
+        const f = fetched.find((fs) => fs.source.id === s.id);
         if (!f || f.points.length === 0) return [];
-        return [{ id: r.id, label: r.label, color: r.color, points: f.points }];
+        return [{ id: s.id, label: s.label, color: s.color, points: f.points }];
       });
   }
 

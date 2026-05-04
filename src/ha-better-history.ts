@@ -1,7 +1,7 @@
 import { LitElement, html, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import { DataController } from "./controllers/data-controller.js";
-import { TooltipController } from "./controllers/tooltip-controller.js";
+import { TooltipController, type SyncedSeries } from "./controllers/tooltip-controller.js";
 import { resolveConfig, resolvedSeriesToSource } from "./data/resolve-config.js";
 import { localize } from "./localize/localize.js";
 import {
@@ -13,6 +13,7 @@ import {
   type ChartRenderData,
   type RenderableSeries
 } from "./render/chart.js";
+import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
 import type { HistorySeries, HistorySource } from "./data/history.js";
@@ -132,7 +133,7 @@ export class HaBetterHistory extends LitElement {
   private _lastHassResolveTime = 0;
 
   protected willUpdate(changed: PropertyValues): void {
-    const watch = ["_rangeStart", "_rangeEnd", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -215,7 +216,7 @@ export class HaBetterHistory extends LitElement {
   private _buildRenderSeries(): RenderableSeries[] {
     if (!this._resolved) return [];
 
-    return this._resolved.series.flatMap((resolved) => {
+    const result: RenderableSeries[] = this._resolved.series.flatMap((resolved) => {
       const fetched = this._data.series.find((s) => s.source.id === resolved.id);
 
       if (!fetched) return [];
@@ -234,6 +235,30 @@ export class HaBetterHistory extends LitElement {
         }
       ];
     });
+
+    for (const source of this._selectedSources) {
+      if (result.some((s) => s.id === source.id)) continue;
+
+      const fetched = this._data.series.find((s) => s.source.id === source.id);
+      if (!fetched) continue;
+
+      const colorIndex = result.length;
+      const scaleGroupKey = source.valueType === "number" && source.unit
+        ? `unit:${source.unit}`
+        : `series:${source.id}`;
+
+      result.push({
+        id: source.id,
+        label: source.label,
+        color: paletteColor(colorIndex),
+        scaleGroupKey,
+        scaleMode: "auto",
+        valueType: source.valueType,
+        points: fetched.points
+      });
+    }
+
+    return result;
   }
 
   private _chartData(): ChartRenderData {
@@ -294,11 +319,12 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _renderLegend(): TemplateResult | typeof nothing {
-    if (!this._resolved?.showLegend || this._resolved.series.length === 0) return nothing;
+    const allSeries = this._buildRenderSeries();
+    if (!this._resolved?.showLegend || allSeries.length === 0) return nothing;
 
     return html`
       <div class="legend">
-        ${this._resolved.series.map((s) => {
+        ${allSeries.map((s) => {
           const hidden = this._hiddenSeriesIds.includes(s.id);
           const swatchStyle =
             s.valueType !== "number"
@@ -350,7 +376,7 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="error">${this._data.error}</div>`;
     }
 
-    if (!this._resolved || this._resolved.series.length === 0) {
+    if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {
       return html`<div class="empty">${localize(lang, "no_series")}</div>`;
     }
 
@@ -372,8 +398,19 @@ export class HaBetterHistory extends LitElement {
     const showTooltip = this._resolved.showTooltip;
 
     if (hasData && showTooltip) {
+      const tooltipSeries: SyncedSeries[] = [
+        ...(this._resolved?.series.map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? []),
+        ...this._selectedSources
+          .filter((src) => !this._resolved?.series.some((r) => r.id === src.id))
+          .map((src, i) => ({
+            id: src.id,
+            label: src.label,
+            color: paletteColor(this._resolved!.series.length + i)
+          }))
+      ];
+
       this._tooltip.sync(
-        this._resolved.series,
+        tooltipSeries,
         this._data.series,
         this._hiddenSeriesIds,
         chartData.chartHeight,
@@ -449,7 +486,7 @@ export class HaBetterHistory extends LitElement {
     const width = this._resolved?.width ?? "100%";
 
     return html`
-      <div style="width:${width};">
+      <div style="width:${width};min-height:var(--better-history-min-height, auto);">
         ${this.showControls
           ? html`<div class="controls-bar">
               ${this._renderDatePicker()}

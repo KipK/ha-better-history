@@ -3,6 +3,7 @@ import { css } from "lit";
 export const chartStyles = css`
   :host {
     display: block;
+    min-height: var(--better-history-min-height, 480px);
     font-family: var(--better-history-font-family, inherit);
   }
 
@@ -15,8 +16,9 @@ export const chartStyles = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 180px;
+    min-height: var(--better-history-min-height, 180px);
     padding: 40px 0;
+    box-sizing: border-box;
   }
 
   svg {
@@ -181,10 +183,15 @@ export const chartStyles = css`
 
   .empty,
   .error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--better-history-min-height, 180px);
     padding: 20px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
     text-align: center;
     font-size: 13px;
+    box-sizing: border-box;
   }
 
   .error {
