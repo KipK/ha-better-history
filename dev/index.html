@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ha-better-history dev</title>
+    <style>
+      body { margin: 24px; font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
+      h2 { color: #aaa; font-size: 13px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+      ha-better-history { display: block; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-bottom: 24px; background: #16213e; }
+    </style>
+  </head>
+  <body>
+    <h1 style="font-size:18px;margin-bottom:4px">ha-better-history dev</h1>
+    <p style="color:#888;font-size:13px;margin-top:0">Synthetic data — no real HA connection</p>
+
+    <h2>1 — entities shortcut (temperature + humidity)</h2>
+    <ha-better-history id="c1"></ha-better-history>
+
+    <h2>2 — explicit series with scaleGroup</h2>
+    <ha-better-history id="c2"></ha-better-history>
+
+    <h2>3 — no config / no entities (empty state)</h2>
+    <ha-better-history id="c3"></ha-better-history>
+
+    <script type="module">
+      import "../src/define.ts";
+
+      // ── Synthetic data helpers ────────────────────────────────────────────────
+
+      const NOW = Date.now();
+      const H24 = 24 * 3600 * 1000;
+
+      function sine(entityId, unit, min, max, periodMs, offset = 0) {
+        const points = [];
+        const steps = 120;
+
+        for (let i = 0; i <= steps; i++) {
+          const t = NOW - H24 + (i / steps) * H24;
+          const v = min + ((Math.sin((t / periodMs) * 2 * Math.PI + offset) + 1) / 2) * (max - min);
+          points.push({ lu: t / 1000, s: v.toFixed(2), a: { unit_of_measurement: unit } });
+        }
+
+        return { [entityId]: points };
+      }
+
+      function states(entityId, values, durationMs) {
+        const points = [];
+        let t = NOW - H24;
+
+        for (let i = 0; i < 40; i++) {
+          const v = values[i % values.length];
+          points.push({ lu: t / 1000, s: v });
+          t += durationMs + (Math.random() - 0.5) * durationMs * 0.4;
+        }
+
+        return { [entityId]: points };
+      }
+
+      function makeHass(historyData, hassStates = {}) {
+        return {
+          states: hassStates,
+          locale: { language: "en" },
+          callWS(msg) {
+            if (msg.type === "history/history_during_period") {
+              const result = {};
+              for (const id of msg.entity_ids) {
+                if (historyData[id]) result[id] = historyData[id];
+              }
+              return Promise.resolve(result);
+            }
+            return Promise.resolve({});
+          },
+          callService: () => Promise.resolve()
+        };
+      }
+
+      // ── Chart 1 : entities shortcut ───────────────────────────────────────────
+
+      const data1 = {
+        ...sine("sensor.temperature", "°C", 18, 24, 3 * 3600 * 1000),
+        ...sine("sensor.humidity", "%", 40, 65, 5 * 3600 * 1000, 1.2),
+      };
+
+      const c1 = document.getElementById("c1");
+      c1.hass = makeHass(data1, {
+        "sensor.temperature": { entity_id: "sensor.temperature", state: "21.5", attributes: { friendly_name: "Temperature", unit_of_measurement: "°C" } },
+        "sensor.humidity":    { entity_id: "sensor.humidity",    state: "55",   attributes: { friendly_name: "Humidity",    unit_of_measurement: "%" } },
+      });
+      c1.entities = ["sensor.temperature", "sensor.humidity"];
+
+      // ── Chart 2 : explicit series with scaleGroup ─────────────────────────────
+
+      const data2 = {
+        ...sine("climate.living", "°C", 19, 22, 4 * 3600 * 1000),
+        ...sine("sensor.outdoor_temp", "°C", 5, 14, 8 * 3600 * 1000, 0.7),
+        ...states("binary_sensor.window", ["on", "off"], 45 * 60 * 1000),
+      };
+
+      const c2 = document.getElementById("c2");
+      c2.hass = makeHass(data2, {
+        "climate.living":        { entity_id: "climate.living",        state: "heat",  attributes: { friendly_name: "Living room", current_temperature: 20.1, unit_of_measurement: "°C" } },
+        "sensor.outdoor_temp":   { entity_id: "sensor.outdoor_temp",   state: "9.3",   attributes: { friendly_name: "Outdoor temp", unit_of_measurement: "°C" } },
+        "binary_sensor.window":  { entity_id: "binary_sensor.window",  state: "off",   attributes: { friendly_name: "Window" } },
+      });
+      c2.config = {
+        series: [
+          { entity: "climate.living",       attribute: "current_temperature", label: "Indoor",  color: "#42a5f5", scaleGroup: "temp" },
+          { entity: "sensor.outdoor_temp",                                    label: "Outdoor", color: "#66bb6a", scaleGroup: "temp" },
+          { entity: "binary_sensor.window",                                   label: "Window open" },
+        ],
+      };
+
+      // ── Chart 3 : empty ───────────────────────────────────────────────────────
+
+      const c3 = document.getElementById("c3");
+      c3.hass = makeHass({});
+    </script>
+  </body>
+</html>

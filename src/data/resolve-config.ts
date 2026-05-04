@@ -1,7 +1,19 @@
-import { attributeSource, entityStateSource } from "./history.js";
+import { attributeSource, entityStateSource, type HistorySource } from "./history.js";
 import type { BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
+
+export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
+  return {
+    id: s.id,
+    kind: s.attribute ? "entity_attribute" : "entity_state",
+    entityId: s.entity,
+    label: s.label,
+    path: s.attribute,
+    valueType: s.valueType,
+    unit: s.unit
+  };
+}
 
 const DEFAULT_HOURS = 24;
 const PALETTE = ["#ff9800", "#42a5f5", "#66bb6a", "#ec407a", "#ab47bc", "#26a69a"];

@@ -20,7 +20,8 @@
   "sideEffects": ["dist/define.js"],
   "scripts": {
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "vite --config vite.config.dev.ts"
   },
   "dependencies": {
     "@kipk/load-ha-components": "^1.0.3",

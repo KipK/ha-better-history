@@ -1,3 +1,11 @@
-import { HaBetterHistory } from "./index.js";
+import { HaBetterHistory } from "./ha-better-history.js";
 
-customElements.define("ha-better-history", HaBetterHistory);
+if (!customElements.get("ha-better-history")) {
+  customElements.define("ha-better-history", HaBetterHistory);
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "ha-better-history": HaBetterHistory;
+  }
+}
