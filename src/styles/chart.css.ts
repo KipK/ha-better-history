@@ -2,22 +2,35 @@ import { css } from "lit";
 
 export const chartStyles = css`
   :host {
-    display: block;
-    min-height: var(--better-history-min-height, 480px);
+    display: flex;
+    flex-direction: column;
+    min-height: 360px;
     font-family: var(--better-history-font-family, inherit);
+  }
+
+  .root {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chart-area {
+    flex: 1;
+    min-height: 0;
   }
 
   .chart-surface {
     position: relative;
     overflow-y: auto;
+    height: 100%;
   }
 
   .chart-loading {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: var(--better-history-min-height, 180px);
-    padding: 40px 0;
+    height: 100%;
     box-sizing: border-box;
   }
 
@@ -186,7 +199,7 @@ export const chartStyles = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: var(--better-history-min-height, 180px);
+    height: 100%;
     padding: 20px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
     text-align: center;
@@ -200,17 +213,39 @@ export const chartStyles = css`
 
   .controls-bar {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     margin-bottom: 8px;
+    margin-left: auto;
+    width: fit-content;
+    max-width: 100%;
   }
 
   .controls-bar .entity-picker {
+    order: -1;
     margin-bottom: 0;
   }
 
   .controls-bar .entity-selected-row {
+    order: 1;
+    flex-basis: 100%;
     margin-bottom: 0;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .controls-bar {
+      flex-direction: column;
+      margin-left: 0;
+      width: 100%;
+    }
+
+    .controls-bar .entity-picker,
+    .controls-bar .entity-selected-row {
+      order: 0;
+      flex-basis: auto;
+    }
   }
 
   .date-picker-wrapper {

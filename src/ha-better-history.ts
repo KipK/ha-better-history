@@ -369,7 +369,7 @@ export class HaBetterHistory extends LitElement {
     );
   }
 
-  private _renderChart(): TemplateResult {
+  private _renderChartBody(): TemplateResult {
     const lang = this._resolved?.language;
 
     if (this._data.error) {
@@ -419,7 +419,7 @@ export class HaBetterHistory extends LitElement {
     }
 
     return html`
-      <div class="chart-surface" style="height:${this._resolved.height ?? "auto"}">
+      <div class="chart-surface">
         ${hasData
           ? html`
               <svg
@@ -450,7 +450,6 @@ export class HaBetterHistory extends LitElement {
             `
           : html`<div class="empty">${localize(lang, "empty")}</div>`}
       </div>
-      ${this._renderLegend()}
     `;
   }
 
@@ -486,14 +485,17 @@ export class HaBetterHistory extends LitElement {
     const width = this._resolved?.width ?? "100%";
 
     return html`
-      <div style="width:${width};min-height:var(--better-history-min-height, auto);">
+      <div class="root" style="width:${width};">
         ${this.showControls
           ? html`<div class="controls-bar">
-              ${this._renderDatePicker()}
               ${this._renderEntityPickerUI()}
+              ${this._renderDatePicker()}
             </div>`
           : nothing}
-        ${this._renderChart()}
+        <div class="chart-area">
+          ${this._renderChartBody()}
+        </div>
+        ${this._renderLegend()}
       </div>
     `;
   }
