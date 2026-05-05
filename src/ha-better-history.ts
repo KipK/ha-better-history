@@ -303,7 +303,7 @@ export class HaBetterHistory extends LitElement {
     const all = this._buildRenderSeries();
     const visible = all.filter((s) => !this._hiddenSeriesIds.includes(s.id));
     const timeBounds = { start: startTime, end: Math.max(endTime, startTime + 1) };
-    const data = buildChartData(visible, timeBounds, this._resolved?.disableClimateOverlay ?? false);
+    const data = buildChartData(all, visible, timeBounds, this._resolved?.disableClimateOverlay ?? false);
 
     this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, data };
 
@@ -358,10 +358,10 @@ export class HaBetterHistory extends LitElement {
             }
           )}
         </div>
-        ${showLegend && group.series.length > 0
+        ${showLegend && group.allSeries.length > 0
           ? html`
             <div class="graph-legend">
-              ${group.series.map((s) => {
+              ${group.allSeries.map((s) => {
                 const hidden = this._hiddenSeriesIds.includes(s.id);
                 const swatchStyle =
                   s.valueType !== "number"

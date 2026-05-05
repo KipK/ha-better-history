@@ -52,6 +52,7 @@ export interface XAxisLabelRenderData {
 }
 
 export interface ChartRenderData {
+  allSeries: RenderableSeries[];
   visibleSeries: RenderableSeries[];
   timeBounds: { start: number; end: number };
   numericScales: NumericScale[];
@@ -66,6 +67,7 @@ export interface ChartRenderData {
 
 export interface GraphGroup {
   series: RenderableSeries[];
+  allSeries: RenderableSeries[];
   scale?: NumericScale;
   svgHeight: number;
   canvasHeight: number;
@@ -324,17 +326,19 @@ function formatTimeTick(time: number, span: number): string {
 }
 
 export function buildChartData(
+  allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
   timeBounds: { start: number; end: number },
   disableClimateOverlay = false
 ): ChartRenderData {
-  const numericScales = numericScalesFor(visibleSeries);
+  const numericScales = numericScalesFor(allSeries);
   const plotBottom = plotBottomFor(numericScales.length);
-  const segmentCount = visibleSeries.filter((s) => s.valueType !== "number").length;
+  const segmentCount = allSeries.filter((s) => s.valueType !== "number").length;
   const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end);
   const span = timeBounds.end - timeBounds.start;
 
   return {
+    allSeries,
     visibleSeries,
     timeBounds,
     numericScales,
@@ -428,7 +432,8 @@ function offsetPointsY(points: string, yOffset: number): string {
 export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
-  const nonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number");
+  const allNonNumeric = data.allSeries.filter((s) => s.valueType !== "number");
+  const visibleNonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number");
   const span = bounds.end - bounds.start;
   const timeTicks = computeTimeTicks(bounds.start, bounds.end);
   const xLabels: XAxisLabelRenderData[] = timeTicks.map((t) => ({
@@ -439,22 +444,26 @@ export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
 
   for (let i = 0; i < data.numericScales.length; i++) {
     const scale = data.numericScales[i];
-    const numericSeries = data.visibleSeries.filter((s) => scale.ids.has(s.id));
-    const groupSeries = i === 0 ? [...numericSeries, ...nonNumeric] : numericSeries;
+    const visibleNumeric = data.visibleSeries.filter((s) => scale.ids.has(s.id));
+    const visibleGroup = i === 0 ? [...visibleNumeric, ...visibleNonNumeric] : visibleNumeric;
+    const allGroup = i === 0
+      ? [...data.allSeries.filter((s) => scale.ids.has(s.id)), ...allNonNumeric]
+      : data.allSeries.filter((s) => scale.ids.has(s.id));
 
-    const segSeries = groupSeries.filter((s) => s.valueType !== "number");
-    const segCount = segSeries.length;
+    const segSeries = visibleGroup.filter((s) => s.valueType !== "number");
+    const segCount = visibleGroup.filter((s) => s.valueType !== "number").length;
     const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
     const yOffset = GRAPH_TOP - scale.top;
 
     groups.push({
-      series: groupSeries,
+      series: visibleGroup,
+      allSeries: allGroup,
       scale,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(groupSeries, scale, bounds),
+      lines: buildGroupNumericLines(visibleGroup, scale, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(scale),
       xLabels,
