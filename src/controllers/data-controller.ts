@@ -31,34 +31,76 @@ export class DataController implements ReactiveController {
       this.series = [];
       this.loading = false;
       this.error = hass ? "No sources provided" : "No hass object";
-      console.warn("[ha-better-history] DataController.fetch skipped:", this.error);
       this.host.requestUpdate();
       return;
     }
 
     const id = ++this._requestId;
 
-    this.loading = true;
+    this.loading = this.series.length === 0;
     this.error = "";
 
-    console.log("[ha-better-history] DataController.fetch started:", { sourceCount: sources.length, sourceIds: sources.map(s => s.id), start: start.toISOString(), end: end.toISOString(), requestId: id });
-
     fetchHistory(hass, sources, start, end).then((series) => {
-      if (id !== this._requestId) {
-        console.log("[ha-better-history] DataController.fetch completed (stale), requestId:", id);
-        return;
-      }
-      console.log("[ha-better-history] DataController.fetch completed:", { seriesCount: series.length, totalPoints: series.reduce((sum, s) => sum + s.points.length, 0) });
+      if (id !== this._requestId) return;
       this.series = series;
       this.loading = false;
       this.host.requestUpdate();
     }).catch((err: unknown) => {
       if (id !== this._requestId) return;
       this.error = err instanceof Error ? err.message : String(err);
-      console.error("[ha-better-history] DataController.fetch failed:", this.error);
       this.series = [];
       this.loading = false;
       this.host.requestUpdate();
     });
+  }
+
+  addSources(
+    hass: HomeAssistant | undefined,
+    newSources: HistorySource[],
+    start: Date,
+    end: Date
+  ): void {
+    if (!hass || newSources.length === 0) return;
+
+    const existingIds = new Set(this.series.map((s) => s.source.id));
+    const toFetch = newSources.filter((s) => !existingIds.has(s.id));
+
+    if (toFetch.length === 0) return;
+
+    const id = ++this._requestId;
+
+    this.loading = this.series.length === 0;
+
+    fetchHistory(hass, toFetch, start, end).then((results) => {
+      if (id !== this._requestId) return;
+
+      for (const result of results) {
+        const idx = this.series.findIndex((s) => s.source.id === result.source.id);
+        if (idx !== -1) {
+          this.series[idx] = result;
+        } else {
+          this.series.push(result);
+        }
+      }
+
+      this.loading = false;
+      this.host.requestUpdate();
+    }).catch((err: unknown) => {
+      if (id !== this._requestId) return;
+      this.error = err instanceof Error ? err.message : String(err);
+      this.loading = false;
+      this.host.requestUpdate();
+    });
+  }
+
+  removeSources(sourceIds: string[]): void {
+    if (sourceIds.length === 0) return;
+
+    const removed = new Set(sourceIds);
+
+    this.series = this.series.filter((s) => !removed.has(s.source.id));
+    this._prevKey = this.series.map((s) => s.source.id).join("|") + "|";
+
+    this.host.requestUpdate();
   }
 }

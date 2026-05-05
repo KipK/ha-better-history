@@ -140,6 +140,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _lastFetchKey = "";
+  private _lastFetchSources: HistorySource[] = [];
   private _lastHassResolveTime = 0;
 
   protected willUpdate(changed: PropertyValues): void {
@@ -179,11 +180,37 @@ export class HaBetterHistory extends LitElement {
       }
 
       const sources = this._fetchSources();
-      const fetchKey = `${sources.map((s) => s.id).sort().join("|")}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
+      const sourceIds = sources.map((s) => s.id).sort().join("|");
+      const fetchKey = `${sourceIds}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
 
       if (fetchKey !== this._lastFetchKey) {
-        this._lastFetchKey = fetchKey;
-        this._data.fetch(this.hass, sources, resolved.startDate, resolved.endDate);
+        const prevSourceIds = this._lastFetchKey.split("|").slice(0, -2).join("|");
+        const timeChanged = sourceIds === prevSourceIds && this._lastFetchKey !== "";
+
+        if (this._lastFetchSources.length > 0 && !timeChanged) {
+          const prevIds = new Set(this._lastFetchSources.map((s) => s.id));
+          const currIds = new Set(sources.map((s) => s.id));
+          const added = sources.filter((s) => !prevIds.has(s.id));
+          const removed = this._lastFetchSources.filter((s) => !currIds.has(s.id)).map((s) => s.id);
+
+          if (added.length > 0 && removed.length === 0) {
+            this._lastFetchKey = fetchKey;
+            this._lastFetchSources = sources;
+            this._data.addSources(this.hass, added, resolved.startDate, resolved.endDate);
+          } else if (removed.length > 0 && added.length === 0) {
+            this._lastFetchKey = fetchKey;
+            this._lastFetchSources = sources;
+            this._data.removeSources(removed);
+          } else {
+            this._lastFetchKey = fetchKey;
+            this._lastFetchSources = sources;
+            this._data.fetch(this.hass, sources, resolved.startDate, resolved.endDate);
+          }
+        } else {
+          this._lastFetchKey = fetchKey;
+          this._lastFetchSources = sources;
+          this._data.fetch(this.hass, sources, resolved.startDate, resolved.endDate);
+        }
       }
 
       if (resolved.showDatePicker && !this._datePickerReady) {
@@ -401,7 +428,7 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="empty">${localize(lang, "no_series")}</div>`;
     }
 
-    if (this._data.loading) {
+    if (this._data.loading && this._data.series.length === 0) {
       const spinnerAvailable = customElements.get("ha-spinner") !== undefined;
       return html`<div class="chart-loading">
         ${spinnerAvailable
