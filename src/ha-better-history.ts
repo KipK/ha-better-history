@@ -567,8 +567,8 @@ export class HaBetterHistory extends LitElement {
       <div class="root" style="width:${width};">
         ${this.showControls
           ? html`<div class="controls-bar">
-              ${this._renderEntityPickerUI()}
               ${this._renderDatePicker()}
+              ${this._renderEntityPickerUI()}
             </div>`
           : nothing}
         <div class="chart-area">

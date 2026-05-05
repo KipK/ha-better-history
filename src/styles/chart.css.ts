@@ -258,36 +258,30 @@ export const chartStyles = css`
   .controls-bar {
     display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
+    align-items: flex-start;
     gap: 8px;
     margin-bottom: 8px;
     width: 100%;
   }
 
-  .controls-bar .date-picker-wrapper {
-    order: -1;
-  }
-
-  .controls-bar .entity-picker {
-    order: 1;
-  }
-
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
-      justify-content: flex-start;
+      align-items: stretch;
     }
 
-    .controls-bar .date-picker-wrapper,
-    .controls-bar .entity-picker {
-      order: 0;
-      flex-basis: auto;
+    .date-picker-wrapper {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .date-picker-wrapper ha-date-range-picker {
+      width: 100%;
     }
   }
 
   .date-picker-wrapper {
+    flex: 0 0 auto;
     width: fit-content;
     max-width: 100%;
     min-width: 0;
@@ -300,11 +294,15 @@ export const chartStyles = css`
 
   .entity-picker {
     position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .entity-row {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
   }
 
   .entity-menu {
@@ -556,15 +554,7 @@ export const chartStyles = css`
     text-align: center;
   }
 
-  .entity-selected-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-  }
-
-  .entity-selected-row ha-input-chip {
+  .entity-row ha-input-chip {
     flex-shrink: 0;
     --md-input-chip-container-height: 28px;
     --md-input-chip-label-text-size: 12px;

@@ -51,18 +51,6 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
       @picker-opened=${opts.onEntityPickerOpened}
       @picker-closed=${opts.onEntityPickerClosed}
     >
-      <ha-generic-picker
-        class="entity-trigger"
-        .hass=${opts.hass}
-        .addButtonLabel=${"Ajouter une cible"}
-        .value=${""}
-        .getItems=${opts.getItems}
-        .getAdditionalItems=${opts.getAdditionalItems}
-        @value-changed=${(e: CustomEvent) => {
-          const entityId = (e.detail as { value: string }).value;
-          if (entityId) opts.onEntitySelected(entityId);
-        }}
-      ></ha-generic-picker>
       <div class="entity-menu" ?open=${opts.menuOpen} @click=${(e: Event) => e.stopPropagation()}>
         <div class="entity-menu-top">
           <span class="entity-menu-title">${entity ? entityLabel(entity) : ""}</span>
@@ -70,7 +58,34 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         </div>
         ${renderBrowser(opts)}
       </div>
-      ${renderSelectedSources(opts)}
+      <div class="entity-row">
+        ${opts.selectedSources.map((source) => {
+          const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
+
+          if (isDefault) {
+            return html`<span class="entity-default-chip">${source.label}</span>`;
+          }
+
+          return html`
+            <ha-input-chip
+              .label=${source.label}
+              @remove=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
+            ></ha-input-chip>
+          `;
+        })}
+        <ha-generic-picker
+          class="entity-trigger"
+          .hass=${opts.hass}
+          .addButtonLabel=${"Ajouter une cible"}
+          .value=${""}
+          .getItems=${opts.getItems}
+          .getAdditionalItems=${opts.getAdditionalItems}
+          @value-changed=${(e: CustomEvent) => {
+            const entityId = (e.detail as { value: string }).value;
+            if (entityId) opts.onEntitySelected(entityId);
+          }}
+        ></ha-generic-picker>
+      </div>
     </div>
   `;
 }
@@ -235,23 +250,3 @@ function renderTreeEntry(
   `;
 }
 
-function renderSelectedSources(opts: EntityPickerRenderOpts): TemplateResult {
-  return html`
-    <div class="entity-selected-row">
-      ${opts.selectedSources.map((source) => {
-        const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
-
-        if (isDefault) {
-          return html`<span class="entity-default-chip">${source.label}</span>`;
-        }
-
-        return html`
-          <ha-input-chip
-            .label=${source.label}
-            @remove=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
-          ></ha-input-chip>
-        `;
-      })}
-    </div>
-  `;
-}
