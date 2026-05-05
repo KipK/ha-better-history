@@ -294,7 +294,18 @@ export const chartStyles = css`
 
   .entity-menu-top {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .entity-menu-title {
+    font-size: var(--wa-font-size-m, var(--ha-font-size-m, 14px));
+    font-weight: var(--wa-font-weight-body, var(--ha-font-weight-normal, 400));
+    color: var(--wa-color-text-normal, var(--primary-text-color));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 8px;
   }
 
   .entity-menu-close {
@@ -411,6 +422,15 @@ export const chartStyles = css`
     background: rgba(var(--rgb-primary-text-color, 255, 255, 255), 0.08);
   }
 
+  .entity-browser-entry--disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  .entity-browser-entry--disabled:hover {
+    background: transparent;
+  }
+
   .entity-browser-entry-label {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -462,24 +482,19 @@ export const chartStyles = css`
     background: transparent;
   }
 
-  .entity-browser-entity-info {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
+  .entity-browser-entity--present {
+    cursor: default;
+    opacity: 0.45;
   }
 
-  .entity-browser-entity-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--better-history-text-color, var(--primary-text-color, #fff));
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .entity-browser-entity--present:hover {
+    background: transparent;
   }
 
   .entity-browser-entity-id {
-    font-size: 11px;
-    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

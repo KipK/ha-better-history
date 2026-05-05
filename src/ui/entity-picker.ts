@@ -44,6 +44,8 @@ export function entityPickerAvailable(): boolean {
 }
 
 export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult {
+  const entity = opts.selectedEntityId && opts.hass ? opts.hass.states[opts.selectedEntityId] : undefined;
+
   return html`
     <div class="entity-picker"
       @picker-opened=${opts.onEntityPickerOpened}
@@ -63,6 +65,7 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
       ></ha-generic-picker>
       <div class="entity-menu" ?open=${opts.menuOpen}>
         <div class="entity-menu-top">
+          <span class="entity-menu-title">${entity ? entityLabel(entity) : ""}</span>
           <button class="entity-menu-close" @click=${opts.onCloseMenu}>&#x2715;</button>
         </div>
         ${renderBrowser(opts)}
@@ -102,7 +105,6 @@ function renderBrowserBreadcrumb(
   if (!entity) return html``;
 
   return html`
-    <div class="entity-browser-title">${entityLabel(entity)}</div>
     <div class="entity-breadcrumb">
       <button class="entity-crumb" @click=${() => opts.onBreadcrumbClick([])}>${entity.entity_id}</button>
       ${opts.path.map(
@@ -145,6 +147,18 @@ function renderBrowserEntries(
   `;
 }
 
+function isAlreadyPresent(id: string, opts: EntityPickerRenderOpts): boolean {
+  const inSelected = opts.selectedSources.some((s) => s.id === id);
+  const inResolved = (opts.resolved?.series ?? []).some((s) => s.id === id);
+  return inSelected || inResolved;
+}
+
+function isEntityAlreadyPresent(entityId: string, opts: EntityPickerRenderOpts): boolean {
+  const inSelected = opts.selectedSources.some((s) => s.entityId === entityId);
+  const inResolved = (opts.resolved?.series ?? []).some((s) => s.entity === entityId);
+  return inSelected || inResolved;
+}
+
 function hasConflictingClimate(entity: HassEntity, opts: EntityPickerRenderOpts): boolean {
   if (!entity.entity_id.startsWith("climate.")) return false;
   const inSelected = opts.selectedSources.some(
@@ -163,21 +177,24 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   if (hasConflictingClimate(entity, opts)) {
     return html`
       <div class="entity-browser-entity entity-browser-entity--disabled">
-        <div class="entity-browser-entity-info">
-          <span class="entity-browser-entity-name">${entityLabel(entity)}</span>
-          <span class="entity-browser-entity-id">${entity.entity_id}</span>
-        </div>
+        <span class="entity-browser-entity-id">${entity.entity_id}</span>
         <span class="entity-browser-entity-hint">graph séparé</span>
+      </div>
+    `;
+  }
+
+  if (isAlreadyPresent(source.id, opts) || isEntityAlreadyPresent(entity.entity_id, opts)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--present">
+        <span class="entity-browser-entity-id">${entity.entity_id}</span>
+        <span class="entity-browser-entry-type">${source.valueType}</span>
       </div>
     `;
   }
 
   return html`
     <div class="entity-browser-entity" @click=${() => opts.onSourceAdded(source)}>
-      <div class="entity-browser-entity-info">
-        <span class="entity-browser-entity-name">${entityLabel(entity)}</span>
-        <span class="entity-browser-entity-id">${entity.entity_id}</span>
-      </div>
+      <span class="entity-browser-entity-id">${entity.entity_id}</span>
       <span class="entity-browser-entry-type">${source.valueType}</span>
     </div>
   `;
@@ -204,6 +221,15 @@ function renderTreeEntry(
   const source = type ? attributeSource(entity, fullPath) : undefined;
 
   if (!source) return nothing;
+
+  if (isAlreadyPresent(source.id, opts)) {
+    return html`
+      <div class="entity-browser-entry entity-browser-entry--disabled">
+        <span class="entity-browser-entry-label">${key}</span>
+        <span class="entity-browser-entry-type">${type}</span>
+      </div>
+    `;
+  }
 
   return html`
     <div class="entity-browser-entry" @click=${() => opts.onSourceAdded(source)}>

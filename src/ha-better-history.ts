@@ -212,7 +212,7 @@ export class HaBetterHistory extends LitElement {
     void this.requestUpdate();
   }
 
-  private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
+  private _pickScaleGroup(source: HistorySource, _existing: RenderableSeries[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
 
     // Match by unit against resolved series that explicitly declare a unit
@@ -222,12 +222,6 @@ export class HaBetterHistory extends LitElement {
       );
       if (match) return match.scaleGroupKey;
     }
-
-    // If there is exactly one numeric scale group already in the graph, merge into it
-    const numericGroups = new Set(
-      existing.filter((s) => s.valueType === "number").map((s) => s.scaleGroupKey)
-    );
-    if (numericGroups.size === 1) return [...numericGroups][0]!;
 
     return source.unit ? `unit:${source.unit}` : `series:${source.id}`;
   }
@@ -616,6 +610,9 @@ export class HaBetterHistory extends LitElement {
 
   private _addSource(source: HistorySource): void {
     if (this._selectedSources.some((selected) => selected.id === source.id)) {
+      return;
+    }
+    if ((this._resolved?.series ?? []).some((s) => s.id === source.id)) {
       return;
     }
 
