@@ -57,11 +57,19 @@ export class DataController implements ReactiveController {
 
     const id = ++this._requestId;
 
+    this.series = [];
     this.loading = true;
     this.error = "";
     this.host.requestUpdate();
 
-    withTimeout(fetchHistory(hass, sources, start, end), FETCH_TIMEOUT_MS)
+    withTimeout(
+      fetchHistory(hass, sources, start, end, (partial) => {
+        if (id !== this._requestId) return;
+        this.series = partial;
+        this.host.requestUpdate();
+      }),
+      FETCH_TIMEOUT_MS
+    )
       .then((series) => {
         if (id !== this._requestId) return;
         defer(() => {
@@ -95,22 +103,18 @@ export class DataController implements ReactiveController {
     this.loading = true;
     this.host.requestUpdate();
 
-    withTimeout(fetchHistory(hass, toFetch, start, end), FETCH_TIMEOUT_MS)
+    withTimeout(
+      fetchHistory(hass, toFetch, start, end, (partial) => {
+        if (id !== this._requestId) return;
+        this._mergePartial(partial);
+        this.host.requestUpdate();
+      }),
+      FETCH_TIMEOUT_MS
+    )
       .then((results) => {
         if (id !== this._requestId) return;
         defer(() => {
-          const updated = [...this.series];
-
-          for (const result of results) {
-            const idx = updated.findIndex((s) => s.source.id === result.source.id);
-            if (idx !== -1) {
-              updated[idx] = result;
-            } else {
-              updated.push(result);
-            }
-          }
-
-          this.series = updated;
+          this._mergePartial(results);
           this.loading = false;
           this.host.requestUpdate();
         });
@@ -120,6 +124,21 @@ export class DataController implements ReactiveController {
         this.loading = false;
         this.host.requestUpdate();
       });
+  }
+
+  private _mergePartial(partial: HistorySeries[]): void {
+    const updated = [...this.series];
+
+    for (const result of partial) {
+      const idx = updated.findIndex((s) => s.source.id === result.source.id);
+      if (idx !== -1) {
+        updated[idx] = result;
+      } else {
+        updated.push(result);
+      }
+    }
+
+    this.series = updated;
   }
 
   removeSources(sourceIds: string[]): void {

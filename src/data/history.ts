@@ -188,28 +188,6 @@ function statesByEntity(history: HistoryResponse, entityIds: string[]): Map<stri
   return result;
 }
 
-function buildStatesMap(
-  responses: Array<{ entityIds: string[]; data: HistoryResponse }>
-): Map<string, HistoryState[]> {
-  const map = new Map<string, HistoryState[]>();
-
-  for (const { entityIds, data } of responses) {
-    const batchMap = statesByEntity(data, entityIds);
-
-    for (const [entityId, states] of batchMap) {
-      const existing = map.get(entityId);
-
-      if (existing) {
-        existing.push(...states);
-      } else {
-        map.set(entityId, states);
-      }
-    }
-  }
-
-  return map;
-}
-
 function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, end: Date): HistoryPoint[] {
   const entity = hass.states[source.entityId];
 
@@ -272,7 +250,8 @@ export async function fetchHistory(
   hass: HomeAssistant,
   sources: HistorySource[],
   start: Date,
-  end: Date
+  end: Date,
+  onProgress?: (series: HistorySeries[]) => void
 ): Promise<HistorySeries[]> {
   if (!hass.callWS && !hass.callApi) {
     throw new Error("Home Assistant history API is unavailable");
@@ -289,12 +268,17 @@ export async function fetchHistory(
   const stateOnlyIds = allEntityIds.filter((id) => !attrEntityIds.has(id));
   const attrIds = allEntityIds.filter((id) => attrEntityIds.has(id));
 
-  const promises: Array<{ entityIds: string[]; data: Promise<HistoryResponse> }> = [];
+  interface Batch {
+    entityIds: string[];
+    data: () => Promise<HistoryResponse>;
+  }
+
+  const batches: Batch[] = [];
 
   if (stateOnlyIds.length > 0) {
-    promises.push({
+    batches.push({
       entityIds: stateOnlyIds,
-      data: fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
+      data: () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
     });
   }
 
@@ -302,43 +286,76 @@ export async function fetchHistory(
     const CHUNK_MS = 24 * 60 * 60 * 1000;
     const span = end.getTime() - start.getTime();
 
-    // For REST API, chunk long periods into 1-day windows to allow
-    // parallel HTTP requests and avoid oversized responses.
-    // For WebSocket, a single request is more efficient.
-    if (!hass.callWS && span > CHUNK_MS) {
+    if (span > CHUNK_MS) {
       for (let t = start.getTime(); t < end.getTime(); t += CHUNK_MS) {
-        promises.push({
+        const chunkStart = new Date(t);
+        const chunkEnd = new Date(Math.min(t + CHUNK_MS, end.getTime()));
+        batches.push({
           entityIds: attrIds,
-          data: fetchHistoryBatch(hass, attrIds, new Date(t), new Date(Math.min(t + CHUNK_MS, end.getTime())), false, false, false)
+          data: () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false)
         });
       }
     } else {
-      promises.push({
+      batches.push({
         entityIds: attrIds,
-        data: fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
+        data: () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
       });
     }
   }
 
-  const responses = await Promise.all(
-    promises.map(async (p) => ({ entityIds: p.entityIds, data: await p.data }))
-  );
+  for (const batch of batches) {
+    const response = await batch.data();
 
-  const historyStatesByEntity = buildStatesMap(responses);
+    // Defer processing so the browser can handle events between network IO
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-  return sources.map((source) => {
-    const points = (historyStatesByEntity.get(source.entityId) ?? []).flatMap((state) => {
-      const value = valueFromState(state, source);
-      const time = timeFromState(state);
+    const batchMap = statesByEntity(response, batch.entityIds);
 
-      return value !== undefined && Number.isFinite(time) ? [{ time, value }] : [];
-    });
+    for (const [entityId, states] of batchMap) {
+      const existing = allStates.get(entityId);
+      if (existing) {
+        existing.push(...states);
+      } else {
+        allStates.set(entityId, states);
+      }
+    }
 
-    const raw = points.length > 0 ? extendPoints(points, start, end) : currentPoint(hass, source, start, end);
+    if (onProgress) {
+      onProgress(
+        sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end))
+      );
 
-    return {
-      source,
-      points: deduplicatePoints(raw)
-    };
+      await new Promise<void>((resolve) => {
+        const raf = requestAnimationFrame(resolve);
+        setTimeout(() => {
+          cancelAnimationFrame(raf);
+          resolve();
+        }, 120);
+      });
+    }
+  }
+
+  return sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end));
+}
+
+function buildSeries(
+  source: HistorySource,
+  states: HistoryState[],
+  hass: HomeAssistant,
+  start: Date,
+  end: Date
+): HistorySeries {
+  const points = states.flatMap((state) => {
+    const value = valueFromState(state, source);
+    const time = timeFromState(state);
+
+    return value !== undefined && Number.isFinite(time) ? [{ time, value }] : [];
   });
+
+  const raw = points.length > 0 ? extendPoints(points, start, end) : currentPoint(hass, source, start, end);
+
+  return {
+    source,
+    points: deduplicatePoints(raw)
+  };
 }
