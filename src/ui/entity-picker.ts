@@ -122,7 +122,7 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
       <span class="source-chip-icon">
         ${isEntity && entity
           ? html`<ha-icon .icon=${entityDomainIcon(entity)}></ha-icon>`
-          : html`<ha-icon icon="mdi:code-tags"></ha-icon>`}
+          : html`<ha-icon .icon=${attrValueTypeIcon(source.valueType)}></ha-icon>`}
       </span>
       <span class="source-chip-label">${source.label}</span>
       ${!isDefault
@@ -133,6 +133,15 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
         : nothing}
     </div>
   `;
+}
+
+function attrValueTypeIcon(valueType: string): string {
+  switch (valueType) {
+    case "number": return "mdi:chart-line";
+    case "string": return "mdi:text";
+    case "boolean": return "mdi:toggle-switch";
+    default: return "mdi:code-tags";
+  }
 }
 
 function renderBrowser(opts: EntityPickerRenderOpts): TemplateResult {
