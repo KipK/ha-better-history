@@ -2,8 +2,24 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchHistory, type HistorySeries, type HistorySource } from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 
+const FETCH_TIMEOUT_MS = 30000;
+
 function defer(cb: () => void): void {
   requestAnimationFrame(() => requestAnimationFrame(cb));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out")), ms)
+    )
+  ]);
+}
+
+function formatError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 export class DataController implements ReactiveController {
@@ -45,19 +61,20 @@ export class DataController implements ReactiveController {
     this.error = "";
     this.host.requestUpdate();
 
-    fetchHistory(hass, sources, start, end).then((series) => {
-      if (id !== this._requestId) return;
-      defer(() => {
-        this.series = series;
+    withTimeout(fetchHistory(hass, sources, start, end), FETCH_TIMEOUT_MS)
+      .then((series) => {
+        if (id !== this._requestId) return;
+        defer(() => {
+          this.series = series;
+          this.loading = false;
+          this.host.requestUpdate();
+        });
+      }).catch((err: unknown) => {
+        if (id !== this._requestId) return;
+        this.error = formatError(err);
         this.loading = false;
         this.host.requestUpdate();
       });
-    }).catch((err: unknown) => {
-      if (id !== this._requestId) return;
-      this.error = err instanceof Error ? err.message : String(err);
-      this.loading = false;
-      this.host.requestUpdate();
-    });
   }
 
   addSources(
@@ -78,30 +95,31 @@ export class DataController implements ReactiveController {
     this.loading = true;
     this.host.requestUpdate();
 
-    fetchHistory(hass, toFetch, start, end).then((results) => {
-      if (id !== this._requestId) return;
-      defer(() => {
-        const updated = [...this.series];
+    withTimeout(fetchHistory(hass, toFetch, start, end), FETCH_TIMEOUT_MS)
+      .then((results) => {
+        if (id !== this._requestId) return;
+        defer(() => {
+          const updated = [...this.series];
 
-        for (const result of results) {
-          const idx = updated.findIndex((s) => s.source.id === result.source.id);
-          if (idx !== -1) {
-            updated[idx] = result;
-          } else {
-            updated.push(result);
+          for (const result of results) {
+            const idx = updated.findIndex((s) => s.source.id === result.source.id);
+            if (idx !== -1) {
+              updated[idx] = result;
+            } else {
+              updated.push(result);
+            }
           }
-        }
 
-        this.series = updated;
+          this.series = updated;
+          this.loading = false;
+          this.host.requestUpdate();
+        });
+      }).catch((err: unknown) => {
+        if (id !== this._requestId) return;
+        this.error = formatError(err);
         this.loading = false;
         this.host.requestUpdate();
       });
-    }).catch((err: unknown) => {
-      if (id !== this._requestId) return;
-      this.error = err instanceof Error ? err.message : String(err);
-      this.loading = false;
-      this.host.requestUpdate();
-    });
   }
 
   removeSources(sourceIds: string[]): void {

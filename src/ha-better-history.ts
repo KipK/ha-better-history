@@ -439,7 +439,8 @@ export class HaBetterHistory extends LitElement {
 
   private _renderChartBody(): TemplateResult {
     if (this._data.error) {
-      return html`<div class="error">${this._data.error}</div>`;
+      const isTimeout = /timed?\s*out/i.test(this._data.error);
+      return html`<div class="error">${localize(this.hass, isTimeout ? "error_timeout" : "error")}</div>`;
     }
 
     if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {

@@ -3,6 +3,7 @@ import type { HomeAssistant } from "../types/ha.js";
 const HA_KEYS: Record<string, string> = {
   loading: "ui.common.loading",
   empty: "ui.components.history_charts.no_history_found",
+  error: "ui.components.history_charts.error",
   add_target: "ui.components.target-picker.add_target",
   attributes: "ui.dialogs.more_info_control.attributes",
   back: "ui.common.back"
@@ -11,11 +12,13 @@ const HA_KEYS: Record<string, string> = {
 const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   en: {
     no_series: "No series configured",
-    no_entity_selected: "No entity selected"
+    no_entity_selected: "No entity selected",
+    error_timeout: "The request timed out. Please try again."
   },
   fr: {
     no_series: "Aucune série configurée",
-    no_entity_selected: "Aucune entité sélectionnée"
+    no_entity_selected: "Aucune entité sélectionnée",
+    error_timeout: "La requête a expiré. Veuillez réessayer."
   }
 };
 
