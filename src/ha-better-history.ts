@@ -84,12 +84,12 @@ export class HaBetterHistory extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
 
-    document.addEventListener("click", this._handleDocumentClick);
+    document.addEventListener("click", this._handleDocumentClick, true);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener("click", this._handleDocumentClick);
+    document.removeEventListener("click", this._handleDocumentClick, true);
   }
 
   private _effectiveStartDate(): Date {
@@ -655,10 +655,9 @@ export class HaBetterHistory extends LitElement {
 
   private _handleDocumentClick = (event: Event): void => {
     if (!this._attributeMenuOpen || this._entityPickerOpen) return;
-    const picker = this.renderRoot?.querySelector(".entity-picker");
-    if (!picker || !event.composedPath().includes(picker)) {
-      this._closeAttributeMenu();
-    }
+    const menu = this.renderRoot?.querySelector(".entity-menu");
+    if (menu && event.composedPath().includes(menu as EventTarget)) return;
+    this._closeAttributeMenu();
   };
 
   private _addSource(source: HistorySource): void {

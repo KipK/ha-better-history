@@ -63,7 +63,7 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           if (entityId) opts.onEntitySelected(entityId);
         }}
       ></ha-generic-picker>
-      <div class="entity-menu" ?open=${opts.menuOpen}>
+      <div class="entity-menu" ?open=${opts.menuOpen} @click=${(e: Event) => e.stopPropagation()}>
         <div class="entity-menu-top">
           <span class="entity-menu-title">${entity ? entityLabel(entity) : ""}</span>
           <button class="entity-menu-close" @click=${opts.onCloseMenu}>&#x2715;</button>
