@@ -92,6 +92,12 @@ export const chartStyles = css`
     opacity: 0.7;
   }
 
+  .segment-border {
+    stroke-width: 1.5;
+    stroke-opacity: 0.6;
+    vector-effect: non-scaling-stroke;
+  }
+
   .climate-heating-area {
     fill: var(--better-history-accent-color, var(--accent-color, #ff9800));
     opacity: 0.22;

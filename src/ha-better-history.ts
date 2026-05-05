@@ -11,10 +11,13 @@ import {
   PLOT_LEFT,
   PLOT_RIGHT,
   PLOT_TOP,
+  PLOT_WIDTH,
+  SEGMENT_ROW_HEIGHT,
   type ChartRenderData,
   type GraphGroup,
   type RenderableSeries
 } from "./render/chart.js";
+import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
 import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
@@ -335,6 +338,12 @@ export class HaBetterHistory extends LitElement {
             ${group.segments.map(
               (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
             )}
+            ${group.series
+              .filter((s) => s.valueType !== "number")
+              .map((s, ni) => {
+                const y = GRAPH_TOP + GRAPH_HEIGHT + 10 + ni * SEGMENT_ROW_HEIGHT;
+                return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
+              })}
             <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
             <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
             ${group.scale
