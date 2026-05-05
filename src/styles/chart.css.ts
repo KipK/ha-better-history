@@ -45,6 +45,30 @@ export const chartStyles = css`
     stroke-width: 1;
   }
 
+  .axis.tick {
+    stroke-width: 1;
+  }
+
+  .grid-line {
+    stroke: var(--better-history-border-color, var(--divider-color, #444));
+    stroke-width: 0.5;
+    stroke-dasharray: 2 4;
+    opacity: 0.5;
+  }
+
+  .x-axis-label {
+    font-size: 11px;
+    fill: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-family: inherit;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .x-axis-label--bold {
+    font-weight: 600;
+    fill: var(--better-history-text-color, var(--primary-text-color, #fff));
+  }
+
   .graph-separator {
     stroke: var(--better-history-border-color, var(--divider-color, #444));
     stroke-width: 1.2;

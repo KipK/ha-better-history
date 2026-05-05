@@ -311,14 +311,11 @@ export class HaBetterHistory extends LitElement {
             height="${group.svgHeight}"
             preserveAspectRatio="none"
           >
-            <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
-            <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
-            ${group.scale ? svg`
-              <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${PLOT_TOP}></line>
-              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${PLOT_TOP}></line>
-              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP + group.scale.height / 2} x2=${PLOT_LEFT} y2=${PLOT_TOP + group.scale.height / 2}></line>
-              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP + group.scale.height} x2=${PLOT_LEFT} y2=${PLOT_TOP + group.scale.height}></line>
-            ` : nothing}
+            ${group.yLabels.map(
+              (label) => svg`
+                <line class="grid-line" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
+              `
+            )}
             ${group.heatingAreas.map(
               (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
             )}
@@ -327,6 +324,20 @@ export class HaBetterHistory extends LitElement {
             )}
             ${group.segments.map(
               (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
+            )}
+            <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
+            <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
+            ${group.scale
+              ? group.yLabels.map(
+                  (label) => svg`
+                    <line class="axis tick" x1=${PLOT_LEFT - 4} y1=${label.y.toFixed(1)} x2=${PLOT_LEFT} y2=${label.y.toFixed(1)}></line>
+                  `
+                )
+              : nothing}
+            ${group.xLabels.map(
+              (label) => svg`
+                <text class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" x=${label.x.toFixed(1)} y=${group.svgHeight - 4}>${label.label}</text>
+              `
             )}
           </svg>
           ${group.yLabels.map(

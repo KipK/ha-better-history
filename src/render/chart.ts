@@ -44,6 +44,12 @@ export interface YAxisLabelRenderData {
   value: string;
 }
 
+export interface XAxisLabelRenderData {
+  x: number;
+  label: string;
+  bold?: boolean;
+}
+
 export interface ChartRenderData {
   visibleSeries: RenderableSeries[];
   timeBounds: { start: number; end: number };
@@ -54,6 +60,7 @@ export interface ChartRenderData {
   segments: SegmentRenderData[];
   heatingAreas: HeatingAreaRenderData[];
   yAxisLabels: YAxisLabelRenderData[];
+  xAxisLabels: XAxisLabelRenderData[];
 }
 
 export interface GraphGroup {
@@ -63,6 +70,7 @@ export interface GraphGroup {
   lines: NumericLineRenderData[];
   segments: SegmentRenderData[];
   yLabels: YAxisLabelRenderData[];
+  xLabels: XAxisLabelRenderData[];
   heatingAreas: HeatingAreaRenderData[];
 }
 
@@ -184,12 +192,101 @@ function buildSegments(
 
 function buildYAxisLabels(scales: NumericScale[]): YAxisLabelRenderData[] {
   return scales.flatMap((scale) =>
-    [
-      { y: scale.top + scale.height, v: scale.min },
-      { y: scale.top + scale.height / 2, v: (scale.min + scale.max) / 2 },
-      { y: scale.top, v: scale.max }
-    ].map(({ y, v }) => ({ y, value: v.toFixed(scale.precision) }))
+    scale.ticks.map((v) => ({
+      y: scale.top + scale.height - ((v - scale.min) / (scale.max - scale.min)) * scale.height,
+      value: formatTickValue(v, scale.precision)
+    }))
   );
+}
+
+function formatTickValue(value: number, precision: number): string {
+  if (precision <= 0 && Number.isInteger(value)) return String(value);
+
+  let formatted = value.toFixed(precision);
+
+  formatted = formatted.replace(/\.?0+$/, "");
+
+  return formatted;
+}
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+function computeTimeTicks(
+  start: number,
+  end: number
+): Array<{ time: number; bold: boolean }> {
+  const span = end - start;
+
+  if (span <= 0) return [];
+
+  const step = timeTickStep(span);
+  const ticks: Array<{ time: number; bold: boolean }> = [];
+  const anchor = Math.ceil(start / step) * step;
+
+  for (let t = anchor; t < end; t += step) {
+    const d = new Date(t);
+
+    ticks.push({
+      time: t,
+      bold: d.getHours() === 0 && d.getMinutes() === 0
+    });
+  }
+
+  return ticks;
+}
+
+function timeTickStep(span: number): number {
+  if (span <= 1.5 * HOUR) return 10 * MINUTE;
+  if (span <= 6 * HOUR) return 30 * MINUTE;
+  if (span <= 18 * HOUR) return HOUR;
+  if (span <= 36 * HOUR) return 2 * HOUR;
+  if (span <= 4 * DAY) return 4 * HOUR;
+  if (span <= 8 * DAY) return 12 * HOUR;
+  if (span <= 18 * DAY) return 1 * DAY;
+  if (span <= 40 * DAY) return 2 * DAY;
+  if (span <= 90 * DAY) return 7 * DAY;
+  if (span <= 200 * DAY) return 14 * DAY;
+  if (span <= 400 * DAY) return 30 * DAY;
+
+  return 60 * DAY;
+}
+
+function formatTimeTick(time: number, span: number): string {
+  const d = new Date(time);
+  const daySpan = span / DAY;
+
+  if (daySpan > 88) {
+    const month = d.toLocaleString("default", { month: "short" });
+    const year = d.getFullYear();
+
+    return d.getMonth() === 0 ? `${month} ${year}` : month;
+  }
+
+  if (daySpan > 35) {
+    const month = d.toLocaleString("default", { month: "short" });
+    const day = d.getDate();
+
+    return `${day} ${month}`;
+  }
+
+  if (daySpan > 7) {
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  }
+
+  if (daySpan > 2) {
+    return d.toLocaleString("default", { weekday: "short" });
+  }
+
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+
+  if (daySpan > 0.5) return `${h}:${m}`;
+
+  const s = String(d.getSeconds()).padStart(2, "0");
+
+  return `${h}:${m}:${s}`;
 }
 
 export function buildChartData(
@@ -200,6 +297,8 @@ export function buildChartData(
   const numericScales = numericScalesFor(visibleSeries);
   const plotBottom = plotBottomFor(numericScales.length);
   const segmentCount = visibleSeries.filter((s) => s.valueType !== "number").length;
+  const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end);
+  const span = timeBounds.end - timeBounds.start;
 
   return {
     visibleSeries,
@@ -210,7 +309,12 @@ export function buildChartData(
     numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds),
     segments: buildSegments(visibleSeries, plotBottom, timeBounds),
     heatingAreas: disableClimateOverlay ? [] : buildClimateHeatingAreas(visibleSeries, numericScales, timeBounds),
-    yAxisLabels: buildYAxisLabels(numericScales)
+    yAxisLabels: buildYAxisLabels(numericScales),
+    xAxisLabels: timeTicks.map((t) => ({
+      x: xFor(t.time, timeBounds),
+      label: formatTimeTick(t.time, span),
+      bold: t.bold
+    }))
   };
 }
 
@@ -267,13 +371,10 @@ function buildGroupSegments(
 }
 
 function buildGroupYLabels(scale: NumericScale): YAxisLabelRenderData[] {
-  const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
-
-  return [
-    { y: localScale.top + scale.height, value: scale.min.toFixed(scale.precision) },
-    { y: localScale.top + scale.height / 2, value: ((scale.min + scale.max) / 2).toFixed(scale.precision) },
-    { y: localScale.top, value: scale.max.toFixed(scale.precision) }
-  ];
+  return scale.ticks.map((v) => ({
+    y: GRAPH_TOP + scale.height - ((v - scale.min) / (scale.max - scale.min)) * scale.height,
+    value: formatTickValue(v, scale.precision)
+  }));
 }
 
 function offsetPointsY(points: string, yOffset: number): string {
@@ -292,6 +393,13 @@ export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
   const nonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number");
+  const span = bounds.end - bounds.start;
+  const timeTicks = computeTimeTicks(bounds.start, bounds.end);
+  const xLabels: XAxisLabelRenderData[] = timeTicks.map((t) => ({
+    x: xFor(t.time, bounds),
+    label: formatTimeTick(t.time, span),
+    bold: t.bold
+  }));
 
   for (let i = 0; i < data.numericScales.length; i++) {
     const scale = data.numericScales[i];
@@ -311,6 +419,7 @@ export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
       lines: buildGroupNumericLines(groupSeries, scale, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(scale),
+      xLabels,
       heatingAreas: i === 0
         ? data.heatingAreas.map((a) => ({ id: a.id, points: offsetPointsY(a.points, yOffset) }))
         : []

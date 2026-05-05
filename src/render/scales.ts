@@ -8,6 +8,7 @@ export interface NumericScale {
   precision: number;
   top: number;
   height: number;
+  ticks: number[];
 }
 
 // Structural subset of RenderableSeries — avoids circular import with chart.ts.
@@ -46,6 +47,65 @@ export function roundToPrecision(value: number, precision: number): number {
   const factor = 10 ** precision;
 
   return Math.round(value * factor) / factor;
+}
+
+export function computeNiceTicks(min: number, max: number, desiredCount: number = 5): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [min, max];
+
+  const span = Math.abs(max - min);
+
+  if (span < 1e-10) {
+    return [min];
+  }
+
+  const maxTicks = Math.max(desiredCount, 2);
+  const step = niceStep(span / (maxTicks - 1));
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const tolerance = step * 1e-8;
+
+  const ticks: number[] = [];
+
+  for (let v = niceMin; v <= niceMax + tolerance; v += step) {
+    ticks.push(roundTick(v, step));
+  }
+
+  return ticks;
+}
+
+function niceStep(approx: number): number {
+  if (approx <= 0) return 1;
+
+  const exp = Math.floor(Math.log10(Math.abs(approx)));
+  const f = approx / Math.pow(10, exp);
+  let nf: number;
+
+  if (f < 1.5) nf = 1;
+  else if (f < 3) nf = 2;
+  else if (f < 7) nf = 5;
+  else nf = 10;
+
+  return nf * Math.pow(10, exp);
+}
+
+function roundTick(value: number, step: number): number {
+  const decimals = Math.max(0, -Math.floor(Math.log10(Math.abs(step) || 1)) + 1);
+
+  return parseFloat(value.toFixed(decimals));
+}
+
+export function tickPrecision(ticks: number[]): number {
+  let maxDecimals = 0;
+
+  for (const t of ticks) {
+    const s = String(t);
+    const dot = s.indexOf(".");
+    if (dot !== -1) {
+      maxDecimals = Math.max(maxDecimals, s.length - dot - 1);
+    }
+  }
+
+  return maxDecimals;
 }
 
 export function paddedRange(min: number, max: number, precision: number): { min: number; max: number } {
@@ -129,12 +189,14 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
     if (group.manualMax !== undefined) autoMax = Math.max(autoMax, group.manualMax);
 
     const range = paddedRange(autoMin, autoMax, group.precision);
+    const ticks = computeNiceTicks(range.min, range.max);
 
     return {
       ids: new Set(group.ids),
       min: range.min,
       max: range.max,
-      precision: group.precision,
+      precision: Math.max(group.precision, tickPrecision(ticks)),
+      ticks,
       top: GRAPH_TOP + index * GRAPH_STEP,
       height: GRAPH_HEIGHT
     };
