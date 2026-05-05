@@ -151,17 +151,21 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
   const groups: GroupAccum[] = [];
 
   for (const s of series) {
-    if (s.valueType !== "number" || s.points.length === 0) continue;
+    if (s.points.length === 0) continue;
+
+    if (s.valueType !== "number" && s.valueType !== "boolean") continue;
 
     const values = s.points.map((p) => Number(p.value)).filter((v) => Number.isFinite(v));
 
     if (values.length === 0) continue;
 
-    const dataMin = Math.min(...values);
-    const dataMax = Math.max(...values);
-    const prec = Math.max(...values.map((v) => valuePrecision(v)));
+    const dataMin = s.valueType === "boolean" ? 0 : Math.min(...values);
+    const dataMax = s.valueType === "boolean" ? 1 : Math.max(...values);
+    const prec = s.valueType === "boolean" ? 0 : Math.max(...values.map((v) => valuePrecision(v)));
 
-    let group = groups.find((g) => g.key === s.scaleGroupKey);
+    const groupKey = s.valueType === "boolean" ? "group:boolean" : s.scaleGroupKey;
+
+    let group = groups.find((g) => g.key === groupKey);
 
     if (group) {
       group.ids.push(s.id);

@@ -144,7 +144,7 @@ function buildNumericLines(
   bounds: { start: number; end: number }
 ): NumericLineRenderData[] {
   return visibleSeries.flatMap((series) => {
-    if (series.valueType !== "number") return [];
+    if (series.valueType !== "number" && series.valueType !== "boolean") return [];
 
     const scale = scaleFor(series, scales);
 
@@ -169,7 +169,7 @@ function buildSegments(
   let rowIndex = 0;
 
   return visibleSeries.flatMap((series, seriesIndex) => {
-    if (series.valueType === "number") return [];
+    if (series.valueType === "number" || series.valueType === "boolean") return [];
 
     const y = top + rowIndex * SEGMENT_ROW_HEIGHT;
     rowIndex += 1;
@@ -331,7 +331,7 @@ export function buildChartData(
 ): ChartRenderData {
   const numericScales = numericScalesFor(allSeries);
   const plotBottom = plotBottomFor(numericScales.length);
-  const segmentCount = allSeries.filter((s) => s.valueType !== "number").length;
+  const segmentCount = allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
   const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end, maxXTicks);
   const span = timeBounds.end - timeBounds.start;
 
@@ -362,7 +362,7 @@ function buildGroupNumericLines(
   const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
 
   return series
-    .filter((s) => s.valueType === "number")
+    .filter((s) => s.valueType === "number" || s.valueType === "boolean")
     .map((s) => {
       const pts = toStepPath(
         displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH),
@@ -379,7 +379,7 @@ function buildGroupSegments(
   segmentStartY: number,
   bounds: { start: number; end: number }
 ): SegmentRenderData[] {
-  const nonNumeric = series.filter((s) => s.valueType !== "number");
+  const nonNumeric = series.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
 
   return nonNumeric.flatMap((s, seriesIndex) => {
     const y = segmentStartY + seriesIndex * SEGMENT_ROW_HEIGHT;
@@ -432,8 +432,8 @@ function offsetPointsY(points: string, yOffset: number): string {
 export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
-  const allNonNumeric = data.allSeries.filter((s) => s.valueType !== "number");
-  const visibleNonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number");
+  const allNonNumeric = data.allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
+  const visibleNonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
   const span = bounds.end - bounds.start;
   const timeTicks = computeTimeTicks(bounds.start, bounds.end, maxXTicks);
   const xLabels: XAxisLabelRenderData[] = timeTicks.map((t) => ({
@@ -450,8 +450,8 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
       ? [...data.allSeries.filter((s) => scale.ids.has(s.id)), ...allNonNumeric]
       : data.allSeries.filter((s) => scale.ids.has(s.id));
 
-    const segSeries = visibleGroup.filter((s) => s.valueType !== "number");
-    const segCount = visibleGroup.filter((s) => s.valueType !== "number").length;
+    const segSeries = visibleGroup.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
+    const segCount = segSeries.length;
     const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;

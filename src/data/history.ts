@@ -24,6 +24,26 @@ export interface HistorySeries {
   points: HistoryPoint[];
 }
 
+function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
+  if (points.length <= 2) return points;
+
+  const result: HistoryPoint[] = [points[0]];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const curr = points[i];
+    const prev = points[i - 1];
+    const next = points[i + 1];
+
+    if (curr.value !== prev.value || next.value !== curr.value) {
+      result.push(curr);
+    }
+  }
+
+  result.push(points[points.length - 1]);
+
+  return result;
+}
+
 export interface HistoryState {
   entity_id?: string;
   state?: string;
@@ -229,9 +249,11 @@ export async function fetchHistory(
       return value !== undefined && Number.isFinite(time) ? [{ time, value }] : [];
     });
 
+    const raw = points.length > 0 ? extendPoints(points, start, end) : currentPoint(hass, source, start, end);
+
     return {
       source,
-      points: points.length > 0 ? extendPoints(points, start, end) : currentPoint(hass, source, start, end)
+      points: deduplicatePoints(raw)
     };
   });
 }

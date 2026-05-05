@@ -30,6 +30,7 @@ import {
   entityLabel,
   renderEntityPicker
 } from "./ui/entity-picker.js";
+import { ensureHaComponents } from "./load-ha-components.js";
 
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 
@@ -87,6 +88,7 @@ export class HaBetterHistory extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    ensureHaComponents();
     document.addEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0;
@@ -386,7 +388,7 @@ export class HaBetterHistory extends LitElement {
               (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
             )}
             ${group.series
-              .filter((s) => s.valueType !== "number")
+              .filter((s) => s.valueType !== "number" && s.valueType !== "boolean")
               .map((s, ni) => {
                 const y = GRAPH_TOP + GRAPH_HEIGHT + 10 + ni * SEGMENT_ROW_HEIGHT;
                 return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
@@ -420,7 +422,7 @@ export class HaBetterHistory extends LitElement {
               ${group.allSeries.map((s) => {
                 const hidden = this._hiddenSeriesIds.includes(s.id);
                 const swatchStyle =
-                  s.valueType !== "number"
+                  s.valueType === "string"
                     ? `background:color-mix(in srgb,${s.color} 30%,transparent);border:1px solid ${s.color};`
                     : `background:${s.color};`;
                 return html`
@@ -500,7 +502,9 @@ export class HaBetterHistory extends LitElement {
               </div>
               ${this._data.loading && this._data.series.length > 0
                 ? html`<div class="chart-loading-overlay">
-                    <span class="chart-loading-label">${localize(this.hass, "loading")}</span>
+                    ${customElements.get("ha-spinner")
+                      ? html`<ha-spinner size="small"></ha-spinner>`
+                      : html`<span class="chart-loading-label">${localize(this.hass, "loading")}</span>`}
                   </div>`
                 : nothing}
             `
