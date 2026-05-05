@@ -12,6 +12,7 @@ export const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT;
 export const PLOT_TOP = 18;
 export const SEGMENT_ROW_HEIGHT = 14;
 export const SEGMENT_HEIGHT = 9;
+const X_AXIS_LABEL_SPACE = 16;
 
 export interface RenderableSeries {
   id: string;
@@ -67,6 +68,7 @@ export interface GraphGroup {
   series: RenderableSeries[];
   scale?: NumericScale;
   svgHeight: number;
+  canvasHeight: number;
   lines: NumericLineRenderData[];
   segments: SegmentRenderData[];
   yLabels: YAxisLabelRenderData[];
@@ -410,12 +412,14 @@ export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
     const segCount = segSeries.length;
     const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
+    const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
     const yOffset = GRAPH_TOP - scale.top;
 
     groups.push({
       series: groupSeries,
       scale,
       svgHeight,
+      canvasHeight,
       lines: buildGroupNumericLines(groupSeries, scale, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(scale),

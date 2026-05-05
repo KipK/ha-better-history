@@ -305,7 +305,7 @@ export class HaBetterHistory extends LitElement {
 
     return html`
       <div class="graph-section">
-        <div class="graph-canvas" style="height:${group.svgHeight}px">
+        <div class="graph-canvas" style="height:${group.canvasHeight}px">
           <svg
             viewBox="0 0 ${CHART_WIDTH} ${group.svgHeight}"
             height="${group.svgHeight}"
@@ -334,16 +334,17 @@ export class HaBetterHistory extends LitElement {
                   `
                 )
               : nothing}
-            ${group.xLabels.map(
-              (label) => svg`
-                <text class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" x=${label.x.toFixed(1)} y=${group.svgHeight - 4}>${label.label}</text>
-              `
-            )}
           </svg>
           ${group.yLabels.map(
             (label) => {
               const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
               return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
+            }
+          )}
+          ${group.xLabels.map(
+            (label) => {
+              const pct = ((label.x / CHART_WIDTH) * 100).toFixed(2);
+              return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
             }
           )}
         </div>
@@ -398,7 +399,7 @@ export class HaBetterHistory extends LitElement {
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
     const groups = buildGraphGroups(chartData);
-    const totalHeight = groups.reduce((h, g) => h + g.svgHeight, 0);
+    const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
 
     if (hasData && showTooltip) {
       const tooltipSeries: SyncedSeries[] = [

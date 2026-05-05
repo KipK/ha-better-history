@@ -57,16 +57,20 @@ export const chartStyles = css`
   }
 
   .x-axis-label {
+    position: absolute;
     font-size: 11px;
-    fill: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
     font-family: inherit;
-    text-anchor: middle;
+    white-space: nowrap;
     pointer-events: none;
+    transform: translateX(-50%);
+    box-sizing: border-box;
+    line-height: 1;
   }
 
   .x-axis-label--bold {
     font-weight: 600;
-    fill: var(--better-history-text-color, var(--primary-text-color, #fff));
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
   }
 
   .graph-separator {
