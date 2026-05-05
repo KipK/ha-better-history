@@ -145,9 +145,11 @@ function buildNumericLines(
 
     if (!scale) return [];
 
-    const pts = displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH)
-      .map((p) => `${xFor(p.time, bounds).toFixed(1)},${yFor(p.value, scale).toFixed(1)}`)
-      .join(" ");
+    const pts = toStepPath(
+      displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH),
+      bounds,
+      scale
+    );
 
     return [{ id: series.id, color: series.color, points: pts }];
   });
@@ -199,6 +201,36 @@ function buildYAxisLabels(scales: NumericScale[]): YAxisLabelRenderData[] {
       value: formatTickValue(v, scale.precision)
     }))
   );
+}
+
+function toStepPath(
+  pts: Array<{ time: number; value: number }>,
+  bounds: { start: number; end: number },
+  scale: NumericScale
+): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) {
+    return `${xFor(pts[0].time, bounds).toFixed(1)},${yFor(pts[0].value, scale).toFixed(1)}`;
+  }
+
+  const result: string[] = [];
+
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const xa = xFor(a.time, bounds).toFixed(1);
+    const ya = yFor(a.value, scale).toFixed(1);
+    const xb = xFor(b.time, bounds).toFixed(1);
+    const yb = yFor(b.value, scale).toFixed(1);
+
+    if (i === 0) {
+      result.push(`${xa},${ya}`);
+    }
+    result.push(`${xb},${ya}`);
+    result.push(`${xb},${yb}`);
+  }
+
+  return result.join(" ");
 }
 
 function formatTickValue(value: number, precision: number): string {
@@ -330,9 +362,11 @@ function buildGroupNumericLines(
   return series
     .filter((s) => s.valueType === "number")
     .map((s) => {
-      const pts = displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH)
-        .map((p) => `${xFor(p.time, bounds).toFixed(1)},${yFor(p.value, localScale).toFixed(1)}`)
-        .join(" ");
+      const pts = toStepPath(
+        displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH),
+        bounds,
+        localScale
+      );
 
       return { id: s.id, color: s.color, points: pts };
     });
