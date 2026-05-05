@@ -139,6 +139,7 @@ export const chartStyles = css`
     flex-direction: column;
     gap: 0;
     position: relative;
+    contain: layout;
   }
 
   .graph-section {
