@@ -177,7 +177,6 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
     return html`
       <div class="entity-browser-entity entity-browser-entity--disabled">
         <span class="entity-browser-entry-label">${entity.entity_id}</span>
-        <span class="entity-browser-entity-hint">graph séparé</span>
       </div>
     `;
   }

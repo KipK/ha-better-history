@@ -539,13 +539,6 @@ export const chartStyles = css`
     white-space: nowrap;
   }
 
-  .entity-browser-entity-hint {
-    font-size: 10px;
-    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
-    flex-shrink: 0;
-    font-style: italic;
-  }
-
   .entity-browser-section-title {
     font-size: 10px;
     font-weight: 600;
