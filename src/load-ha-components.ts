@@ -9,8 +9,7 @@ const HA_COMPONENTS = [
   "ha-md-list-item",
   "ha-input-chip",
   "ha-assist-chip",
-  "ha-generic-picker",
-  "ha-spinner"
+  "ha-generic-picker"
 ];
 
 let loadPromise: Promise<void> | undefined;

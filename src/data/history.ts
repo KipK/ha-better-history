@@ -270,6 +270,7 @@ export async function fetchHistory(
 
   interface Batch {
     entityIds: string[];
+    end: Date;
     data: () => Promise<HistoryResponse>;
   }
 
@@ -278,6 +279,7 @@ export async function fetchHistory(
   if (stateOnlyIds.length > 0) {
     batches.push({
       entityIds: stateOnlyIds,
+      end,
       data: () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
     });
   }
@@ -292,18 +294,21 @@ export async function fetchHistory(
         const chunkEnd = new Date(Math.min(t + CHUNK_MS, end.getTime()));
         batches.push({
           entityIds: attrIds,
+          end: chunkEnd,
           data: () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false)
         });
       }
     } else {
       batches.push({
         entityIds: attrIds,
+        end,
         data: () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
       });
     }
   }
 
   const allStates = new Map<string, HistoryState[]>();
+  const entityDataEnd = new Map<string, Date>();
 
   for (const batch of batches) {
     const response = await batch.data();
@@ -322,16 +327,19 @@ export async function fetchHistory(
       }
     }
 
+    for (const entityId of batch.entityIds) {
+      entityDataEnd.set(entityId, batch.end);
+    }
+
     if (onProgress) {
-      // Only include sources that have received data so far
       onProgress(
         sources
           .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
-          .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end))
+          .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, entityDataEnd.get(source.entityId) ?? end))
       );
 
       await new Promise<void>((resolve) => {
-        const raf = requestAnimationFrame(resolve);
+        const raf = requestAnimationFrame(() => resolve());
         setTimeout(() => {
           cancelAnimationFrame(raf);
           resolve();

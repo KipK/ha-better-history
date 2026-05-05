@@ -449,15 +449,6 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="empty">${localize(this.hass, "no_series")}</div>`;
     }
 
-    if (this._data.loading && this._data.series.length === 0) {
-      const spinnerAvailable = customElements.get("ha-spinner") !== undefined;
-      return html`<div class="chart-loading">
-        ${spinnerAvailable
-          ? html`<ha-spinner size="medium"></ha-spinner>`
-          : html`<span>${localize(this.hass, "loading")}</span>`}
-      </div>`;
-    }
-
     if (this._data.series.length === 0) {
       return html`<div class="empty">${localize(this.hass, "empty")}</div>`;
     }
