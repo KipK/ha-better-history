@@ -258,7 +258,7 @@ export const chartStyles = css`
   .controls-bar {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
     margin-bottom: 8px;
     width: 100%;
