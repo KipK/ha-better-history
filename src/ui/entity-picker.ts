@@ -70,8 +70,8 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         </div>
         ${renderBrowser(opts)}
       </div>
+      ${renderSelectedSources(opts)}
     </div>
-    ${renderSelectedSources(opts)}
   `;
 }
 
@@ -102,14 +102,13 @@ function renderBrowserBreadcrumb(
   entity: HassEntity | undefined,
   opts: EntityPickerRenderOpts
 ): TemplateResult {
-  if (!entity) return html``;
+  if (!entity || opts.path.length === 0) return html``;
 
   return html`
     <div class="entity-breadcrumb">
-      <button class="entity-crumb" @click=${() => opts.onBreadcrumbClick([])}>${entity.entity_id}</button>
       ${opts.path.map(
         (part, index) => html`
-          <span class="entity-breadcrumb-sep">/</span>
+          ${index > 0 ? html`<span class="entity-breadcrumb-sep">/</span>` : nothing}
           <button class="entity-crumb" @click=${() => opts.onBreadcrumbClick(opts.path.slice(0, index + 1))}>${part}</button>
         `
       )}
@@ -177,7 +176,7 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   if (hasConflictingClimate(entity, opts)) {
     return html`
       <div class="entity-browser-entity entity-browser-entity--disabled">
-        <span class="entity-browser-entity-id">${entity.entity_id}</span>
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
         <span class="entity-browser-entity-hint">graph séparé</span>
       </div>
     `;
@@ -186,16 +185,14 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   if (isAlreadyPresent(source.id, opts) || isEntityAlreadyPresent(entity.entity_id, opts)) {
     return html`
       <div class="entity-browser-entity entity-browser-entity--present">
-        <span class="entity-browser-entity-id">${entity.entity_id}</span>
-        <span class="entity-browser-entry-type">${source.valueType}</span>
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
       </div>
     `;
   }
 
   return html`
     <div class="entity-browser-entity" @click=${() => opts.onSourceAdded(source)}>
-      <span class="entity-browser-entity-id">${entity.entity_id}</span>
-      <span class="entity-browser-entry-type">${source.valueType}</span>
+      <span class="entity-browser-entry-label">${entity.entity_id}</span>
     </div>
   `;
 }

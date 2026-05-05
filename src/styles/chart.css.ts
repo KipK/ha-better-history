@@ -260,7 +260,7 @@ export const chartStyles = css`
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     margin-bottom: 8px;
     width: 100%;
@@ -272,13 +272,6 @@ export const chartStyles = css`
 
   .controls-bar .entity-picker {
     order: 1;
-    margin-bottom: 0;
-  }
-
-  .controls-bar .entity-selected-row {
-    order: 2;
-    margin-left: auto;
-    margin-bottom: 0;
   }
 
   @media (hover: none) and (pointer: coarse) {
@@ -288,8 +281,7 @@ export const chartStyles = css`
     }
 
     .controls-bar .date-picker-wrapper,
-    .controls-bar .entity-picker,
-    .controls-bar .entity-selected-row {
+    .controls-bar .entity-picker {
       order: 0;
       flex-basis: auto;
     }
@@ -308,9 +300,11 @@ export const chartStyles = css`
 
   .entity-picker {
     position: relative;
-    width: fit-content;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
     flex-shrink: 0;
-    margin-bottom: 8px;
   }
 
   .entity-menu {
@@ -507,7 +501,8 @@ export const chartStyles = css`
     gap: 8px;
     padding: 8px 10px;
     border-radius: var(--better-history-radius, 8px);
-    border: 1px solid var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
     cursor: pointer;
     margin-bottom: 6px;
   }
@@ -574,7 +569,6 @@ export const chartStyles = css`
     align-items: center;
     gap: 6px;
     min-width: 0;
-    margin-bottom: 8px;
   }
 
   .entity-selected-row ha-input-chip {

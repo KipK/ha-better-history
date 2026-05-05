@@ -100,9 +100,10 @@ export function stateRanges(
   series: RenderableSeries,
   bounds: { start: number; end: number }
 ): Array<{ start: number; end: number; value: number | string | boolean }> {
+  const now = Date.now();
   return series.points.flatMap((point, i) => {
     const start = Math.max(point.time, bounds.start);
-    const end = Math.min(series.points[i + 1]?.time ?? bounds.end, bounds.end);
+    const end = Math.min(series.points[i + 1]?.time ?? bounds.end, bounds.end, now);
 
     return end > start ? [{ start, end, value: point.value }] : [];
   });

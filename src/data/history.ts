@@ -132,7 +132,7 @@ function extendPoints(points: HistoryPoint[], start: Date, end: Date): HistoryPo
   }
 
   const startTime = start.getTime();
-  const endTime = end.getTime();
+  const effectiveEnd = Math.min(end.getTime(), Date.now());
   const sorted = [...points].sort((left, right) => left.time - right.time);
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
@@ -140,7 +140,7 @@ function extendPoints(points: HistoryPoint[], start: Date, end: Date): HistoryPo
   return [
     ...(first.time > startTime ? [{ time: startTime, value: first.value }] : []),
     ...sorted,
-    ...(last.time < endTime ? [{ time: endTime, value: last.value }] : [])
+    ...(last.time < effectiveEnd ? [{ time: effectiveEnd, value: last.value }] : [])
   ];
 }
 
@@ -187,7 +187,7 @@ function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, e
     ? []
     : [
         { time: start.getTime(), value },
-        { time: end.getTime(), value }
+        { time: Math.min(end.getTime(), Date.now()), value }
       ];
 }
 

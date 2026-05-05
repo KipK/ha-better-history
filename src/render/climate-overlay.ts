@@ -129,9 +129,10 @@ function stateRangesFromPoints(
   points: Array<{ time: number; value: number | string | boolean }>,
   bounds: { start: number; end: number }
 ): Array<{ start: number; end: number; value: number | string | boolean }> {
+  const now = Date.now();
   return points.flatMap((point, i) => {
     const start = Math.max(point.time, bounds.start);
-    const end = Math.min(points[i + 1]?.time ?? bounds.end, bounds.end);
+    const end = Math.min(points[i + 1]?.time ?? bounds.end, bounds.end, now);
     return end > start ? [{ start, end, value: point.value }] : [];
   });
 }

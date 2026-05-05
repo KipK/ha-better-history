@@ -646,6 +646,7 @@ export class HaBetterHistory extends LitElement {
 
   private _onEntityPickerOpened(): void {
     this._entityPickerOpen = true;
+    this._attributeMenuOpen = false;
   }
 
   private _onEntityPickerClosed(): void {
