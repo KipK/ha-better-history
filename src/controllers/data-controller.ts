@@ -2,6 +2,10 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchHistory, type HistorySeries, type HistorySource } from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 
+function defer(cb: () => void): void {
+  requestAnimationFrame(() => requestAnimationFrame(cb));
+}
+
 export class DataController implements ReactiveController {
   readonly host: ReactiveControllerHost;
 
@@ -37,18 +41,20 @@ export class DataController implements ReactiveController {
 
     const id = ++this._requestId;
 
-    this.loading = this.series.length === 0;
+    this.loading = true;
     this.error = "";
+    this.host.requestUpdate();
 
     fetchHistory(hass, sources, start, end).then((series) => {
       if (id !== this._requestId) return;
-      this.series = series;
-      this.loading = false;
-      this.host.requestUpdate();
+      defer(() => {
+        this.series = series;
+        this.loading = false;
+        this.host.requestUpdate();
+      });
     }).catch((err: unknown) => {
       if (id !== this._requestId) return;
       this.error = err instanceof Error ? err.message : String(err);
-      this.series = [];
       this.loading = false;
       this.host.requestUpdate();
     });
@@ -69,22 +75,27 @@ export class DataController implements ReactiveController {
 
     const id = ++this._requestId;
 
-    this.loading = this.series.length === 0;
+    this.loading = true;
+    this.host.requestUpdate();
 
     fetchHistory(hass, toFetch, start, end).then((results) => {
       if (id !== this._requestId) return;
+      defer(() => {
+        const updated = [...this.series];
 
-      for (const result of results) {
-        const idx = this.series.findIndex((s) => s.source.id === result.source.id);
-        if (idx !== -1) {
-          this.series[idx] = result;
-        } else {
-          this.series.push(result);
+        for (const result of results) {
+          const idx = updated.findIndex((s) => s.source.id === result.source.id);
+          if (idx !== -1) {
+            updated[idx] = result;
+          } else {
+            updated.push(result);
+          }
         }
-      }
 
-      this.loading = false;
-      this.host.requestUpdate();
+        this.series = updated;
+        this.loading = false;
+        this.host.requestUpdate();
+      });
     }).catch((err: unknown) => {
       if (id !== this._requestId) return;
       this.error = err instanceof Error ? err.message : String(err);

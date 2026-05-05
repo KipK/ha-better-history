@@ -479,6 +479,11 @@ export class HaBetterHistory extends LitElement {
                 ${groups.map((g) => this._renderGraphGroup(g))}
                 ${showTooltip ? this._tooltip.renderTooltip(totalHeight) : nothing}
               </div>
+              ${this._data.loading && this._data.series.length > 0
+                ? html`<div class="chart-loading-overlay">
+                    <span class="chart-loading-label">${localize(lang, "loading")}</span>
+                  </div>`
+                : nothing}
             `
           : html`<div class="empty">${localize(lang, "empty")}</div>`}
       </div>
