@@ -303,6 +303,8 @@ export async function fetchHistory(
     }
   }
 
+  const allStates = new Map<string, HistoryState[]>();
+
   for (const batch of batches) {
     const response = await batch.data();
 
