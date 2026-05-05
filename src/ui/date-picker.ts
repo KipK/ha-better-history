@@ -23,6 +23,7 @@ export function renderDatePicker(
         .startDate=${startDate}
         .endDate=${endDate}
         time-picker
+        extended-presets
         @value-changed=${(event: CustomEvent) => {
           const detail = event.detail as {
             value?: { startDate?: unknown; endDate?: unknown };
