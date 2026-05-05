@@ -196,8 +196,9 @@ export class TooltipController implements ReactiveController {
     if (!this.tooltip) return nothing;
 
     const leftPct = (this.tooltip.x / CHART_WIDTH) * 100;
-    const topPct = (this.tooltip.y / chartHeight) * 100;
-    const placement = topPct > 58
+    const estimatedHeight = 120;
+    const spaceBelow = chartHeight - this.tooltip.y;
+    const placement = spaceBelow < estimatedHeight
       ? "translate(-50%, calc(-100% - 10px))"
       : "translate(-50%, 10px)";
 
