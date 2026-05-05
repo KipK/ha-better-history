@@ -254,44 +254,36 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-function computeTimeTicks(
-  start: number,
-  end: number
-): Array<{ time: number; bold: boolean }> {
+const TIME_TICK_STEPS = [
+  10 * MINUTE, 15 * MINUTE, 20 * MINUTE, 30 * MINUTE,
+  HOUR, 2 * HOUR, 3 * HOUR, 4 * HOUR, 6 * HOUR, 8 * HOUR, 12 * HOUR,
+  DAY, 2 * DAY, 3 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 60 * DAY, 90 * DAY
+];
+
+function timeTickStep(span: number, maxTicks: number): number {
+  for (const step of TIME_TICK_STEPS) {
+    if (span / step <= maxTicks) return step;
+  }
+
+  return TIME_TICK_STEPS[TIME_TICK_STEPS.length - 1];
+}
+
+function computeTimeTicks(start: number, end: number, maxTicks = 12): Array<{ time: number; bold: boolean }> {
   const span = end - start;
 
   if (span <= 0) return [];
 
-  const step = timeTickStep(span);
+  const step = timeTickStep(span, maxTicks);
   const ticks: Array<{ time: number; bold: boolean }> = [];
   const anchor = Math.ceil(start / step) * step;
 
   for (let t = anchor; t < end; t += step) {
     const d = new Date(t);
 
-    ticks.push({
-      time: t,
-      bold: d.getHours() === 0 && d.getMinutes() === 0
-    });
+    ticks.push({ time: t, bold: d.getHours() === 0 && d.getMinutes() === 0 });
   }
 
   return ticks;
-}
-
-function timeTickStep(span: number): number {
-  if (span <= 1.5 * HOUR) return 10 * MINUTE;
-  if (span <= 6 * HOUR) return 30 * MINUTE;
-  if (span <= 18 * HOUR) return HOUR;
-  if (span <= 36 * HOUR) return 2 * HOUR;
-  if (span <= 4 * DAY) return 4 * HOUR;
-  if (span <= 8 * DAY) return 12 * HOUR;
-  if (span <= 18 * DAY) return 1 * DAY;
-  if (span <= 40 * DAY) return 2 * DAY;
-  if (span <= 90 * DAY) return 7 * DAY;
-  if (span <= 200 * DAY) return 14 * DAY;
-  if (span <= 400 * DAY) return 30 * DAY;
-
-  return 60 * DAY;
 }
 
 function formatTimeTick(time: number, span: number): string {
@@ -334,12 +326,13 @@ export function buildChartData(
   allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
   timeBounds: { start: number; end: number },
-  disableClimateOverlay = false
+  disableClimateOverlay = false,
+  maxXTicks = 12
 ): ChartRenderData {
   const numericScales = numericScalesFor(allSeries);
   const plotBottom = plotBottomFor(numericScales.length);
   const segmentCount = allSeries.filter((s) => s.valueType !== "number").length;
-  const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end);
+  const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end, maxXTicks);
   const span = timeBounds.end - timeBounds.start;
 
   return {
@@ -436,13 +429,13 @@ function offsetPointsY(points: string, yOffset: number): string {
     .join(" ");
 }
 
-export function buildGraphGroups(data: ChartRenderData): GraphGroup[] {
+export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
   const allNonNumeric = data.allSeries.filter((s) => s.valueType !== "number");
   const visibleNonNumeric = data.visibleSeries.filter((s) => s.valueType !== "number");
   const span = bounds.end - bounds.start;
-  const timeTicks = computeTimeTicks(bounds.start, bounds.end);
+  const timeTicks = computeTimeTicks(bounds.start, bounds.end, maxXTicks);
   const xLabels: XAxisLabelRenderData[] = timeTicks.map((t) => ({
     x: xFor(t.time, bounds),
     label: formatTimeTick(t.time, span),

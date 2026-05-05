@@ -42,6 +42,7 @@ interface ChartRenderCache {
   hiddenKey: string;
   startTime: number;
   endTime: number;
+  containerWidth: number;
   data: ChartRenderData;
 }
 
@@ -81,15 +82,31 @@ export class HaBetterHistory extends LitElement {
   private readonly _tooltip = new TooltipController(this);
   private _chartRenderCache?: ChartRenderCache;
 
+  @state() private _containerWidth = 0;
+  private _resizeObserver?: ResizeObserver;
+
   connectedCallback(): void {
     super.connectedCallback();
-
     document.addEventListener("click", this._handleDocumentClick, true);
+    this._resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width !== this._containerWidth) {
+        this._containerWidth = width;
+      }
+    });
+    this._resizeObserver.observe(this);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("click", this._handleDocumentClick, true);
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
+  }
+
+  private _maxXTicks(): number {
+    if (this._containerWidth <= 0) return 12;
+    return Math.max(3, Math.floor(this._containerWidth * PLOT_WIDTH / (CHART_WIDTH * 50)));
   }
 
   private _effectiveStartDate(): Date {
@@ -319,23 +336,26 @@ export class HaBetterHistory extends LitElement {
     const cache = this._chartRenderCache;
     const startTime = this._resolved?.startDate.getTime() ?? 0;
     const endTime = this._resolved?.endDate.getTime() ?? 0;
+    const containerWidth = this._containerWidth;
 
     if (
       cache &&
       cache.seriesRef === this._data.series &&
       cache.hiddenKey === hiddenKey &&
       cache.startTime === startTime &&
-      cache.endTime === endTime
+      cache.endTime === endTime &&
+      cache.containerWidth === containerWidth
     ) {
       return cache.data;
     }
 
+    const maxXTicks = this._maxXTicks();
     const all = this._buildRenderSeries();
     const visible = all.filter((s) => !this._hiddenSeriesIds.includes(s.id));
     const timeBounds = { start: startTime, end: Math.max(endTime, startTime + 1) };
-    const data = buildChartData(all, visible, timeBounds, this._resolved?.disableClimateOverlay ?? false);
+    const data = buildChartData(all, visible, timeBounds, this._resolved?.disableClimateOverlay ?? false, maxXTicks);
 
-    this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, data };
+    this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, containerWidth, data };
 
     return data;
   }
@@ -444,7 +464,7 @@ export class HaBetterHistory extends LitElement {
     const chartData = this._chartData();
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
-    const groups = buildGraphGroups(chartData);
+    const groups = buildGraphGroups(chartData, this._maxXTicks());
     const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
 
     if (hasData && showTooltip) {
