@@ -370,33 +370,79 @@ export const chartStyles = css`
     min-width: 0;
   }
 
-  .entity-chip {
+  .source-chip {
     display: inline-flex;
     align-items: center;
-    height: 28px;
-    padding: 0 12px;
-    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
-    border-radius: 16px;
-    background: transparent;
-    color: var(--better-history-text-color, var(--primary-text-color, #fff));
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
+    gap: 4px;
+    height: 32px;
+    padding: 0 8px 0 3px;
+    border-radius: 20px;
+    border: var(--wa-border-width-md, 1.5px) solid;
+    background: var(--card-background-color, var(--better-history-bg, #1e1e2e));
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
     flex-shrink: 0;
   }
 
-  .entity-chip[active] {
-    border-color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
-    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 15%, transparent);
-    color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
+  .source-chip.entity-source-chip {
+    border-color: var(--ha-color-green-80, #81c784);
   }
 
-  .entity-chip ha-input-chip {
-    --md-input-chip-container-shape: 16px;
-    --md-input-chip-label-text-font: inherit;
-    --md-input-chip-label-text-size: 13px;
-    --md-input-chip-outline-color: var(--better-history-border-color, var(--divider-color, #444));
+  .source-chip.attr-source-chip {
+    border-color: var(--ha-color-amber-80, #ffb74d);
+  }
+
+  .source-chip-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .entity-source-chip .source-chip-icon {
+    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 20%, transparent);
+  }
+
+  .attr-source-chip .source-chip-icon {
+    background: color-mix(in srgb, var(--ha-color-amber-80, #ffb74d) 20%, transparent);
+  }
+
+  .source-chip-icon ha-icon {
+    --mdc-icon-size: 16px;
+  }
+
+  .source-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--wa-font-size-s, 13px);
+    color: var(--primary-text-color, var(--better-history-text-color, #fff));
+  }
+
+  .source-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--secondary-text-color, #888);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .source-chip-remove:hover {
+    background: color-mix(in srgb, var(--secondary-text-color, #888) 15%, transparent);
+    color: var(--primary-text-color, #fff);
   }
 
   .entity-browser {
@@ -557,29 +603,5 @@ export const chartStyles = css`
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
     font-size: 13px;
     text-align: center;
-  }
-
-  .entity-row ha-input-chip {
-    flex-shrink: 0;
-    --md-input-chip-container-height: 28px;
-    --md-input-chip-label-text-size: 12px;
-    --md-input-chip-container-shape: 16px;
-    --md-input-chip-label-text-font: inherit;
-    --md-input-chip-outline-color: var(--better-history-border-color, var(--divider-color, #444));
-  }
-
-  .entity-default-chip {
-    display: inline-flex;
-    align-items: center;
-    height: 28px;
-    padding: 0 12px;
-    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
-    border-radius: 16px;
-    background: transparent;
-    color: var(--better-history-text-color, var(--primary-text-color, #fff));
-    font-size: 12px;
-    font-family: inherit;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 `;

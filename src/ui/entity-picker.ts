@@ -73,22 +73,64 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
       ></ha-generic-picker>
       ${opts.selectedSources.length > 0 ? html`
         <div class="entity-row">
-          ${opts.selectedSources.map((source) => {
-            const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
-
-            if (isDefault) {
-              return html`<span class="entity-default-chip">${source.label}</span>`;
-            }
-
-            return html`
-              <ha-input-chip
-                .label=${source.label}
-                @remove=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
-              ></ha-input-chip>
-            `;
-          })}
+          ${opts.selectedSources.map((source) => renderChip(source, opts))}
         </div>
       ` : nothing}
+    </div>
+  `;
+}
+
+function entityDomainIcon(entity: HassEntity): string {
+  const icon = entity.attributes.icon;
+  if (typeof icon === "string" && icon) return icon;
+
+  const domain = entity.entity_id.split(".")[0];
+  const icons: Record<string, string> = {
+    climate: "mdi:thermostat",
+    sensor: "mdi:eye",
+    binary_sensor: "mdi:radiobox-marked",
+    light: "mdi:lightbulb",
+    switch: "mdi:toggle-switch",
+    input_boolean: "mdi:toggle-switch",
+    fan: "mdi:fan",
+    cover: "mdi:window-shutter",
+    lock: "mdi:lock",
+    media_player: "mdi:cast",
+    vacuum: "mdi:robot-vacuum",
+    camera: "mdi:camera",
+    weather: "mdi:weather-partly-cloudy",
+    device_tracker: "mdi:map-marker",
+    person: "mdi:account",
+    sun: "mdi:white-balance-sunny",
+    alarm_control_panel: "mdi:shield",
+    automation: "mdi:robot",
+    script: "mdi:script-text",
+    scene: "mdi:palette",
+    timer: "mdi:timer",
+  };
+  return icons[domain] ?? "mdi:bookmark";
+}
+
+function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): TemplateResult {
+  const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
+  const isEntity = source.kind === "entity_state";
+  const entity = opts.hass?.states[source.entityId];
+  const chipClass = isEntity ? "entity-source-chip" : "attr-source-chip";
+
+  return html`
+    <div class="source-chip ${chipClass}">
+      <span class="source-chip-icon">
+        ${isEntity && entity
+          ? html`<ha-icon .icon=${entityDomainIcon(entity)}></ha-icon>`
+          : html`<ha-icon icon="mdi:code-tags"></ha-icon>`}
+      </span>
+      <span class="source-chip-label">${source.label}</span>
+      ${!isDefault
+        ? html`<button
+            class="source-chip-remove"
+            @click=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
+          >&#x2715;</button>`
+        : nothing}
     </div>
   `;
 }
