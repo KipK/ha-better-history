@@ -188,6 +188,28 @@ function statesByEntity(history: HistoryResponse, entityIds: string[]): Map<stri
   return result;
 }
 
+function buildStatesMap(
+  responses: Array<{ entityIds: string[]; data: HistoryResponse }>
+): Map<string, HistoryState[]> {
+  const map = new Map<string, HistoryState[]>();
+
+  for (const { entityIds, data } of responses) {
+    const batchMap = statesByEntity(data, entityIds);
+
+    for (const [entityId, states] of batchMap) {
+      const existing = map.get(entityId);
+
+      if (existing) {
+        existing.push(...states);
+      } else {
+        map.set(entityId, states);
+      }
+    }
+  }
+
+  return map;
+}
+
 function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, end: Date): HistoryPoint[] {
   const entity = hass.states[source.entityId];
 
@@ -211,6 +233,41 @@ function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, e
       ];
 }
 
+async function fetchHistoryBatch(
+  hass: HomeAssistant,
+  entityIds: string[],
+  start: Date,
+  end: Date,
+  minimalResponse: boolean,
+  noAttributes: boolean,
+  significantChangesOnly: boolean
+): Promise<HistoryResponse> {
+  if (hass.callWS) {
+    return hass.callWS<HistoryResponse>({
+      type: "history/history_during_period",
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      entity_ids: entityIds,
+      minimal_response: minimalResponse,
+      no_attributes: noAttributes,
+      significant_changes_only: significantChangesOnly
+    });
+  }
+
+  const params = new URLSearchParams({
+    filter_entity_id: entityIds.join(","),
+    end_time: end.toISOString()
+  });
+
+  if (minimalResponse) params.set("minimal_response", "1");
+  if (noAttributes) params.set("no_attributes", "1");
+  if (significantChangesOnly) params.set("significant_changes_only", "1");
+
+  return hass.callApi!("GET",
+    `history/period/${encodeURIComponent(start.toISOString())}?${params.toString()}`
+  );
+}
+
 export async function fetchHistory(
   hass: HomeAssistant,
   sources: HistorySource[],
@@ -221,25 +278,53 @@ export async function fetchHistory(
     throw new Error("Home Assistant history API is unavailable");
   }
 
-  const entityIds = [...new Set(sources.map((source) => source.entityId))];
-  const history = hass.callWS
-    ? await hass.callWS<HistoryResponse>({
-        type: "history/history_during_period",
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        entity_ids: entityIds,
-        minimal_response: false,
-        no_attributes: false,
-        significant_changes_only: false
-      })
-    : await hass.callApi!<HistoryResponse>(
-        "GET",
-        `history/period/${encodeURIComponent(start.toISOString())}?${new URLSearchParams({
-          filter_entity_id: entityIds.join(","),
-          end_time: end.toISOString()
-        }).toString()}`
-      );
-  const historyStatesByEntity = statesByEntity(history, entityIds);
+  const allEntityIds = [...new Set(sources.map((source) => source.entityId))];
+
+  const attrEntityIds = new Set(
+    sources
+      .filter((s) => s.kind === "entity_attribute")
+      .map((s) => s.entityId)
+  );
+
+  const stateOnlyIds = allEntityIds.filter((id) => !attrEntityIds.has(id));
+  const attrIds = allEntityIds.filter((id) => attrEntityIds.has(id));
+
+  const promises: Array<{ entityIds: string[]; data: Promise<HistoryResponse> }> = [];
+
+  if (stateOnlyIds.length > 0) {
+    promises.push({
+      entityIds: stateOnlyIds,
+      data: fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
+    });
+  }
+
+  if (attrIds.length > 0) {
+    const CHUNK_MS = 24 * 60 * 60 * 1000;
+    const span = end.getTime() - start.getTime();
+
+    // For REST API, chunk long periods into 1-day windows to allow
+    // parallel HTTP requests and avoid oversized responses.
+    // For WebSocket, a single request is more efficient.
+    if (!hass.callWS && span > CHUNK_MS) {
+      for (let t = start.getTime(); t < end.getTime(); t += CHUNK_MS) {
+        promises.push({
+          entityIds: attrIds,
+          data: fetchHistoryBatch(hass, attrIds, new Date(t), new Date(Math.min(t + CHUNK_MS, end.getTime())), false, false, false)
+        });
+      }
+    } else {
+      promises.push({
+        entityIds: attrIds,
+        data: fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
+      });
+    }
+  }
+
+  const responses = await Promise.all(
+    promises.map(async (p) => ({ entityIds: p.entityIds, data: await p.data }))
+  );
+
+  const historyStatesByEntity = buildStatesMap(responses);
 
   return sources.map((source) => {
     const points = (historyStatesByEntity.get(source.entityId) ?? []).flatMap((state) => {

@@ -2,7 +2,7 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchHistory, type HistorySeries, type HistorySource } from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 
-const FETCH_TIMEOUT_MS = 30000;
+const FETCH_TIMEOUT_MS = 60000;
 
 function defer(cb: () => void): void {
   requestAnimationFrame(() => requestAnimationFrame(cb));
