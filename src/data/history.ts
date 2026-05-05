@@ -323,8 +323,11 @@ export async function fetchHistory(
     }
 
     if (onProgress) {
+      // Only include sources that have received data so far
       onProgress(
-        sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end))
+        sources
+          .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
+          .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end))
       );
 
       await new Promise<void>((resolve) => {

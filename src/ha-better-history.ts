@@ -499,15 +499,7 @@ export class HaBetterHistory extends LitElement {
               >
                 ${groups.map((g) => this._renderGraphGroup(g))}
                 ${showTooltip ? this._tooltip.renderTooltip(totalHeight) : nothing}
-              </div>
-              ${this._data.loading && this._data.series.length > 0
-                ? html`<div class="chart-loading-overlay">
-                    ${customElements.get("ha-spinner")
-                      ? html`<ha-spinner size="small"></ha-spinner>`
-                      : html`<span class="chart-loading-label">${localize(this.hass, "loading")}</span>`}
-                  </div>`
-                : nothing}
-            `
+              </div>`
           : html`<div class="empty">${localize(this.hass, "empty")}</div>`}
       </div>
     `;
