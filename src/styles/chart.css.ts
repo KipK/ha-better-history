@@ -81,15 +81,6 @@ export const chartStyles = css`
     z-index: 1;
   }
 
-  .chart-tooltip-clip {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
   .chart-loading-overlay {
     position: absolute;
     inset: 0;
@@ -109,11 +100,29 @@ export const chartStyles = css`
     opacity: 0.88;
   }
 
-  .legend {
+  .chart-graphs {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+  }
+
+  .graph-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .graph-canvas {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .graph-legend {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
+    padding: 0 6px 8px 6px;
     font-size: 12px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
   }

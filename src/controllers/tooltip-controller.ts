@@ -1,4 +1,4 @@
-import { html, nothing, svg, type TemplateResult, type SVGTemplateResult } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { CHART_WIDTH, PLOT_LEFT, PLOT_WIDTH } from "../render/chart.js";
 import type { HistorySeries } from "../data/history.js";
@@ -182,19 +182,14 @@ export class TooltipController implements ReactiveController {
   }
 
   private _svgPoint(event: PointerEvent): { x: number; y: number } | undefined {
-    const svgEl = event.currentTarget instanceof SVGSVGElement ? event.currentTarget : undefined;
-    if (!svgEl) return undefined;
+    const el = event.currentTarget;
+    if (!(el instanceof Element)) return undefined;
 
-    const rect = svgEl.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
     return {
       x: ((event.clientX - rect.left) / rect.width) * CHART_WIDTH,
       y: ((event.clientY - rect.top) / rect.height) * this._chartHeight
     };
-  }
-
-  renderGuide(plotBottom: number): SVGTemplateResult | typeof nothing {
-    if (!this.tooltip) return nothing;
-    return svg`<line class="axis" x1=${this.tooltip.x} y1="18" x2=${this.tooltip.x} y2=${plotBottom}></line>`;
   }
 
   renderTooltip(chartHeight: number): TemplateResult | typeof nothing {

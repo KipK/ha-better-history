@@ -6,11 +6,13 @@ import { resolveConfig, resolvedSeriesToSource } from "./data/resolve-config.js"
 import { localize } from "./localize/localize.js";
 import {
   buildChartData,
+  buildGraphGroups,
   CHART_WIDTH,
   PLOT_LEFT,
   PLOT_RIGHT,
   PLOT_TOP,
   type ChartRenderData,
+  type GraphGroup,
   type RenderableSeries
 } from "./render/chart.js";
 import { paletteColor } from "./render/colors.js";
@@ -298,86 +300,63 @@ export class HaBetterHistory extends LitElement {
     return data;
   }
 
-  private _renderScaleLabels(chartData: ChartRenderData): TemplateResult[] {
-    const result: TemplateResult[] = [];
-
-    for (const [index, scale] of chartData.numericScales.entries()) {
-      if (index > 0) {
-        const separatorY = scale.top - 17;
-
-        result.push(svg`<line class="graph-separator" x1=${PLOT_LEFT} y1=${separatorY} x2=${PLOT_RIGHT} y2=${separatorY}></line>` as unknown as TemplateResult);
-      }
-
-      result.push(svg`<line class="axis" x1=${PLOT_LEFT} y1=${scale.top} x2=${PLOT_RIGHT} y2=${scale.top}></line>` as unknown as TemplateResult);
-
-      for (const tickY of [scale.top, scale.top + scale.height / 2, scale.top + scale.height]) {
-        result.push(svg`<line class="axis" x1=${PLOT_LEFT - 4} y1=${tickY} x2=${PLOT_LEFT} y2=${tickY}></line>` as unknown as TemplateResult);
-      }
-    }
-
-    return result;
-  }
-
-  private _renderYAxisLabels(chartData: ChartRenderData): TemplateResult {
-    const leftPct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
-    const sideStyle = `left:0;width:${leftPct}%;text-align:right;padding-right:6px;`;
+  private _renderGraphGroup(group: GraphGroup): TemplateResult {
+    const showLegend = this._resolved?.showLegend ?? true;
 
     return html`
-      ${chartData.yAxisLabels.map(
-        (label) => html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;${sideStyle}">${label.value}</span>`
-      )}
-    `;
-  }
-
-  private _renderLegend(): TemplateResult | typeof nothing {
-    const allSeries = this._buildRenderSeries();
-    if (!this._resolved?.showLegend || allSeries.length === 0) return nothing;
-
-    return html`
-      <div class="legend">
-        ${allSeries.map((s) => {
-          const hidden = this._hiddenSeriesIds.includes(s.id);
-          const swatchStyle =
-            s.valueType !== "number"
-              ? `background:color-mix(in srgb,${s.color} 30%,transparent);border:1px solid ${s.color};`
-              : `background:${s.color};`;
-
-          return html`
-            <button class="legend-item" ?hidden-series=${hidden} @click=${() => this._toggleSeries(s.id)}>
-              <span class="swatch" style=${swatchStyle}></span>
-              <span class="legend-label">${s.label}</span>
-            </button>
-          `;
-        })}
+      <div class="graph-section">
+        <div class="graph-canvas" style="height:${group.svgHeight}px">
+          <svg
+            viewBox="0 0 ${CHART_WIDTH} ${group.svgHeight}"
+            height="${group.svgHeight}"
+            preserveAspectRatio="none"
+          >
+            <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
+            <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
+            ${group.scale ? svg`
+              <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${PLOT_TOP}></line>
+              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${PLOT_TOP}></line>
+              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP + group.scale.height / 2} x2=${PLOT_LEFT} y2=${PLOT_TOP + group.scale.height / 2}></line>
+              <line class="axis" x1=${PLOT_LEFT - 4} y1=${PLOT_TOP + group.scale.height} x2=${PLOT_LEFT} y2=${PLOT_TOP + group.scale.height}></line>
+            ` : nothing}
+            ${group.heatingAreas.map(
+              (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
+            )}
+            ${group.lines.map(
+              (line) => svg`<polyline class="line" points=${line.points} stroke=${line.color}></polyline>`
+            )}
+            ${group.segments.map(
+              (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
+            )}
+          </svg>
+          ${group.yLabels.map(
+            (label) => {
+              const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
+              return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
+            }
+          )}
+        </div>
+        ${showLegend && group.series.length > 0
+          ? html`
+            <div class="graph-legend">
+              ${group.series.map((s) => {
+                const hidden = this._hiddenSeriesIds.includes(s.id);
+                const swatchStyle =
+                  s.valueType !== "number"
+                    ? `background:color-mix(in srgb,${s.color} 30%,transparent);border:1px solid ${s.color};`
+                    : `background:${s.color};`;
+                return html`
+                  <button class="legend-item" ?hidden-series=${hidden} @click=${() => this._toggleSeries(s.id)}>
+                    <span class="swatch" style=${swatchStyle}></span>
+                    <span class="legend-label">${s.label}</span>
+                  </button>
+                `;
+              })}
+            </div>
+          `
+          : nothing}
       </div>
     `;
-  }
-
-  private _toggleSeries(id: string): void {
-    const nowHidden = !this._hiddenSeriesIds.includes(id);
-
-    this._hiddenSeriesIds = nowHidden
-      ? [...this._hiddenSeriesIds, id]
-      : this._hiddenSeriesIds.filter((h) => h !== id);
-
-    this.dispatchEvent(
-      new CustomEvent("series-toggled", {
-        detail: { id, hidden: nowHidden },
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
-
-  private _renderDatePicker(): TemplateResult | typeof nothing {
-    if (!this._resolved?.showDatePicker || !this._datePickerReady) return nothing;
-
-    return renderDatePicker(
-      this.hass,
-      this._resolved.startDate,
-      this._resolved.endDate,
-      (startDate, endDate) => this._onDateRangeChanged(startDate, endDate)
-    );
   }
 
   private _renderChartBody(): TemplateResult {
@@ -407,6 +386,8 @@ export class HaBetterHistory extends LitElement {
     const chartData = this._chartData();
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
+    const groups = buildGraphGroups(chartData);
+    const totalHeight = groups.reduce((h, g) => h + g.svgHeight, 0);
 
     if (hasData && showTooltip) {
       const tooltipSeries: SyncedSeries[] = [
@@ -424,7 +405,7 @@ export class HaBetterHistory extends LitElement {
         tooltipSeries,
         this._data.series,
         this._hiddenSeriesIds,
-        chartData.chartHeight,
+        totalHeight,
         chartData.timeBounds
       );
     }
@@ -433,31 +414,13 @@ export class HaBetterHistory extends LitElement {
       <div class="chart-surface">
         ${hasData
           ? html`
-              <svg
-                viewBox="0 0 ${CHART_WIDTH} ${chartData.chartHeight}"
-                height="${chartData.chartHeight}"
-                preserveAspectRatio="none"
+              <div class="chart-graphs"
                 @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
                 @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
-                <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${chartData.plotBottom}></line>
-                <line class="axis" x1=${PLOT_LEFT} y1=${chartData.plotBottom} x2=${PLOT_RIGHT} y2=${chartData.plotBottom}></line>
-                ${this._renderScaleLabels(chartData)}
-                ${chartData.heatingAreas.map(
-                  (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
-                )}
-                ${chartData.numericLines.map(
-                  (line) => svg`<polyline class="line" points=${line.points} stroke=${line.color}></polyline>`
-                )}
-                ${chartData.segments.map(
-                  (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
-                )}
-                ${showTooltip ? this._tooltip.renderGuide(chartData.plotBottom) : nothing}
-              </svg>
-              ${this._renderYAxisLabels(chartData)}
-              ${showTooltip
-                ? html`<div class="chart-tooltip-clip" style="height:${chartData.chartHeight}px">${this._tooltip.renderTooltip(chartData.chartHeight)}</div>`
-                : nothing}
+                ${groups.map((g) => this._renderGraphGroup(g))}
+                ${showTooltip ? this._tooltip.renderTooltip(totalHeight) : nothing}
+              </div>
             `
           : html`<div class="empty">${localize(lang, "empty")}</div>`}
       </div>
@@ -528,9 +491,35 @@ export class HaBetterHistory extends LitElement {
         <div class="chart-area">
           ${this._renderChartBody()}
         </div>
-        ${this._renderLegend()}
       </div>
     `;
+  }
+
+  private _toggleSeries(id: string): void {
+    const nowHidden = !this._hiddenSeriesIds.includes(id);
+
+    this._hiddenSeriesIds = nowHidden
+      ? [...this._hiddenSeriesIds, id]
+      : this._hiddenSeriesIds.filter((h) => h !== id);
+
+    this.dispatchEvent(
+      new CustomEvent("series-toggled", {
+        detail: { id, hidden: nowHidden },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private _renderDatePicker(): TemplateResult | typeof nothing {
+    if (!this._resolved?.showDatePicker || !this._datePickerReady) return nothing;
+
+    return renderDatePicker(
+      this.hass,
+      this._resolved.startDate,
+      this._resolved.endDate,
+      (startDate, endDate) => this._onDateRangeChanged(startDate, endDate)
+    );
   }
 
   private _positionEntityMenu(): void {
