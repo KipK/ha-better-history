@@ -1,4 +1,5 @@
 import { attributeSource, entityStateSource, type HistorySource } from "./history.js";
+import { paletteColor, CLIMATE_ATTR_COLORS } from "../render/colors.js";
 import type { BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
@@ -16,16 +17,11 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
 }
 
 const DEFAULT_HOURS = 24;
-const PALETTE = ["#ff9800", "#42a5f5", "#66bb6a", "#ec407a", "#ab47bc", "#26a69a"];
 
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 
 function truncateDate(d: Date): Date {
   return new Date(Math.floor(d.getTime() / 1000) * 1000);
-}
-
-function paletteColor(index: number): string {
-  return PALETTE[index % PALETTE.length];
 }
 
 function normalizeAttribute(attribute: string | string[] | undefined): string[] | undefined {
@@ -140,19 +136,22 @@ function climateTemperatureUnit(entityId: string, hass: HomeAssistant | undefine
   return undefined;
 }
 
-function expandClimateSeries(s: ResolvedSeries, index: number, hass: HomeAssistant | undefined): ResolvedSeries[] {
+function expandClimateSeries(
+  s: ResolvedSeries,
+  nextColor: () => number,
+  hass: HomeAssistant | undefined
+): ResolvedSeries[] {
   if (s.attribute) return [s];
   if (!s.entity.startsWith("climate.")) return [s];
   if (!hass?.states[s.entity]) return [s];
 
   const tempUnit = climateTemperatureUnit(s.entity, hass);
-  let ci = index + 1;
 
   const attributeSeries = CLIMATE_LINE_ATTRIBUTES.map((attrName): ResolvedSeries => {
     const attribute = [attrName];
     const id = seriesId(s.entity, attribute);
     const vt = resolveValueType(hass, s.entity, attribute);
-    const color = paletteColor(ci++);
+    const color = CLIMATE_ATTR_COLORS[attrName] ?? paletteColor(nextColor());
     const attrUnit = (attrName === "current_temperature" || attrName === "temperature") ? tempUnit : undefined;
     const scaleGroup = attrName === "hvac_action" ? undefined : "temperature";
 
@@ -207,7 +206,9 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
       .filter((s): s is ResolvedSeries => s !== undefined);
   }
 
-  series = series.flatMap((s, i) => expandClimateSeries(s, i, hass));
+  let nextColorIndex = series.length;
+
+  series = series.flatMap((s) => expandClimateSeries(s, () => nextColorIndex++, hass));
 
   return {
     startDate: truncateDate(startDate),

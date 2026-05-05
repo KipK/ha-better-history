@@ -28,6 +28,12 @@ import {
   renderEntityPicker
 } from "./ui/entity-picker.js";
 
+const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
+
+function isTemperatureUnit(unit: string): boolean {
+  return TEMPERATURE_UNIT_RE.test(unit);
+}
+
 interface ChartRenderCache {
   seriesRef: HistorySeries[];
   hiddenKey: string;
@@ -217,12 +223,16 @@ export class HaBetterHistory extends LitElement {
   private _pickScaleGroup(source: HistorySource, _existing: RenderableSeries[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
 
-    // Match by unit against resolved series that explicitly declare a unit
     if (source.unit) {
       const match = this._resolved?.series.find(
         (s) => s.unit === source.unit && s.valueType === "number"
       );
       if (match) return match.scaleGroupKey;
+
+      const tempGroup = this._resolved?.series.find(
+        (s) => s.scaleGroupKey === "group:temperature"
+      );
+      if (tempGroup && isTemperatureUnit(source.unit)) return tempGroup.scaleGroupKey;
     }
 
     return source.unit ? `unit:${source.unit}` : `series:${source.id}`;
