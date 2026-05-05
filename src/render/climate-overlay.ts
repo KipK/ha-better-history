@@ -1,5 +1,5 @@
 import { PLOT_LEFT, PLOT_WIDTH, type RenderableSeries } from "./chart.js";
-import { type NumericScale } from "./scales.js";
+import { type NumericScale, PLOT_PADDING } from "./scales.js";
 
 export interface HeatingAreaRenderData {
   id: string;
@@ -13,7 +13,8 @@ function xFor(time: number, bounds: { start: number; end: number }): number {
 function yFor(value: number, scale: NumericScale): number {
   const span = scale.max - scale.min;
   if (span < 1e-6) return scale.top + scale.height / 2;
-  return scale.top + scale.height - ((value - scale.min) / span) * scale.height;
+  const drawHeight = scale.height - 2 * PLOT_PADDING;
+  return scale.top + PLOT_PADDING + drawHeight - ((value - scale.min) / span) * drawHeight;
 }
 
 function temperatureAt(

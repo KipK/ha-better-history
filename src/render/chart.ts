@@ -1,5 +1,5 @@
 import { PALETTE } from "./colors.js";
-import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, type NumericScale } from "./scales.js";
+import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, PLOT_PADDING, type NumericScale } from "./scales.js";
 import { displayNumericPoints } from "./downsample.js";
 import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
 import type { HistoryPoint } from "../data/history.js";
@@ -87,7 +87,9 @@ export function yFor(value: number, scale: NumericScale): number {
 
   if (span < 1e-6) return scale.top + scale.height / 2;
 
-  return scale.top + scale.height - ((value - scale.min) / span) * scale.height;
+  const drawHeight = scale.height - 2 * PLOT_PADDING;
+
+  return scale.top + PLOT_PADDING + drawHeight - ((value - scale.min) / span) * drawHeight;
 }
 
 export function scaleFor(series: RenderableSeries, scales: NumericScale[]): NumericScale | undefined {
@@ -197,12 +199,14 @@ function buildSegments(
 }
 
 function buildYAxisLabels(scales: NumericScale[]): YAxisLabelRenderData[] {
-  return scales.flatMap((scale) =>
-    scale.ticks.map((v) => ({
-      y: scale.top + scale.height - ((v - scale.min) / (scale.max - scale.min)) * scale.height,
+  return scales.flatMap((scale) => {
+    const drawHeight = scale.height - 2 * PLOT_PADDING;
+
+    return scale.ticks.map((v) => ({
+      y: scale.top + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
       value: formatTickValue(v, scale.precision)
-    }))
-  );
+    }));
+  });
 }
 
 function toStepPath(
@@ -411,8 +415,10 @@ function buildGroupSegments(
 }
 
 function buildGroupYLabels(scale: NumericScale): YAxisLabelRenderData[] {
+  const drawHeight = scale.height - 2 * PLOT_PADDING;
+
   return scale.ticks.map((v) => ({
-    y: GRAPH_TOP + scale.height - ((v - scale.min) / (scale.max - scale.min)) * scale.height,
+    y: GRAPH_TOP + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
     value: formatTickValue(v, scale.precision)
   }));
 }

@@ -27,6 +27,7 @@ export const GRAPH_HEIGHT = 180;
 export const GRAPH_GAP = 34;
 export const GRAPH_STEP = GRAPH_HEIGHT + GRAPH_GAP;
 export const GRAPH_BOTTOM_PADDING = 18;
+export const PLOT_PADDING = 5;
 
 export function valuePrecision(value: number): number {
   if (!Number.isFinite(value) || Number.isInteger(value)) return 0;
@@ -120,7 +121,9 @@ export function paddedRange(min: number, max: number, precision: number): { min:
     };
   }
 
-  const padding = span * 0.08;
+  const minPadding = Math.max(span * 0.08, 10 ** -precision);
+  const factor = 10 ** precision;
+  const padding = Math.ceil(minPadding * factor) / factor;
 
   return {
     min: roundToPrecision(min - padding, precision),
