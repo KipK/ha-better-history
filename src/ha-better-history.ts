@@ -438,14 +438,12 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _renderChartBody(): TemplateResult {
-    const lang = this._resolved?.language;
-
     if (this._data.error) {
       return html`<div class="error">${this._data.error}</div>`;
     }
 
     if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {
-      return html`<div class="empty">${localize(lang, "no_series")}</div>`;
+      return html`<div class="empty">${localize(this.hass, "no_series")}</div>`;
     }
 
     if (this._data.loading && this._data.series.length === 0) {
@@ -453,12 +451,12 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="chart-loading">
         ${spinnerAvailable
           ? html`<ha-spinner size="medium"></ha-spinner>`
-          : html`<span>${localize(lang, "loading")}</span>`}
+          : html`<span>${localize(this.hass, "loading")}</span>`}
       </div>`;
     }
 
     if (this._data.series.length === 0) {
-      return html`<div class="empty">${localize(lang, "empty")}</div>`;
+      return html`<div class="empty">${localize(this.hass, "empty")}</div>`;
     }
 
     const chartData = this._chartData();
@@ -501,11 +499,11 @@ export class HaBetterHistory extends LitElement {
               </div>
               ${this._data.loading && this._data.series.length > 0
                 ? html`<div class="chart-loading-overlay">
-                    <span class="chart-loading-label">${localize(lang, "loading")}</span>
+                    <span class="chart-loading-label">${localize(this.hass, "loading")}</span>
                   </div>`
                 : nothing}
             `
-          : html`<div class="empty">${localize(lang, "empty")}</div>`}
+          : html`<div class="empty">${localize(this.hass, "empty")}</div>`}
       </div>
     `;
   }

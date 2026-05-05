@@ -3,6 +3,7 @@ import { entityStateSource, attributeSource, valueType, type HistorySource } fro
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { ResolvedConfig } from "../types/config.js";
 import { ensureHaComponents } from "../load-ha-components.js";
+import { localize } from "../localize/localize.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,7 +62,7 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
       <ha-generic-picker
         class="entity-trigger"
         .hass=${opts.hass}
-        .addButtonLabel=${"Ajouter une cible"}
+        .addButtonLabel=${localize(opts.hass, "add_target")}
         .value=${""}
         .getItems=${opts.getItems}
         .getAdditionalItems=${opts.getAdditionalItems}
@@ -109,7 +110,7 @@ function renderBrowser(opts: EntityPickerRenderOpts): TemplateResult {
     <div class="entity-browser">
       ${renderBrowserBreadcrumb(entity, opts)}
       <div class="entity-browser-list">
-        ${entity ? renderBrowserEntries(entity, path, isRecord(current) ? current : {}, opts) : html`<div class="entity-browser-empty">No entity selected</div>`}
+        ${entity ? renderBrowserEntries(entity, path, isRecord(current) ? current : {}, opts) : html`<div class="entity-browser-empty">${localize(opts.hass, "no_entity_selected")}</div>`}
       </div>
     </div>
   `;
@@ -151,12 +152,12 @@ function renderBrowserEntries(
       ${path.length > 0
         ? html`
             <div class="entity-browser-back" @click=${() => opts.onBreadcrumbClick(path.slice(0, -1))}>
-              &#x2190; Back
+              &#x2190; ${localize(opts.hass, "back")}
             </div>
           `
         : html`
             ${renderEntityHeader(entity, opts)}
-            ${hasVisibleAttributes ? html`<div class="entity-browser-section-title">Attributs</div>` : nothing}
+            ${hasVisibleAttributes ? html`<div class="entity-browser-section-title">${localize(opts.hass, "attributes")}</div>` : nothing}
           `}
       ${entries.map(([key, value]) => renderTreeEntry(entity, key, value, path, opts))}
     </div>
