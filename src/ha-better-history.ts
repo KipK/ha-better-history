@@ -22,6 +22,7 @@ import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/d
 import {
   preloadEntityPickerComponents,
   entityPickerAvailable,
+  entityLabel,
   renderEntityPicker
 } from "./ui/entity-picker.js";
 
@@ -63,9 +64,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _path: string[] = [];
   @state() private _selectedSources: HistorySource[] = [];
   @state() private _customEntityIds: string[] = [];
-  @state() private _customEntityInput = "";
   @state() private _entityPickerOpen = false;
-  private _isMouseOutsideEntityPicker = false;
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
@@ -453,27 +452,49 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
+  private readonly _getEntityPickerItems = (): unknown[] =>
+    this._pickerEntities().map((entity) => ({
+      id: entity.entity_id,
+      primary: entityLabel(entity),
+      secondary: entity.entity_id,
+    }));
+
+  private readonly _getAdditionalEntityPickerItems = (search?: string): unknown[] => {
+    if (!this.hass || !search?.trim()) return [];
+    const lower = search.toLowerCase();
+    const pinnedIds = new Set(this._pickerEntities().map((e) => e.entity_id));
+    return Object.values(this.hass.states)
+      .filter((e): e is HassEntity => e !== undefined)
+      .filter((e) => !pinnedIds.has(e.entity_id))
+      .filter((e) =>
+        e.entity_id.toLowerCase().includes(lower) ||
+        (typeof e.attributes.friendly_name === "string" &&
+          e.attributes.friendly_name.toLowerCase().includes(lower))
+      )
+      .slice(0, 20)
+      .map((e) => ({
+        id: e.entity_id,
+        primary: entityLabel(e),
+        secondary: e.entity_id,
+      }));
+  };
+
   private _renderEntityPickerUI(): TemplateResult | typeof nothing {
     if (!this._resolved?.showEntityPicker || !this._entityComponentsReady) return nothing;
 
     return renderEntityPicker({
       hass: this.hass,
-      language: this.language,
       menuOpen: this._attributeMenuOpen,
       entityPickerOpen: this._entityPickerOpen,
       selectedEntityId: this._selectedEntityId,
       path: this._path,
       selectedSources: this._selectedSources,
       resolved: this._resolved,
-      entities: this._pickerEntities(),
-      customEntityInput: this._customEntityInput,
-      positionMenu: () => this._positionEntityMenu(),
-      onToggleMenu: () => this._toggleAttributeMenu(),
-      onSelectEntity: (entityId) => this._selectEntity(entityId),
-      onEntityPickerChanged: (entityId) => this._onEntityPickerChanged(entityId),
+      getItems: this._getEntityPickerItems,
+      getAdditionalItems: this._getAdditionalEntityPickerItems,
       onEntityPickerOpened: () => this._onEntityPickerOpened(),
       onEntityPickerClosed: () => this._onEntityPickerClosed(),
-      onEntityPickerFocusOut: () => this._onEntityPickerFocusOut(),
+      onEntitySelected: (entityId) => this._onEntitySelected(entityId),
       onSourceAdded: (source) => this._addSource(source),
       onSourceRemoved: (sourceId) => this._removeSource(sourceId),
       onBreadcrumbClick: (path) => { this._path = path; },
@@ -509,69 +530,62 @@ export class HaBetterHistory extends LitElement {
     menu.style.left = "0";
     menu.style.right = "";
     menu.style.width = "";
+    // originRect: viewport position of the menu when CSS left=0,top=0.
+    // Inside a CSS-transformed ancestor (e.g. HA dialog), fixed coordinates are
+    // relative to that ancestor, not the viewport. We convert at the end:
+    //   css_x = viewport_x - originRect.left
     const originRect = menu.getBoundingClientRect();
 
     const triggerRect = trigger.getBoundingClientRect();
-    const host = this.renderRoot?.firstElementChild as HTMLElement | null;
-    const bottomLimit = (host?.getBoundingClientRect().bottom ?? window.innerHeight) - 8;
-    const available = bottomLimit - triggerRect.bottom - 8;
+    const hostRect = this.getBoundingClientRect();
+    const margin = 8;
 
+    const available = hostRect.bottom - margin - triggerRect.bottom - margin;
     menu.style.maxHeight = `${Math.min(Math.max(available, 120), 420)}px`;
     menu.style.top = `${triggerRect.bottom - originRect.top + 6}px`;
 
-    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-      menu.style.left = `${triggerRect.left - originRect.left}px`;
-    } else {
-      menu.style.left = `${16 - originRect.left}px`;
-      menu.style.width = "calc(100vw - 32px)";
-    }
-  }
+    // All boundary calculations stay in viewport coordinates.
+    const leftBoundaryVp = hostRect.left + margin;
+    const rightBoundaryVp = hostRect.right - margin;
+    const availableWidth = rightBoundaryVp - leftBoundaryVp;
+    const menuWidth = Math.min(420, availableWidth);
+    menu.style.width = `${menuWidth}px`;
 
-  private _toggleAttributeMenu(): void {
-    this._attributeMenuOpen = !this._attributeMenuOpen;
+    let leftVp: number;
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      leftVp = triggerRect.left;
+      leftVp = Math.min(leftVp, rightBoundaryVp - menuWidth);
+      leftVp = Math.max(leftVp, leftBoundaryVp);
+    } else {
+      leftVp = leftBoundaryVp;
+      menu.style.width = `${availableWidth}px`;
+    }
+
+    menu.style.left = `${leftVp - originRect.left}px`;
+    menu.style.right = "";
   }
 
   private _closeAttributeMenu(): void {
     this._attributeMenuOpen = false;
-    this._isMouseOutsideEntityPicker = false;
     this._entityPickerOpen = false;
   }
 
-  private _selectEntity(entityId: string): void {
-    this._selectedEntityId = entityId;
-    this._path = [];
-    this._attributeMenuOpen = true;
-  }
-
-  private _onEntityPickerChanged(entityId: string): void {
-    const knownIds = new Set(this._pickerEntities().map((entity) => entity.entity_id));
-
+  private _onEntitySelected(entityId: string): void {
+    const knownIds = new Set(this._pickerEntities().map((e) => e.entity_id));
     if (!knownIds.has(entityId)) {
       this._customEntityIds = [...this._customEntityIds, entityId];
     }
-
     this._selectedEntityId = entityId;
     this._path = [];
-    this._customEntityInput = "";
-    this._isMouseOutsideEntityPicker = false;
+    this._attributeMenuOpen = true;
   }
 
   private _onEntityPickerOpened(): void {
     this._entityPickerOpen = true;
   }
 
-  private _onEntityPickerFocusOut(): void {
-    this._entityPickerOpen = false;
-    if (this._isMouseOutsideEntityPicker) {
-      this._closeAttributeMenu();
-    }
-  }
-
   private _onEntityPickerClosed(): void {
     this._entityPickerOpen = false;
-    if (this._isMouseOutsideEntityPicker) {
-      this._closeAttributeMenu();
-    }
   }
 
   private _handleDocumentClick = (event: Event): void => {

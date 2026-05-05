@@ -216,31 +216,34 @@ export const chartStyles = css`
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     margin-bottom: 8px;
-    margin-left: auto;
-    width: fit-content;
-    max-width: 100%;
+    width: 100%;
+  }
+
+  .controls-bar .date-picker-wrapper {
+    order: -1;
   }
 
   .controls-bar .entity-picker {
-    order: -1;
+    order: 1;
     margin-bottom: 0;
   }
 
   .controls-bar .entity-selected-row {
-    order: 1;
-    flex-basis: 100%;
+    order: 2;
+    margin-left: auto;
     margin-bottom: 0;
   }
 
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
-      margin-left: 0;
-      width: 100%;
+      justify-content: flex-start;
     }
 
+    .controls-bar .date-picker-wrapper,
     .controls-bar .entity-picker,
     .controls-bar .entity-selected-row {
       order: 0;
@@ -261,43 +264,9 @@ export const chartStyles = css`
 
   .entity-picker {
     position: relative;
-    width: 170px;
+    width: fit-content;
     flex-shrink: 0;
     margin-bottom: 8px;
-  }
-
-  .entity-trigger {
-    display: inline-grid;
-    grid-template-columns: minmax(0, 1fr) 18px;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    text-align: left;
-    border: 0;
-    border-radius: var(--better-history-radius, 8px);
-    background: var(--better-history-bg, color-mix(in srgb, var(--card-background-color, #1e1e2e) 92%, var(--primary-text-color, #fff) 8%));
-    color: var(--better-history-text-color, var(--primary-text-color, #fff));
-    min-height: 30px;
-    padding: 0 10px;
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .entity-trigger[open] {
-    background: var(--better-history-accent-color, var(--accent-color, #ff9800));
-    color: #fff;
-  }
-
-  .entity-trigger span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .entity-trigger-arrow {
-    font-size: 12px;
-    line-height: 1;
   }
 
   .entity-menu {
@@ -307,32 +276,25 @@ export const chartStyles = css`
     display: none;
     width: min(420px, calc(100vw - 48px));
     max-height: 420px;
-    padding: 8px;
+    padding: 12px;
     overflow: hidden;
-    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
-    border-radius: var(--better-history-radius, 8px);
-    background: var(--better-history-bg, color-mix(in srgb, var(--card-background-color, #1e1e2e) 94%, var(--primary-text-color, #fff) 6%));
-    box-shadow: 0 14px 36px rgb(0 0 0 / 30%);
+    border: var(--wa-panel-border-width, 1px) var(--wa-panel-border-style, solid) var(--wa-color-surface-border, var(--divider-color, rgba(0, 0, 0, 0.12)));
+    border-radius: var(--wa-panel-border-radius, var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 24px)));
+    background: var(--wa-color-surface-raised, var(--card-background-color, #fff));
+    box-shadow: var(--wa-shadow-m, var(--ha-box-shadow-m, 0 4px 8px rgba(0, 0, 0, 0.08)));
     box-sizing: border-box;
     z-index: 100;
   }
 
   .entity-menu[open] {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
   }
 
   .entity-menu-top {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .entity-menu-top ha-entity-picker {
-    display: block;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .entity-menu-close {
@@ -373,9 +335,9 @@ export const chartStyles = css`
   }
 
   .entity-chip[active] {
-    border-color: var(--better-history-accent-color, var(--accent-color, #ff9800));
-    background: color-mix(in srgb, var(--better-history-accent-color, var(--accent-color, #ff9800)) 15%, transparent);
-    color: var(--better-history-accent-color, var(--accent-color, #ff9800));
+    border-color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 15%, transparent);
+    color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
   }
 
   .entity-chip ha-input-chip {
@@ -390,6 +352,13 @@ export const chartStyles = css`
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  .entity-browser-title {
+    font-size: var(--wa-font-size-m, var(--ha-font-size-m, 14px));
+    font-weight: var(--wa-font-weight-body, var(--ha-font-weight-normal, 400));
+    color: var(--wa-color-text-normal, var(--primary-text-color));
+    margin-bottom: 2px;
   }
 
   .entity-breadcrumb {
@@ -459,8 +428,8 @@ export const chartStyles = css`
     padding: 6px 8px;
     cursor: pointer;
     font-size: 12px;
-    color: var(--better-history-accent-color, var(--accent-color, #ff9800));
-    border-radius: var(--better-history-radius, 8px);
+    color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    border-radius: var(--ha-card-border-radius, 12px);
   }
 
   .entity-browser-back:hover {

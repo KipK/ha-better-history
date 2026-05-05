@@ -3,10 +3,13 @@ import { loadHaComponents } from "@kipk/load-ha-components";
 const HA_COMPONENTS = [
   "ha-icon",
   "ha-icon-button",
+  "ha-svg-icon",
   "ha-entity-picker",
   "ha-md-list",
   "ha-md-list-item",
   "ha-input-chip",
+  "ha-assist-chip",
+  "ha-generic-picker",
   "ha-spinner"
 ];
 

@@ -8,7 +8,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function entityLabel(entity: HassEntity): string {
+export function entityLabel(entity: HassEntity): string {
   return typeof entity.attributes.friendly_name === "string" ? entity.attributes.friendly_name : entity.entity_id;
 }
 
@@ -22,22 +22,17 @@ export async function preloadEntityPickerComponents(): Promise<void> {
 
 interface EntityPickerRenderOpts {
   hass?: HomeAssistant;
-  language?: string;
   menuOpen: boolean;
   entityPickerOpen: boolean;
   selectedEntityId?: string;
   path: string[];
   selectedSources: HistorySource[];
   resolved?: ResolvedConfig;
-  entities: HassEntity[];
-  customEntityInput: string;
-  positionMenu(): void;
-  onToggleMenu(): void;
-  onSelectEntity(entityId: string): void;
-  onEntityPickerChanged(entityId: string): void;
+  getItems: () => unknown[];
+  getAdditionalItems: (search?: string) => unknown[];
   onEntityPickerOpened(): void;
   onEntityPickerClosed(): void;
-  onEntityPickerFocusOut(): void;
+  onEntitySelected(entityId: string): void;
   onSourceAdded(source: HistorySource): void;
   onSourceRemoved(sourceId: string): void;
   onBreadcrumbClick(path: string[]): void;
@@ -45,46 +40,30 @@ interface EntityPickerRenderOpts {
 }
 
 export function entityPickerAvailable(): boolean {
-  return customElements.get("ha-entity-picker") !== undefined;
+  return customElements.get("ha-generic-picker") !== undefined;
 }
 
 export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult {
-  const selectedEntity = opts.selectedEntityId && opts.hass ? opts.hass.states[opts.selectedEntityId] : undefined;
-
   return html`
     <div class="entity-picker"
       @picker-opened=${opts.onEntityPickerOpened}
       @picker-closed=${opts.onEntityPickerClosed}
     >
-      <button class="entity-trigger" ?open=${opts.menuOpen} @click=${opts.onToggleMenu}>
-        <span>${selectedEntity ? entityLabel(selectedEntity) : "Entity"}</span>
-        <span class="entity-trigger-arrow">${opts.menuOpen ? "▾" : "▸"}</span>
-      </button>
+      <ha-generic-picker
+        class="entity-trigger"
+        .hass=${opts.hass}
+        .addButtonLabel=${"Ajouter une cible"}
+        .value=${""}
+        .getItems=${opts.getItems}
+        .getAdditionalItems=${opts.getAdditionalItems}
+        @value-changed=${(e: CustomEvent) => {
+          const entityId = (e.detail as { value: string }).value;
+          if (entityId) opts.onEntitySelected(entityId);
+        }}
+      ></ha-generic-picker>
       <div class="entity-menu" ?open=${opts.menuOpen}>
         <div class="entity-menu-top">
-          <ha-entity-picker
-            .hass=${opts.hass}
-            .value=${opts.customEntityInput}
-            .placeholder=${"Add entity"}
-            @value-changed=${(event: CustomEvent) => {
-              const entityId = (event.detail as { value: string }).value;
-              if (entityId) opts.onEntityPickerChanged(entityId);
-            }}
-            @focusin=${opts.onEntityPickerOpened}
-            @focusout=${opts.onEntityPickerFocusOut}
-          ></ha-entity-picker>
           <button class="entity-menu-close" @click=${opts.onCloseMenu}>&#x2715;</button>
-        </div>
-        <div class="entity-list">
-          ${opts.entities.map(
-            (entity) => html`
-              <button
-                class="entity-chip"
-                ?active=${entity.entity_id === opts.selectedEntityId}
-                @click=${() => opts.onSelectEntity(entity.entity_id)}
-              >${entityLabel(entity)}</button>
-            `
-          )}
         </div>
         ${renderBrowser(opts)}
       </div>
@@ -123,6 +102,7 @@ function renderBrowserBreadcrumb(
   if (!entity) return html``;
 
   return html`
+    <div class="entity-browser-title">${entityLabel(entity)}</div>
     <div class="entity-breadcrumb">
       <button class="entity-crumb" @click=${() => opts.onBreadcrumbClick([])}>${entity.entity_id}</button>
       ${opts.path.map(
