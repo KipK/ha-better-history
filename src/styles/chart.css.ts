@@ -296,6 +296,10 @@ export const chartStyles = css`
     position: relative;
     flex: 1 1 0;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 
   .entity-row {
@@ -303,6 +307,7 @@ export const chartStyles = css`
     flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+    width: 100%;
   }
 
   .entity-menu {

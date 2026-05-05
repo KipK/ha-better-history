@@ -58,34 +58,36 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         </div>
         ${renderBrowser(opts)}
       </div>
-      <div class="entity-row">
-        ${opts.selectedSources.map((source) => {
-          const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
+      <ha-generic-picker
+        class="entity-trigger"
+        .hass=${opts.hass}
+        .addButtonLabel=${"Ajouter une cible"}
+        .value=${""}
+        .getItems=${opts.getItems}
+        .getAdditionalItems=${opts.getAdditionalItems}
+        @value-changed=${(e: CustomEvent) => {
+          const entityId = (e.detail as { value: string }).value;
+          if (entityId) opts.onEntitySelected(entityId);
+        }}
+      ></ha-generic-picker>
+      ${opts.selectedSources.length > 0 ? html`
+        <div class="entity-row">
+          ${opts.selectedSources.map((source) => {
+            const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
 
-          if (isDefault) {
-            return html`<span class="entity-default-chip">${source.label}</span>`;
-          }
+            if (isDefault) {
+              return html`<span class="entity-default-chip">${source.label}</span>`;
+            }
 
-          return html`
-            <ha-input-chip
-              .label=${source.label}
-              @remove=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
-            ></ha-input-chip>
-          `;
-        })}
-        <ha-generic-picker
-          class="entity-trigger"
-          .hass=${opts.hass}
-          .addButtonLabel=${"Ajouter une cible"}
-          .value=${""}
-          .getItems=${opts.getItems}
-          .getAdditionalItems=${opts.getAdditionalItems}
-          @value-changed=${(e: CustomEvent) => {
-            const entityId = (e.detail as { value: string }).value;
-            if (entityId) opts.onEntitySelected(entityId);
-          }}
-        ></ha-generic-picker>
-      </div>
+            return html`
+              <ha-input-chip
+                .label=${source.label}
+                @remove=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
+              ></ha-input-chip>
+            `;
+          })}
+        </div>
+      ` : nothing}
     </div>
   `;
 }
