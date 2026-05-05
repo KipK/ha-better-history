@@ -122,6 +122,11 @@ function renderBrowserEntries(
   opts: EntityPickerRenderOpts
 ): TemplateResult {
   const entries = Object.entries(current).sort(([left], [right]) => left.localeCompare(right));
+  const hasVisibleAttributes = entries.some(([key, value]) => {
+    if (isRecord(value)) return true;
+    const type = valueType(value);
+    return type !== undefined && Boolean(attributeSource(entity, [...path, key]));
+  });
 
   return html`
     <div class="entity-browser-entries">
@@ -131,20 +136,48 @@ function renderBrowserEntries(
               &#x2190; Back
             </div>
           `
-        : renderStateEntry(entity, opts)}
+        : html`
+            ${renderEntityHeader(entity, opts)}
+            ${hasVisibleAttributes ? html`<div class="entity-browser-section-title">Attributs</div>` : nothing}
+          `}
       ${entries.map(([key, value]) => renderTreeEntry(entity, key, value, path, opts))}
     </div>
   `;
 }
 
-function renderStateEntry(entity: HassEntity, opts: EntityPickerRenderOpts): TemplateResult | typeof nothing {
-  const source = entityStateSource(entity);
+function hasConflictingClimate(entity: HassEntity, opts: EntityPickerRenderOpts): boolean {
+  if (!entity.entity_id.startsWith("climate.")) return false;
+  const inSelected = opts.selectedSources.some(
+    (s) => s.entityId.startsWith("climate.") && s.entityId !== entity.entity_id
+  );
+  const inResolved = (opts.resolved?.series ?? []).some(
+    (s) => s.entity.startsWith("climate.") && s.entity !== entity.entity_id
+  );
+  return inSelected || inResolved;
+}
 
+function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): TemplateResult | typeof nothing {
+  const source = entityStateSource(entity);
   if (!source) return nothing;
 
+  if (hasConflictingClimate(entity, opts)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--disabled">
+        <div class="entity-browser-entity-info">
+          <span class="entity-browser-entity-name">${entityLabel(entity)}</span>
+          <span class="entity-browser-entity-id">${entity.entity_id}</span>
+        </div>
+        <span class="entity-browser-entity-hint">graph séparé</span>
+      </div>
+    `;
+  }
+
   return html`
-    <div class="entity-browser-entry" @click=${() => opts.onSourceAdded(source)}>
-      <span class="entity-browser-entry-label">state</span>
+    <div class="entity-browser-entity" @click=${() => opts.onSourceAdded(source)}>
+      <div class="entity-browser-entity-info">
+        <span class="entity-browser-entity-name">${entityLabel(entity)}</span>
+        <span class="entity-browser-entity-id">${entity.entity_id}</span>
+      </div>
       <span class="entity-browser-entry-type">${source.valueType}</span>
     </div>
   `;

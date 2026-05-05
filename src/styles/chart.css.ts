@@ -436,6 +436,72 @@ export const chartStyles = css`
     background: rgba(var(--rgb-primary-text-color, 255, 255, 255), 0.08);
   }
 
+  .entity-browser-entity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--better-history-radius, 8px);
+    border: 1px solid var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    cursor: pointer;
+    margin-bottom: 6px;
+  }
+
+  .entity-browser-entity:hover {
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 10%, transparent);
+  }
+
+  .entity-browser-entity--disabled {
+    cursor: default;
+    opacity: 0.45;
+    border-style: dashed;
+  }
+
+  .entity-browser-entity--disabled:hover {
+    background: transparent;
+  }
+
+  .entity-browser-entity-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .entity-browser-entity-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entity-browser-entity-id {
+    font-size: 11px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entity-browser-entity-hint {
+    font-size: 10px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    flex-shrink: 0;
+    font-style: italic;
+  }
+
+  .entity-browser-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    padding: 2px 8px 4px;
+    margin-top: 2px;
+  }
+
   .entity-browser-empty {
     padding: 12px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
