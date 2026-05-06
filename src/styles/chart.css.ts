@@ -51,9 +51,9 @@ export const chartStyles = css`
 
   .grid-line {
     stroke: var(--better-history-border-color, var(--divider-color, #444));
-    stroke-width: 0.5;
-    stroke-dasharray: 2 4;
-    opacity: 0.5;
+    stroke-width: 1;
+    opacity: 0.45;
+    vector-effect: non-scaling-stroke;
   }
 
   .x-axis-label {
@@ -122,6 +122,17 @@ export const chartStyles = css`
     align-items: center;
     justify-content: center;
     pointer-events: none;
+  }
+
+  .tooltip-axis-pointer {
+    position: absolute;
+    top: 0;
+    width: 0;
+    border-left: 1px dashed var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    opacity: 0.9;
+    pointer-events: none;
+    transform: translateX(-0.5px);
+    z-index: 2;
   }
 
   .chart-loading-label {

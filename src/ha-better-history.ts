@@ -429,9 +429,14 @@ export class HaBetterHistory extends LitElement {
             height="${group.svgHeight}"
             preserveAspectRatio="none"
           >
+            ${group.xLabels.map(
+              (label) => svg`
+                <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
+              `
+            )}
             ${group.yLabels.map(
               (label) => svg`
-                <line class="grid-line" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
+                <line class="grid-line grid-line--horizontal" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
               `
             )}
             <defs>

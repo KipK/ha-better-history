@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { CHART_WIDTH, PLOT_LEFT, PLOT_WIDTH } from "../render/chart.js";
+import { CHART_WIDTH, PLOT_LEFT, PLOT_WIDTH, xFor } from "../render/chart.js";
 import type { HistorySeries } from "../data/history.js";
 
 export interface SyncedSeries {
@@ -123,8 +123,18 @@ export class TooltipController implements ReactiveController {
     if (!pt) return;
 
     const targetTime = this._timeAt(pt.x);
+    const selectedPoint = this._nearestPoint(targetTime);
+    if (!selectedPoint) {
+      if (this.tooltip !== undefined) {
+        this.tooltip = undefined;
+        this._host.requestUpdate();
+        this._emit();
+      }
+      return;
+    }
+    const selectedTime = selectedPoint.time;
     const values: TooltipValue[] = this._series.flatMap((s) => {
-      const p = this._nearest(s.points, targetTime);
+      const p = this._pointAtOrBefore(s.points, selectedTime);
       return p ? [{ label: s.label, color: s.color, value: String(p.value) }] : [];
     });
 
@@ -138,9 +148,9 @@ export class TooltipController implements ReactiveController {
     }
 
     this.tooltip = {
-      x: Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120),
+      x: xFor(selectedTime, this._timeBounds),
       y: Math.min(Math.max(pt.y, 28), this._chartHeight - 28),
-      time: targetTime,
+      time: selectedTime,
       values
     };
 
@@ -176,6 +186,39 @@ export class TooltipController implements ReactiveController {
     return prev && Math.abs(prev.time - time) < Math.abs(cur.time - time) ? prev : cur;
   }
 
+  private _nearestPoint(time: number): TooltipPoint | undefined {
+    let nearest: TooltipPoint | undefined;
+    let distance = Number.POSITIVE_INFINITY;
+
+    for (const series of this._series) {
+      const point = this._nearest(series.points, time);
+      if (!point) continue;
+
+      const pointDistance = Math.abs(point.time - time);
+      if (pointDistance < distance) {
+        nearest = point;
+        distance = pointDistance;
+      }
+    }
+
+    return nearest;
+  }
+
+  private _pointAtOrBefore(points: TooltipPoint[], time: number): TooltipPoint | undefined {
+    if (points.length === 0) return undefined;
+
+    let low = 0;
+    let high = points.length - 1;
+
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (points[mid].time <= time) low = mid;
+      else high = mid - 1;
+    }
+
+    return points[low].time <= time ? points[low] : undefined;
+  }
+
   private _timeAt(svgX: number): number {
     const ratio = Math.min(Math.max((svgX - PLOT_LEFT) / PLOT_WIDTH, 0), 1);
     return this._timeBounds.start + ratio * (this._timeBounds.end - this._timeBounds.start);
@@ -203,6 +246,7 @@ export class TooltipController implements ReactiveController {
       : "translate(-50%, 10px)";
 
     return html`
+      <div class="tooltip-axis-pointer" style=${`left:${leftPct}%;height:${chartHeight}px;`}></div>
       <div
         class="tooltip"
         style=${`left:clamp(150px,${leftPct}%,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
