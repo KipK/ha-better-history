@@ -46,6 +46,15 @@ const DEFAULT_CHUNK_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_CHUNK_ATTEMPTS = 3;
 const DEFAULT_CHUNK_RETRY_BASE_DELAY_MS = 350;
 const DEFAULT_ATTRIBUTE_CHUNK_MS = 6 * 60 * 60 * 1000;
+const MIN_ATTRIBUTE_CHUNK_MS = 1 * 60 * 60 * 1000;
+const MAX_ATTRIBUTE_CHUNK_MS = 12 * 60 * 60 * 1000;
+const LIGHT_CHUNK_STATE_COUNT = 2_500;
+const HEAVY_CHUNK_STATE_COUNT = 8_000;
+const VERY_HEAVY_CHUNK_STATE_COUNT = 15_000;
+const LIGHT_CHUNK_TOTAL_MS = 300;
+const HEAVY_CHUNK_TOTAL_MS = 700;
+const VERY_HEAVY_CHUNK_TOTAL_MS = 1_100;
+const HEAVY_CHUNK_PROCESS_MS = 80;
 
 function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
@@ -499,6 +508,45 @@ function deduplicateStates(states: HistoryState[]): HistoryState[] {
     .map(([, state]) => state);
 }
 
+function nextAdaptiveAttributeChunkMs(
+  currentChunkMs: number,
+  metrics: {
+    stateCount: number;
+    requestDurationMs: number;
+    normalizeDurationMs: number;
+    mergeDurationMs: number;
+    buildDurationMs: number;
+  }
+): { nextChunkMs: number; reason: "increase" | "decrease" | "keep" } {
+  const processingDurationMs = metrics.normalizeDurationMs + metrics.mergeDurationMs + metrics.buildDurationMs;
+  const isVeryHeavy = metrics.stateCount >= VERY_HEAVY_CHUNK_STATE_COUNT
+    || metrics.requestDurationMs >= VERY_HEAVY_CHUNK_TOTAL_MS;
+  const isHeavy = isVeryHeavy
+    || metrics.stateCount >= HEAVY_CHUNK_STATE_COUNT
+    || metrics.requestDurationMs >= HEAVY_CHUNK_TOTAL_MS
+    || processingDurationMs >= HEAVY_CHUNK_PROCESS_MS;
+  const isLight = metrics.stateCount <= LIGHT_CHUNK_STATE_COUNT
+    && metrics.requestDurationMs <= LIGHT_CHUNK_TOTAL_MS
+    && processingDurationMs <= HEAVY_CHUNK_PROCESS_MS / 2;
+
+  if (isHeavy && currentChunkMs > MIN_ATTRIBUTE_CHUNK_MS) {
+    const divisor = isVeryHeavy ? 4 : 2;
+    return {
+      nextChunkMs: Math.max(MIN_ATTRIBUTE_CHUNK_MS, Math.floor(currentChunkMs / divisor)),
+      reason: "decrease"
+    };
+  }
+
+  if (isLight && currentChunkMs < MAX_ATTRIBUTE_CHUNK_MS) {
+    return {
+      nextChunkMs: Math.min(MAX_ATTRIBUTE_CHUNK_MS, currentChunkMs * 2),
+      reason: "increase"
+    };
+  }
+
+  return { nextChunkMs: currentChunkMs, reason: "keep" };
+}
+
 async function fetchHistoryBatch(
   hass: HomeAssistant,
   entityIds: string[],
@@ -690,6 +738,7 @@ export async function fetchHistory(
       });
     }
   };
+  const attributeIntervals: Array<{ entityId: string; start: Date; end: Date }> = [];
 
   for (const entityId of stateOnlyIds) {
     for (const interval of accumulator.missingIntervals(entityId, start, end, "state")) {
@@ -697,24 +746,136 @@ export async function fetchHistory(
     }
   }
 
-  if (attrIds.length > 0) {
-    for (const entityId of attrIds) {
-      for (const interval of accumulator.missingIntervals(entityId, start, end, "full")) {
-        const span = interval.end.getTime() - interval.start.getTime();
-
-        if (span <= DEFAULT_ATTRIBUTE_CHUNK_MS) {
-          addBatch(entityId, interval.start, interval.end, "full", false, false, false);
-          continue;
-        }
-
-        for (let t = interval.start.getTime(); t < interval.end.getTime(); t += DEFAULT_ATTRIBUTE_CHUNK_MS) {
-          const chunkStart = new Date(t);
-          const chunkEnd = new Date(Math.min(t + DEFAULT_ATTRIBUTE_CHUNK_MS, interval.end.getTime()));
-          addBatch(entityId, chunkStart, chunkEnd, "full", false, false, false);
-        }
-      }
+  for (const entityId of attrIds) {
+    for (const interval of accumulator.missingIntervals(entityId, start, end, "full")) {
+      attributeIntervals.push({ entityId, start: interval.start, end: interval.end });
     }
   }
+
+  const estimatedAttributeBatchCount = attributeIntervals.reduce((total, interval) => {
+    const span = interval.end.getTime() - interval.start.getTime();
+
+    return total + Math.max(1, Math.ceil(span / DEFAULT_ATTRIBUTE_CHUNK_MS));
+  }, 0);
+
+  const estimatedBatchCount = groupedBatches.size + estimatedAttributeBatchCount;
+
+  type ProcessBatch = {
+    id: string;
+    entityIds: string[];
+    start: Date;
+    end: Date;
+    coverageKind: HistoryCoverageKind;
+  };
+
+  type ProcessedBatchMetrics = {
+    stateCount: number;
+    requestDurationMs: number;
+    normalizeDurationMs: number;
+    mergeDurationMs: number;
+    buildDurationMs: number;
+  };
+
+  let processedBatchCount = 0;
+  const fetchedEntityIds = new Set<string>();
+
+  const processBatchResult = async (
+    batch: ProcessBatch,
+    response: HistoryResponse,
+    batchDurationMs: number
+  ): Promise<ProcessedBatchMetrics> => {
+    const batchIndex = processedBatchCount;
+    processedBatchCount += 1;
+
+    if (options.isCancelled?.()) {
+      return {
+        stateCount: 0,
+        requestDurationMs: Math.round(batchDurationMs),
+        normalizeDurationMs: 0,
+        mergeDurationMs: 0,
+        buildDurationMs: 0
+      };
+    }
+
+    await yieldToBrowser();
+
+    const normalizeStart = performanceNow();
+    const batchMap = statesByEntity(response, batch.entityIds);
+    const normalizeDurationMs = performanceNow() - normalizeStart;
+    const stateCount = [...batchMap.values()].reduce((total, states) => total + states.length, 0);
+
+    onPerformance?.({
+      event: "history.batch",
+      details: {
+        batchIndex,
+        batchCount: estimatedBatchCount,
+        entityCount: batch.entityIds.length,
+        stateCount,
+        requestDurationMs: Math.round(batchDurationMs),
+        normalizeDurationMs: Math.round(normalizeDurationMs)
+      }
+    });
+
+    const mergeStart = performanceNow();
+    const changedEntityIds = new Set<string>();
+    for (const [entityId, states] of batchMap) {
+      accumulator.integrate(entityId, states, batch.start, batch.end, batch.coverageKind);
+      changedEntityIds.add(entityId);
+      fetchedEntityIds.add(entityId);
+    }
+    const mergeDurationMs = performanceNow() - mergeStart;
+
+    onPerformance?.({
+      event: "history.merge",
+      details: {
+        batchIndex,
+        entityCount: batch.entityIds.length,
+        stateCount,
+        mergeDurationMs: Math.round(mergeDurationMs)
+      }
+    });
+
+    let buildDurationMs = 0;
+
+    if (onProgress) {
+      await yieldToBrowser();
+
+      const buildStart = performanceNow();
+      for (const source of sources) {
+        if (changedEntityIds.has(source.entityId) || !seriesBySourceId.has(source.id)) {
+          if (source.kind === "entity_attribute" ? accumulator.hasFullStates(source.entityId) : accumulator.hasStates(source.entityId)) {
+            seriesBySourceId.set(source.id, accumulator.buildSeries(source, hass, start, end));
+          }
+        }
+      }
+      const progressSeries = sources
+        .map((source) => seriesBySourceId.get(source.id))
+        .filter((series): series is HistorySeries => series !== undefined);
+      buildDurationMs = performanceNow() - buildStart;
+
+      onPerformance?.({
+        event: "history.progress_series",
+        details: {
+          batchIndex,
+          seriesCount: progressSeries.length,
+          pointCount: progressSeries.reduce((total, series) => total + series.points.length, 0),
+          buildDurationMs: Math.round(buildDurationMs)
+        }
+      });
+
+      onProgress(progressSeries);
+
+      await yieldToBrowser(120);
+    }
+
+    return {
+      stateCount,
+      requestDurationMs: Math.round(batchDurationMs),
+      normalizeDurationMs: Math.round(normalizeDurationMs),
+      mergeDurationMs: Math.round(mergeDurationMs),
+      buildDurationMs: Math.round(buildDurationMs)
+    };
+  };
 
   for (const batch of groupedBatches.values()) {
     const prefix = batch.coverageKind === "full" ? "attr" : "state";
@@ -744,8 +905,11 @@ export async function fetchHistory(
     details: {
       sourceCount: sources.length,
       entityCount: allEntityIds.length,
-      batchCount: batches.length,
+      batchCount: estimatedBatchCount,
       attributeChunkHours: DEFAULT_ATTRIBUTE_CHUNK_MS / 3_600_000,
+      minAttributeChunkHours: MIN_ATTRIBUTE_CHUNK_MS / 3_600_000,
+      maxAttributeChunkHours: MAX_ATTRIBUTE_CHUNK_MS / 3_600_000,
+      adaptiveAttributeChunks: attributeIntervals.length > 0,
       cachedSourceCount: sources.filter((source) =>
         accumulator.hasCoverage(source.entityId, start, end, source.kind === "entity_attribute" ? "full" : "state")
       ).length,
@@ -777,86 +941,89 @@ export async function fetchHistory(
       });
     },
     onResult: async ({ task: batch, value: response, durationMs: batchDurationMs }) => {
-      const batchIndex = batches.indexOf(batch);
-
-      if (options.isCancelled?.()) {
-        return;
-      }
-
-      await yieldToBrowser();
-
-      const normalizeStart = onPerformance ? performanceNow() : 0;
-      const batchMap = statesByEntity(response, batch.entityIds);
-      const normalizeDurationMs = onPerformance ? performanceNow() - normalizeStart : 0;
-      const stateCount = onPerformance ? [...batchMap.values()].reduce((total, states) => total + states.length, 0) : 0;
-
-      onPerformance?.({
-        event: "history.batch",
-        details: {
-          batchIndex,
-          batchCount: batches.length,
-          entityCount: batch.entityIds.length,
-          stateCount,
-          requestDurationMs: Math.round(batchDurationMs),
-          normalizeDurationMs: Math.round(normalizeDurationMs)
-        }
-      });
-
-      const mergeStart = onPerformance ? performanceNow() : 0;
-      const changedEntityIds = new Set<string>();
-      for (const [entityId, states] of batchMap) {
-        accumulator.integrate(entityId, states, batch.start, batch.end, batch.coverageKind);
-        changedEntityIds.add(entityId);
-      }
-      const mergeDurationMs = onPerformance ? performanceNow() - mergeStart : 0;
-
-      onPerformance?.({
-        event: "history.merge",
-        details: {
-          batchIndex,
-          entityCount: batch.entityIds.length,
-          stateCount,
-          mergeDurationMs: Math.round(mergeDurationMs)
-        }
-      });
-
-      if (onProgress) {
-        await yieldToBrowser();
-
-        const buildStart = onPerformance ? performanceNow() : 0;
-        for (const source of sources) {
-          if (changedEntityIds.has(source.entityId) || !seriesBySourceId.has(source.id)) {
-            if (source.kind === "entity_attribute" ? accumulator.hasFullStates(source.entityId) : accumulator.hasStates(source.entityId)) {
-              seriesBySourceId.set(source.id, accumulator.buildSeries(source, hass, start, end));
-            }
-          }
-        }
-        const progressSeries = sources
-          .map((source) => seriesBySourceId.get(source.id))
-          .filter((series): series is HistorySeries => series !== undefined);
-        const buildDurationMs = onPerformance ? performanceNow() - buildStart : 0;
-
-        onPerformance?.({
-          event: "history.progress_series",
-          details: {
-            batchIndex,
-            seriesCount: progressSeries.length,
-            pointCount: progressSeries.reduce((total, series) => total + series.points.length, 0),
-            buildDurationMs: Math.round(buildDurationMs)
-          }
-        });
-
-        onProgress(progressSeries);
-
-        await yieldToBrowser(120);
-      }
+      await processBatchResult(batch, response, batchDurationMs);
     }
   });
+
+  let completedAttributeChunks = 0;
+  for (const interval of attributeIntervals) {
+    let chunkMs = DEFAULT_ATTRIBUTE_CHUNK_MS;
+
+    for (let t = interval.start.getTime(); t < interval.end.getTime();) {
+      if (options.isCancelled?.()) {
+        break;
+      }
+
+      const chunkStart = new Date(t);
+      const chunkEnd = new Date(Math.min(t + chunkMs, interval.end.getTime()));
+      const actualChunkMs = chunkEnd.getTime() - chunkStart.getTime();
+      const taskId = `attr:${interval.entityId}:${chunkStart.toISOString()}:${chunkEnd.toISOString()}`;
+
+      onPerformance?.({
+        event: "history.queue.task_start",
+        details: {
+          taskId,
+          queuedCount: undefined,
+          activeCount: 1,
+          completedCount: completedAttributeChunks
+        }
+      });
+
+      const requestStart = performanceNow();
+      const response = await runChunk(taskId, () => fetchHistoryBatch(
+        hass,
+        [interval.entityId],
+        chunkStart,
+        chunkEnd,
+        false,
+        false,
+        false
+      ));
+      const requestDurationMs = performanceNow() - requestStart;
+      completedAttributeChunks += 1;
+
+      onPerformance?.({
+        event: "history.queue.task_complete",
+        details: {
+          taskId,
+          queuedCount: undefined,
+          activeCount: 0,
+          completedCount: completedAttributeChunks
+        }
+      });
+
+      const metrics = await processBatchResult({
+        id: taskId,
+        entityIds: [interval.entityId],
+        start: chunkStart,
+        end: chunkEnd,
+        coverageKind: "full"
+      }, response, requestDurationMs);
+      const adaptive = nextAdaptiveAttributeChunkMs(chunkMs, metrics);
+
+      onPerformance?.({
+        event: "history.adaptive_chunk",
+        details: {
+          taskId,
+          entityId: interval.entityId,
+          chunkHours: Math.round(actualChunkMs / 36_000) / 100,
+          nextChunkHours: Math.round(adaptive.nextChunkMs / 36_000) / 100,
+          stateCount: metrics.stateCount,
+          requestDurationMs: metrics.requestDurationMs,
+          processingDurationMs: metrics.normalizeDurationMs + metrics.mergeDurationMs + metrics.buildDurationMs,
+          reason: adaptive.reason
+        }
+      });
+
+      chunkMs = adaptive.nextChunkMs;
+      t = chunkEnd.getTime();
+    }
+  }
 
   const finalBuildStart = onPerformance ? performanceNow() : 0;
   const finalSeries = sources.map((source) => {
     const existing = seriesBySourceId.get(source.id);
-    if (existing && !batches.some((batch) => batch.entityIds.includes(source.entityId))) {
+    if (existing && !fetchedEntityIds.has(source.entityId)) {
       return existing;
     }
 
