@@ -1,5 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchHistory, type HistorySeries, type HistorySource } from "../data/history.js";
+import { fetchHistory, HistoryDataAccumulator, type HistorySeries, type HistorySource } from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 import { logPerformance, performanceNow } from "../utils/performance.js";
 
@@ -14,6 +14,7 @@ interface HistoryLoadSession {
   cancelled: boolean;
   activeLoads: number;
   sourceStates: Map<string, SourceLoadState>;
+  accumulator: HistoryDataAccumulator;
 }
 
 function defer(cb: () => void): void {
@@ -56,7 +57,8 @@ export class DataController implements ReactiveController {
       endTime: end.getTime(),
       cancelled: false,
       activeLoads: 0,
-      sourceStates: new Map(sources.map((source) => [source.id, "queued"]))
+      sourceStates: new Map(sources.map((source) => [source.id, "queued"])),
+      accumulator: new HistoryDataAccumulator()
     };
 
     this._session = session;
@@ -155,7 +157,8 @@ export class DataController implements ReactiveController {
       } : undefined,
       {
         isCancelled: () => !this._isCurrentSession(session),
-        chunkTimeoutMs: FETCH_TIMEOUT_MS
+        chunkTimeoutMs: FETCH_TIMEOUT_MS,
+        accumulator: session.accumulator
       }
     )
       .then((series) => {
@@ -258,7 +261,8 @@ export class DataController implements ReactiveController {
       } : undefined,
       {
         isCancelled: () => !this._isCurrentSession(session),
-        chunkTimeoutMs: FETCH_TIMEOUT_MS
+        chunkTimeoutMs: FETCH_TIMEOUT_MS,
+        accumulator: session.accumulator
       }
     )
       .then((results) => {

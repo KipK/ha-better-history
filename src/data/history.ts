@@ -39,6 +39,7 @@ export interface HistoryFetchOptions {
   chunkTimeoutMs?: number;
   maxChunkAttempts?: number;
   chunkRetryBaseDelayMs?: number;
+  accumulator?: HistoryDataAccumulator;
 }
 
 const DEFAULT_CHUNK_TIMEOUT_MS = 60_000;
@@ -314,6 +315,171 @@ function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, e
       ];
 }
 
+type HistoryCoverageKind = "state" | "full";
+
+interface HistoryCoverageInterval {
+  startTime: number;
+  endTime: number;
+}
+
+interface HistoryEntityAccumulator {
+  states: HistoryState[];
+  stateCoverage: HistoryCoverageInterval[];
+  fullCoverage: HistoryCoverageInterval[];
+}
+
+export class HistoryDataAccumulator {
+  private readonly _entities = new Map<string, HistoryEntityAccumulator>();
+
+  hasStates(entityId: string): boolean {
+    return (this._entities.get(entityId)?.states.length ?? 0) > 0;
+  }
+
+  hasFullStates(entityId: string): boolean {
+    const entity = this._entities.get(entityId);
+
+    return entity !== undefined && entity.fullCoverage.length > 0 && entity.states.length > 0;
+  }
+
+  hasCoverage(entityId: string, start: Date, end: Date, kind: HistoryCoverageKind): boolean {
+    const entity = this._entities.get(entityId);
+    if (!entity) return false;
+
+    const intervals = kind === "full"
+      ? entity.fullCoverage
+      : [...entity.stateCoverage, ...entity.fullCoverage];
+
+    return coversRange(intervals, start.getTime(), end.getTime());
+  }
+
+  missingIntervals(entityId: string, start: Date, end: Date, kind: HistoryCoverageKind): Array<{ start: Date; end: Date }> {
+    const entity = this._entities.get(entityId);
+    const intervals = entity
+      ? kind === "full"
+        ? entity.fullCoverage
+        : [...entity.stateCoverage, ...entity.fullCoverage]
+      : [];
+
+    return missingRanges(intervals, start.getTime(), end.getTime()).map((range) => ({
+      start: new Date(range.startTime),
+      end: new Date(range.endTime)
+    }));
+  }
+
+  integrate(entityId: string, states: HistoryState[], start: Date, end: Date, kind: HistoryCoverageKind): void {
+    const entity = this._entities.get(entityId) ?? {
+      states: [],
+      stateCoverage: [],
+      fullCoverage: []
+    };
+
+    entity.states = deduplicateStates([...entity.states, ...states]);
+    entity.stateCoverage = mergeCoverage([...entity.stateCoverage, { startTime: start.getTime(), endTime: end.getTime() }]);
+
+    if (kind === "full") {
+      entity.fullCoverage = mergeCoverage([...entity.fullCoverage, { startTime: start.getTime(), endTime: end.getTime() }]);
+    }
+
+    this._entities.set(entityId, entity);
+  }
+
+  buildSeries(source: HistorySource, hass: HomeAssistant, start: Date, end: Date): HistorySeries {
+    const kind = source.kind === "entity_attribute" ? "full" : "state";
+    const coveredEnd = this.coverageEnd(source.entityId, start, end, kind);
+
+    return buildSeries(source, this._entities.get(source.entityId)?.states ?? [], hass, start, new Date(coveredEnd));
+  }
+
+  private coverageEnd(entityId: string, start: Date, end: Date, kind: HistoryCoverageKind): number {
+    const entity = this._entities.get(entityId);
+    if (!entity) return end.getTime();
+
+    const intervals = kind === "full"
+      ? entity.fullCoverage
+      : [...entity.stateCoverage, ...entity.fullCoverage];
+
+    return coveredRangeEnd(intervals, start.getTime(), end.getTime());
+  }
+}
+
+function mergeCoverage(intervals: HistoryCoverageInterval[]): HistoryCoverageInterval[] {
+  const sorted = intervals
+    .filter((interval) => interval.endTime > interval.startTime)
+    .sort((left, right) => left.startTime - right.startTime);
+  const merged: HistoryCoverageInterval[] = [];
+
+  for (const interval of sorted) {
+    const last = merged[merged.length - 1];
+
+    if (last && interval.startTime <= last.endTime + 1) {
+      last.endTime = Math.max(last.endTime, interval.endTime);
+    } else {
+      merged.push({ ...interval });
+    }
+  }
+
+  return merged;
+}
+
+function coversRange(intervals: HistoryCoverageInterval[], startTime: number, endTime: number): boolean {
+  return coveredRangeEnd(intervals, startTime, endTime) >= endTime - 1;
+}
+
+function coveredRangeEnd(intervals: HistoryCoverageInterval[], startTime: number, endTime: number): number {
+  if (endTime <= startTime) return endTime;
+
+  let cursor = startTime;
+
+  for (const interval of mergeCoverage(intervals)) {
+    if (interval.endTime < cursor) continue;
+    if (interval.startTime > cursor + 1) break;
+
+    cursor = Math.max(cursor, interval.endTime);
+    if (cursor >= endTime - 1) return endTime;
+  }
+
+  return cursor;
+}
+
+function missingRanges(intervals: HistoryCoverageInterval[], startTime: number, endTime: number): HistoryCoverageInterval[] {
+  if (endTime <= startTime) return [];
+
+  const missing: HistoryCoverageInterval[] = [];
+  let cursor = startTime;
+
+  for (const interval of mergeCoverage(intervals)) {
+    if (interval.endTime <= cursor) continue;
+
+    if (interval.startTime > cursor + 1) {
+      missing.push({ startTime: cursor, endTime: Math.min(interval.startTime, endTime) });
+    }
+
+    cursor = Math.max(cursor, interval.endTime);
+    if (cursor >= endTime) break;
+  }
+
+  if (cursor < endTime) {
+    missing.push({ startTime: cursor, endTime });
+  }
+
+  return missing;
+}
+
+function deduplicateStates(states: HistoryState[]): HistoryState[] {
+  const byTime = new Map<number, HistoryState>();
+
+  for (const state of states) {
+    const time = timeFromState(state);
+    if (Number.isFinite(time)) {
+      byTime.set(time, state);
+    }
+  }
+
+  return [...byTime.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, state]) => state);
+}
+
 async function fetchHistoryBatch(
   hass: HomeAssistant,
   entityIds: string[],
@@ -444,9 +610,12 @@ export async function fetchHistory(
 
   interface Batch extends HistoryQueueTask<HistoryResponse> {
     entityIds: string[];
+    start: Date;
     end: Date;
+    coverageKind: HistoryCoverageKind;
   }
 
+  const accumulator = options.accumulator ?? new HistoryDataAccumulator();
   const batches: Batch[] = [];
   const chunkTimeoutMs = Math.max(1, Math.floor(options.chunkTimeoutMs ?? DEFAULT_CHUNK_TIMEOUT_MS));
   const maxChunkAttempts = Math.max(1, Math.floor(options.maxChunkAttempts ?? DEFAULT_MAX_CHUNK_ATTEMPTS));
@@ -460,42 +629,97 @@ export async function fetchHistory(
       isCancelled: options.isCancelled,
       onPerformance
     });
+  const groupedBatches = new Map<string, {
+    entityIds: string[];
+    start: Date;
+    end: Date;
+    coverageKind: HistoryCoverageKind;
+    minimalResponse: boolean;
+    noAttributes: boolean;
+    significantChangesOnly: boolean;
+  }>();
+  const addBatch = (
+    entityId: string,
+    batchStart: Date,
+    batchEnd: Date,
+    coverageKind: HistoryCoverageKind,
+    minimalResponse: boolean,
+    noAttributes: boolean,
+    significantChangesOnly: boolean
+  ): void => {
+    const key = [
+      coverageKind,
+      batchStart.toISOString(),
+      batchEnd.toISOString(),
+      minimalResponse ? "minimal" : "full",
+      noAttributes ? "noattr" : "attrs",
+      significantChangesOnly ? "significant" : "all"
+    ].join("|");
+    const existing = groupedBatches.get(key);
 
-  if (stateOnlyIds.length > 0) {
-    const id = `state:${stateOnlyIds.join(",")}:${start.toISOString()}:${end.toISOString()}`;
-    batches.push({
-      id,
-      entityIds: stateOnlyIds,
-      end,
-      run: () => runChunk(id, () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true))
-    });
+    if (existing) {
+      existing.entityIds.push(entityId);
+    } else {
+      groupedBatches.set(key, {
+        entityIds: [entityId],
+        start: batchStart,
+        end: batchEnd,
+        coverageKind,
+        minimalResponse,
+        noAttributes,
+        significantChangesOnly
+      });
+    }
+  };
+
+  for (const entityId of stateOnlyIds) {
+    for (const interval of accumulator.missingIntervals(entityId, start, end, "state")) {
+      addBatch(entityId, interval.start, interval.end, "state", true, true, true);
+    }
   }
 
   if (attrIds.length > 0) {
     const CHUNK_MS = 24 * 60 * 60 * 1000;
-    const span = end.getTime() - start.getTime();
 
-    if (span > CHUNK_MS) {
-      for (let t = start.getTime(); t < end.getTime(); t += CHUNK_MS) {
-        const chunkStart = new Date(t);
-        const chunkEnd = new Date(Math.min(t + CHUNK_MS, end.getTime()));
-        const id = `attr:${attrIds.join(",")}:${chunkStart.toISOString()}:${chunkEnd.toISOString()}`;
-        batches.push({
-          id,
-          entityIds: attrIds,
-          end: chunkEnd,
-          run: () => runChunk(id, () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false))
-        });
+    for (const entityId of attrIds) {
+      for (const interval of accumulator.missingIntervals(entityId, start, end, "full")) {
+        const span = interval.end.getTime() - interval.start.getTime();
+
+        if (span <= CHUNK_MS) {
+          addBatch(entityId, interval.start, interval.end, "full", false, false, false);
+          continue;
+        }
+
+        for (let t = interval.start.getTime(); t < interval.end.getTime(); t += CHUNK_MS) {
+          const chunkStart = new Date(t);
+          const chunkEnd = new Date(Math.min(t + CHUNK_MS, interval.end.getTime()));
+          addBatch(entityId, chunkStart, chunkEnd, "full", false, false, false);
+        }
       }
-    } else {
-      const id = `attr:${attrIds.join(",")}:${start.toISOString()}:${end.toISOString()}`;
-      batches.push({
-        id,
-        entityIds: attrIds,
-        end,
-        run: () => runChunk(id, () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false))
-      });
     }
+  }
+
+  for (const batch of groupedBatches.values()) {
+    const prefix = batch.coverageKind === "full" ? "attr" : "state";
+    const entityIds = [...new Set(batch.entityIds)];
+    const id = `${prefix}:${entityIds.join(",")}:${batch.start.toISOString()}:${batch.end.toISOString()}`;
+
+    batches.push({
+      id,
+      entityIds,
+      start: batch.start,
+      end: batch.end,
+      coverageKind: batch.coverageKind,
+      run: () => runChunk(id, () => fetchHistoryBatch(
+        hass,
+        entityIds,
+        batch.start,
+        batch.end,
+        batch.minimalResponse,
+        batch.noAttributes,
+        batch.significantChangesOnly
+      ))
+    });
   }
 
   onPerformance?.({
@@ -504,14 +728,21 @@ export async function fetchHistory(
       sourceCount: sources.length,
       entityCount: allEntityIds.length,
       batchCount: batches.length,
+      cachedSourceCount: sources.filter((source) =>
+        accumulator.hasCoverage(source.entityId, start, end, source.kind === "entity_attribute" ? "full" : "state")
+      ).length,
       chunkTimeoutMs,
       maxChunkAttempts,
       rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
     }
   });
 
-  const allStates = new Map<string, HistoryState[]>();
-  const entityDataEnd = new Map<string, Date>();
+  const seriesBySourceId = new Map<string, HistorySeries>();
+  for (const source of sources) {
+    if (source.kind === "entity_attribute" ? accumulator.hasFullStates(source.entityId) : accumulator.hasStates(source.entityId)) {
+      seriesBySourceId.set(source.id, accumulator.buildSeries(source, hass, start, end));
+    }
+  }
 
   await runHistoryQueue<HistoryResponse, Batch>(batches, {
     concurrency: options.concurrency ?? 1,
@@ -555,17 +786,10 @@ export async function fetchHistory(
       });
 
       const mergeStart = onPerformance ? performanceNow() : 0;
+      const changedEntityIds = new Set<string>();
       for (const [entityId, states] of batchMap) {
-        const existing = allStates.get(entityId);
-        if (existing) {
-          existing.push(...states);
-        } else {
-          allStates.set(entityId, states);
-        }
-      }
-
-      for (const entityId of batch.entityIds) {
-        entityDataEnd.set(entityId, batch.end);
+        accumulator.integrate(entityId, states, batch.start, batch.end, batch.coverageKind);
+        changedEntityIds.add(entityId);
       }
       const mergeDurationMs = onPerformance ? performanceNow() - mergeStart : 0;
 
@@ -581,11 +805,16 @@ export async function fetchHistory(
 
       if (onProgress) {
         const buildStart = onPerformance ? performanceNow() : 0;
-        const progressSeries = (
-          sources
-            .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
-            .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, entityDataEnd.get(source.entityId) ?? end))
-        );
+        for (const source of sources) {
+          if (changedEntityIds.has(source.entityId) || !seriesBySourceId.has(source.id)) {
+            if (source.kind === "entity_attribute" ? accumulator.hasFullStates(source.entityId) : accumulator.hasStates(source.entityId)) {
+              seriesBySourceId.set(source.id, accumulator.buildSeries(source, hass, start, end));
+            }
+          }
+        }
+        const progressSeries = sources
+          .map((source) => seriesBySourceId.get(source.id))
+          .filter((series): series is HistorySeries => series !== undefined);
         const buildDurationMs = onPerformance ? performanceNow() - buildStart : 0;
 
         onPerformance?.({
@@ -612,7 +841,14 @@ export async function fetchHistory(
   });
 
   const finalBuildStart = onPerformance ? performanceNow() : 0;
-  const finalSeries = sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end));
+  const finalSeries = sources.map((source) => {
+    const existing = seriesBySourceId.get(source.id);
+    if (existing && !batches.some((batch) => batch.entityIds.includes(source.entityId))) {
+      return existing;
+    }
+
+    return accumulator.buildSeries(source, hass, start, end);
+  });
   const finalBuildDurationMs = onPerformance ? performanceNow() - finalBuildStart : 0;
 
   onPerformance?.({
