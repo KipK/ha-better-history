@@ -5,6 +5,17 @@ import { logPerformance, performanceNow } from "../utils/performance.js";
 
 const FETCH_TIMEOUT_MS = 60000;
 
+type SourceLoadState = "queued" | "loading" | "ready" | "partial" | "error";
+
+interface HistoryLoadSession {
+  id: number;
+  startTime: number;
+  endTime: number;
+  cancelled: boolean;
+  activeLoads: number;
+  sourceStates: Map<string, SourceLoadState>;
+}
+
 function defer(cb: () => void): void {
   requestAnimationFrame(() => requestAnimationFrame(cb));
 }
@@ -23,7 +34,8 @@ export class DataController implements ReactiveController {
   debugPerformance = false;
 
   private _prevKey = "";
-  private _requestId = 0;
+  private _nextSessionId = 0;
+  private _session?: HistoryLoadSession;
 
   constructor(host: ReactiveControllerHost) {
     this.host = host;
@@ -32,6 +44,57 @@ export class DataController implements ReactiveController {
 
   hostConnected(): void {}
   hostDisconnected(): void {}
+
+  private _createSession(sources: HistorySource[], start: Date, end: Date): HistoryLoadSession {
+    if (this._session) {
+      this._session.cancelled = true;
+    }
+
+    const session: HistoryLoadSession = {
+      id: ++this._nextSessionId,
+      startTime: start.getTime(),
+      endTime: end.getTime(),
+      cancelled: false,
+      activeLoads: 0,
+      sourceStates: new Map(sources.map((source) => [source.id, "queued"]))
+    };
+
+    this._session = session;
+
+    return session;
+  }
+
+  private _activeSession(start: Date, end: Date): HistoryLoadSession | undefined {
+    const session = this._session;
+
+    if (!session || session.cancelled) {
+      return undefined;
+    }
+
+    return session.startTime === start.getTime() && session.endTime === end.getTime()
+      ? session
+      : undefined;
+  }
+
+  private _isCurrentSession(session: HistoryLoadSession): boolean {
+    return this._session === session && !session.cancelled;
+  }
+
+  private _beginLoad(session: HistoryLoadSession, sources: HistorySource[]): void {
+    session.activeLoads += 1;
+    for (const source of sources) {
+      session.sourceStates.set(source.id, "loading");
+    }
+  }
+
+  private _completeLoad(session: HistoryLoadSession): void {
+    session.activeLoads = Math.max(0, session.activeLoads - 1);
+    this.loading = session.activeLoads > 0;
+  }
+
+  private _sessionSources(session: HistoryLoadSession, series: HistorySeries[]): HistorySeries[] {
+    return series.filter((item) => session.sourceStates.has(item.source.id));
+  }
 
   fetch(hass: HomeAssistant | undefined, sources: HistorySource[], start: Date, end: Date): void {
     const key = `${sources.map((s) => s.id).join("|")}|${start.getTime()}|${end.getTime()}`;
@@ -48,14 +111,16 @@ export class DataController implements ReactiveController {
       return;
     }
 
-    const id = ++this._requestId;
+    const session = this._createSession(sources, start, end);
     const fetchStart = performanceNow();
 
     this.series = [];
     this.loading = true;
     this.error = "";
+    this._beginLoad(session, sources);
     if (this.debugPerformance) {
       logPerformance(this.debugPerformance, "controller.fetch_start", {
+        sessionId: session.id,
         sourceCount: sources.length,
         rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
       });
@@ -68,12 +133,17 @@ export class DataController implements ReactiveController {
       start,
       end,
       (partial) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
         const updateStart = performanceNow();
-        this.series = partial;
+        const nextPartial = this._sessionSources(session, partial);
+        this.series = this._mergeSeries(this.series.filter((series) => !sources.some((source) => source.id === series.source.id)), nextPartial);
+        for (const item of nextPartial) {
+          session.sourceStates.set(item.source.id, "partial");
+        }
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.progress_update", {
+            sessionId: session.id,
             sourceCount: partial.length,
             pointCount: partial.reduce((total, series) => total + series.points.length, 0),
             updateDurationMs: Math.round(performanceNow() - updateStart)
@@ -84,19 +154,25 @@ export class DataController implements ReactiveController {
         logPerformance(this.debugPerformance, event.event, event.details);
       } : undefined,
       {
-        isCancelled: () => id !== this._requestId,
+        isCancelled: () => !this._isCurrentSession(session),
         chunkTimeoutMs: FETCH_TIMEOUT_MS
       }
     )
       .then((series) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
         defer(() => {
+          if (!this._isCurrentSession(session)) return;
           const updateStart = performanceNow();
-          this.series = series;
-          this.loading = false;
+          const nextSeries = this._sessionSources(session, series);
+          this.series = this._mergeSeries(this.series.filter((item) => !sources.some((source) => source.id === item.source.id)), nextSeries);
+          for (const item of nextSeries) {
+            session.sourceStates.set(item.source.id, "ready");
+          }
+          this._completeLoad(session);
           this.host.requestUpdate();
           if (this.debugPerformance) {
             logPerformance(this.debugPerformance, "controller.fetch_complete", {
+              sessionId: session.id,
               sourceCount: series.length,
               pointCount: series.reduce((total, item) => total + item.points.length, 0),
               totalDurationMs: Math.round(performanceNow() - fetchStart),
@@ -105,12 +181,16 @@ export class DataController implements ReactiveController {
           }
         });
       }).catch((err: unknown) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
+        for (const source of sources) {
+          session.sourceStates.set(source.id, "error");
+        }
         this.error = formatError(err);
-        this.loading = false;
+        this._completeLoad(session);
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.fetch_error", {
+            sessionId: session.id,
             totalDurationMs: Math.round(performanceNow() - fetchStart),
             error: this.error
           });
@@ -131,12 +211,18 @@ export class DataController implements ReactiveController {
 
     if (toFetch.length === 0) return;
 
-    const id = ++this._requestId;
+    const session = this._activeSession(start, end) ?? this._createSession(this.series.map((item) => item.source), start, end);
     const fetchStart = performanceNow();
 
+    for (const source of toFetch) {
+      session.sourceStates.set(source.id, "queued");
+    }
+
     this.loading = true;
+    this._beginLoad(session, toFetch);
     if (this.debugPerformance) {
       logPerformance(this.debugPerformance, "controller.add_sources_start", {
+        sessionId: session.id,
         sourceCount: toFetch.length,
         existingSourceCount: this.series.length,
         rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
@@ -150,12 +236,17 @@ export class DataController implements ReactiveController {
       start,
       end,
       (partial) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
         const mergeStart = performanceNow();
-        this._mergePartial(partial);
+        const nextPartial = this._sessionSources(session, partial);
+        this._mergePartial(nextPartial);
+        for (const item of nextPartial) {
+          session.sourceStates.set(item.source.id, "partial");
+        }
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.add_sources_progress", {
+            sessionId: session.id,
             sourceCount: partial.length,
             pointCount: partial.reduce((total, series) => total + series.points.length, 0),
             mergeDurationMs: Math.round(performanceNow() - mergeStart)
@@ -166,19 +257,25 @@ export class DataController implements ReactiveController {
         logPerformance(this.debugPerformance, event.event, event.details);
       } : undefined,
       {
-        isCancelled: () => id !== this._requestId,
+        isCancelled: () => !this._isCurrentSession(session),
         chunkTimeoutMs: FETCH_TIMEOUT_MS
       }
     )
       .then((results) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
         defer(() => {
+          if (!this._isCurrentSession(session)) return;
           const mergeStart = performanceNow();
-          this._mergePartial(results);
-          this.loading = false;
+          const nextResults = this._sessionSources(session, results);
+          this._mergePartial(nextResults);
+          for (const item of nextResults) {
+            session.sourceStates.set(item.source.id, "ready");
+          }
+          this._completeLoad(session);
           this.host.requestUpdate();
           if (this.debugPerformance) {
             logPerformance(this.debugPerformance, "controller.add_sources_complete", {
+              sessionId: session.id,
               sourceCount: results.length,
               pointCount: results.reduce((total, series) => total + series.points.length, 0),
               totalDurationMs: Math.round(performanceNow() - fetchStart),
@@ -187,12 +284,16 @@ export class DataController implements ReactiveController {
           }
         });
       }).catch((err: unknown) => {
-        if (id !== this._requestId) return;
+        if (!this._isCurrentSession(session)) return;
+        for (const source of toFetch) {
+          session.sourceStates.set(source.id, "error");
+        }
         this.error = formatError(err);
-        this.loading = false;
+        this._completeLoad(session);
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.add_sources_error", {
+            sessionId: session.id,
             totalDurationMs: Math.round(performanceNow() - fetchStart),
             error: this.error
           });
@@ -200,8 +301,8 @@ export class DataController implements ReactiveController {
       });
   }
 
-  private _mergePartial(partial: HistorySeries[]): void {
-    const updated = [...this.series];
+  private _mergeSeries(base: HistorySeries[], partial: HistorySeries[]): HistorySeries[] {
+    const updated = [...base];
 
     for (const result of partial) {
       const idx = updated.findIndex((s) => s.source.id === result.source.id);
@@ -212,7 +313,11 @@ export class DataController implements ReactiveController {
       }
     }
 
-    this.series = updated;
+    return updated;
+  }
+
+  private _mergePartial(partial: HistorySeries[]): void {
+    this.series = this._mergeSeries(this.series, partial);
   }
 
   removeSources(sourceIds: string[]): void {
@@ -221,6 +326,9 @@ export class DataController implements ReactiveController {
     const removed = new Set(sourceIds);
 
     this.series = this.series.filter((s) => !removed.has(s.source.id));
+    for (const sourceId of sourceIds) {
+      this._session?.sourceStates.delete(sourceId);
+    }
     this._prevKey = this.series.map((s) => s.source.id).join("|") + "|";
 
     this.host.requestUpdate();
