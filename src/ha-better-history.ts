@@ -441,10 +441,11 @@ export class HaBetterHistory extends LitElement {
 
   private _renderGraphGroup(group: GraphGroup): TemplateResult {
     const showLegend = this._resolved?.showLegend ?? true;
+    const seriesIds = group.series.map((series) => series.id).join("|");
 
     return html`
       <div class="graph-section">
-        <div class="graph-canvas" style="height:${group.canvasHeight}px">
+        <div class="graph-canvas" data-series-ids=${seriesIds} style="height:${group.canvasHeight}px">
           <svg
             viewBox="0 0 ${CHART_WIDTH} ${group.svgHeight}"
             height="${group.svgHeight}"
@@ -642,7 +643,7 @@ export class HaBetterHistory extends LitElement {
                 @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
                 ${groups.map((g) => this._renderGraphGroup(g))}
-                ${showTooltip ? this._tooltip.renderTooltip(totalHeight) : nothing}
+                ${showTooltip ? this._tooltip.renderTooltip() : nothing}
                 ${this._data.loading ? html`<div class="chart-loading-overlay"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>` : nothing}
               </div>`
           : this._data.loading
