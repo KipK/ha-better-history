@@ -14,7 +14,9 @@ interface HistoryLoadSession {
   endTime: number;
   cancelled: boolean;
   activeLoads: number;
+  sources: HistorySource[];
   sourceStates: Map<string, SourceLoadState>;
+  activeEntityLoads: Map<string, number>;
   accumulator: HistoryDataAccumulator;
 }
 
@@ -25,6 +27,10 @@ function defer(cb: () => void): void {
 function formatError(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function sourceCoverageKey(source: HistorySource): string {
+  return `${source.kind === "entity_attribute" ? "full" : "state"}:${source.entityId}`;
 }
 
 export class DataController implements ReactiveController {
@@ -60,7 +66,9 @@ export class DataController implements ReactiveController {
       endTime: end.getTime(),
       cancelled: false,
       activeLoads: 0,
+      sources: [...sources],
       sourceStates: new Map(sources.map((source) => [source.id, "queued"])),
+      activeEntityLoads: new Map(),
       accumulator: new HistoryDataAccumulator()
     };
 
@@ -85,15 +93,41 @@ export class DataController implements ReactiveController {
     return this._session === session && !session.cancelled;
   }
 
+  private _addSessionSources(session: HistoryLoadSession, sources: HistorySource[]): void {
+    const known = new Set(session.sources.map((source) => source.id));
+
+    for (const source of sources) {
+      if (!known.has(source.id)) {
+        known.add(source.id);
+        session.sources.push(source);
+      }
+    }
+  }
+
+  private _hasActiveEntityLoad(session: HistoryLoadSession, source: HistorySource): boolean {
+    return (session.activeEntityLoads.get(sourceCoverageKey(source)) ?? 0) > 0;
+  }
+
   private _beginLoad(session: HistoryLoadSession, sources: HistorySource[]): void {
     session.activeLoads += 1;
     for (const source of sources) {
       session.sourceStates.set(source.id, "loading");
+      const key = sourceCoverageKey(source);
+      session.activeEntityLoads.set(key, (session.activeEntityLoads.get(key) ?? 0) + 1);
     }
   }
 
-  private _completeLoad(session: HistoryLoadSession): void {
+  private _completeLoad(session: HistoryLoadSession, sources: HistorySource[]): void {
     session.activeLoads = Math.max(0, session.activeLoads - 1);
+    for (const source of sources) {
+      const key = sourceCoverageKey(source);
+      const count = Math.max(0, (session.activeEntityLoads.get(key) ?? 0) - 1);
+      if (count > 0) {
+        session.activeEntityLoads.set(key, count);
+      } else {
+        session.activeEntityLoads.delete(key);
+      }
+    }
     this.loading = session.activeLoads > 0;
   }
 
@@ -152,14 +186,14 @@ export class DataController implements ReactiveController {
 
     fetchHistory(
       hass,
-      sources,
+      session.sources,
       start,
       end,
       (partial) => {
         if (!this._isCurrentSession(session)) return;
         const updateStart = performanceNow();
         const nextPartial = this._sessionSources(session, partial);
-        this.series = this._mergeSeries(this.series.filter((series) => !sources.some((source) => source.id === series.source.id)), nextPartial);
+        this.series = this._mergeSeries(this.series.filter((series) => !session.sources.some((source) => source.id === series.source.id)), nextPartial);
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
         }
@@ -188,11 +222,11 @@ export class DataController implements ReactiveController {
           if (!this._isCurrentSession(session)) return;
           const updateStart = performanceNow();
           const nextSeries = this._sessionSources(session, series);
-          this.series = this._mergeSeries(this.series.filter((item) => !sources.some((source) => source.id === item.source.id)), nextSeries);
+          this.series = this._mergeSeries(this.series.filter((item) => !session.sources.some((source) => source.id === item.source.id)), nextSeries);
           for (const item of nextSeries) {
             session.sourceStates.set(item.source.id, "ready");
           }
-          this._completeLoad(session);
+          this._completeLoad(session, sources);
           this.host.requestUpdate();
           if (this.debugPerformance) {
             logPerformance(this.debugPerformance, "controller.fetch_complete", {
@@ -210,7 +244,7 @@ export class DataController implements ReactiveController {
           session.sourceStates.set(source.id, "error");
         }
         this.error = formatError(err);
-        this._completeLoad(session);
+        this._completeLoad(session, sources);
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.fetch_error", {
@@ -230,24 +264,48 @@ export class DataController implements ReactiveController {
   ): void {
     if (!hass || newSources.length === 0) return;
 
-    const existingIds = new Set(this.series.map((s) => s.source.id));
+    const session = this._activeSession(start, end) ?? this._createSession(this.series.map((item) => item.source), start, end);
+    const existingIds = new Set([
+      ...this.series.map((s) => s.source.id),
+      ...session.sourceStates.keys()
+    ]);
     const toFetch = newSources.filter((s) => !existingIds.has(s.id));
 
     if (toFetch.length === 0) return;
 
-    const session = this._activeSession(start, end) ?? this._createSession(this.series.map((item) => item.source), start, end);
+    const activeCoverageKeys = new Set(session.activeEntityLoads.keys());
+    this._addSessionSources(session, toFetch);
+    const networkSources = toFetch.filter((source) => !this._hasActiveEntityLoad(session, source));
+    const networkSourceIds = new Set(networkSources.map((source) => source.id));
+    const fetchSources = session.sources.filter((source) =>
+      networkSourceIds.has(source.id) || !activeCoverageKeys.has(sourceCoverageKey(source))
+    );
     const fetchStart = performanceNow();
 
     for (const source of toFetch) {
-      session.sourceStates.set(source.id, "queued");
+      session.sourceStates.set(source.id, networkSources.includes(source) ? "queued" : "loading");
+    }
+
+    if (networkSources.length === 0) {
+      this.loading = session.activeLoads > 0;
+      this._requestProgressUpdate(session);
+      if (this.debugPerformance) {
+        logPerformance(this.debugPerformance, "controller.add_sources_joined_active_load", {
+          sessionId: session.id,
+          sourceCount: toFetch.length,
+          existingSourceCount: this.series.length
+        });
+      }
+      return;
     }
 
     this.loading = true;
-    this._beginLoad(session, toFetch);
+    this._beginLoad(session, networkSources);
     if (this.debugPerformance) {
       logPerformance(this.debugPerformance, "controller.add_sources_start", {
         sessionId: session.id,
-        sourceCount: toFetch.length,
+        sourceCount: networkSources.length,
+        joinedActiveSourceCount: toFetch.length - networkSources.length,
         existingSourceCount: this.series.length,
         rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
       });
@@ -256,7 +314,7 @@ export class DataController implements ReactiveController {
 
     fetchHistory(
       hass,
-      toFetch,
+      fetchSources,
       start,
       end,
       (partial) => {
@@ -296,7 +354,7 @@ export class DataController implements ReactiveController {
           for (const item of nextResults) {
             session.sourceStates.set(item.source.id, "ready");
           }
-          this._completeLoad(session);
+          this._completeLoad(session, networkSources);
           this.host.requestUpdate();
           if (this.debugPerformance) {
             logPerformance(this.debugPerformance, "controller.add_sources_complete", {
@@ -310,11 +368,11 @@ export class DataController implements ReactiveController {
         });
       }).catch((err: unknown) => {
         if (!this._isCurrentSession(session)) return;
-        for (const source of toFetch) {
+        for (const source of networkSources) {
           session.sourceStates.set(source.id, "error");
         }
         this.error = formatError(err);
-        this._completeLoad(session);
+        this._completeLoad(session, networkSources);
         this.host.requestUpdate();
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.add_sources_error", {
