@@ -30,6 +30,7 @@ export interface NumericLineRenderData {
   id: string;
   color: string;
   points: string;
+  pathLength: number;
 }
 
 export interface SegmentRenderData {
@@ -150,13 +151,13 @@ function buildNumericLines(
 
     if (!scale) return [];
 
-    const pts = toStepPath(
+    const { points, pathLength } = toStepPath(
       displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH),
       bounds,
       scale
     );
 
-    return [{ id: series.id, color: series.color, points: pts }];
+    return [{ id: series.id, color: series.color, points, pathLength }];
   });
 }
 
@@ -214,30 +215,36 @@ function toStepPath(
   pts: Array<{ time: number; value: number }>,
   bounds: { start: number; end: number },
   scale: NumericScale
-): string {
-  if (pts.length === 0) return "";
+): { points: string; pathLength: number } {
+  if (pts.length === 0) return { points: "", pathLength: 0 };
   if (pts.length === 1) {
-    return `${xFor(pts[0].time, bounds).toFixed(1)},${yFor(pts[0].value, scale).toFixed(1)}`;
+    return {
+      points: `${xFor(pts[0].time, bounds).toFixed(1)},${yFor(pts[0].value, scale).toFixed(1)}`,
+      pathLength: 0
+    };
   }
 
   const result: string[] = [];
+  let length = 0;
 
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i];
     const b = pts[i + 1];
-    const xa = xFor(a.time, bounds).toFixed(1);
-    const ya = yFor(a.value, scale).toFixed(1);
-    const xb = xFor(b.time, bounds).toFixed(1);
-    const yb = yFor(b.value, scale).toFixed(1);
+    const xa = xFor(a.time, bounds);
+    const ya = yFor(a.value, scale);
+    const xb = xFor(b.time, bounds);
+    const yb = yFor(b.value, scale);
 
     if (i === 0) {
-      result.push(`${xa},${ya}`);
+      result.push(`${xa.toFixed(1)},${ya.toFixed(1)}`);
     }
-    result.push(`${xb},${ya}`);
-    result.push(`${xb},${yb}`);
+    result.push(`${xb.toFixed(1)},${ya.toFixed(1)}`);
+    result.push(`${xb.toFixed(1)},${yb.toFixed(1)}`);
+
+    length += Math.abs(xb - xa) + Math.abs(yb - ya);
   }
 
-  return result.join(" ");
+  return { points: result.join(" "), pathLength: length };
 }
 
 function formatTickValue(value: number, precision: number): string {
@@ -364,13 +371,13 @@ function buildGroupNumericLines(
   return series
     .filter((s) => s.valueType === "number" || s.valueType === "boolean")
     .map((s) => {
-      const pts = toStepPath(
+      const { points, pathLength } = toStepPath(
         displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH),
         bounds,
         localScale
       );
 
-      return { id: s.id, color: s.color, points: pts };
+      return { id: s.id, color: s.color, points, pathLength };
     });
 }
 

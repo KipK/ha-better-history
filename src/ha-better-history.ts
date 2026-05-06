@@ -82,6 +82,10 @@ export class HaBetterHistory extends LitElement {
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
   private _chartRenderCache?: ChartRenderCache;
+  private _prevClipX = new Map<string, number>();
+  private _prevStartTime = 0;
+  private _prevEndTime = 0;
+  private _prevContainerWidth = 0;
 
   @state() private _containerWidth = 0;
   private _resizeObserver?: ResizeObserver;
@@ -163,6 +167,20 @@ export class HaBetterHistory extends LitElement {
   private _lastHassResolveTime = 0;
 
   protected willUpdate(changed: PropertyValues): void {
+    const startTime = this._effectiveStartDate().getTime();
+    const endTime = this._effectiveEndDate().getTime();
+
+    if (startTime !== this._prevStartTime || endTime !== this._prevEndTime || this._containerWidth !== this._prevContainerWidth) {
+      this._prevClipX.clear();
+      this._prevStartTime = startTime;
+      this._prevEndTime = endTime;
+      this._prevContainerWidth = this._containerWidth;
+    }
+
+    if (this._data.loading && this._data.series.length === 0) {
+      this._prevClipX.clear();
+    }
+
     const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
 
     if (watch.some((p) => changed.has(p))) {
@@ -252,6 +270,7 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
+    this._animateClipPaths();
   }
 
   private _onDateRangeChanged(startDate: Date, endDate: Date): void {
@@ -378,11 +397,33 @@ export class HaBetterHistory extends LitElement {
                 <line class="grid-line" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
               `
             )}
+            <defs>
+              ${group.lines.map((line) => {
+                const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                const clipId = `clip-${safeId}`;
+                const rectId = `rect-${safeId}`;
+                return svg`
+                  <clipPath id=${clipId}>
+                    <rect id=${rectId} x="0" y="0" width="0" height=${group.svgHeight}></rect>
+                  </clipPath>
+                `;
+              })}
+            </defs>
             ${group.heatingAreas.map(
               (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
             )}
             ${group.lines.map(
-              (line) => svg`<polyline class="line" points=${line.points} stroke=${line.color}></polyline>`
+              (line) => {
+                const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                const clipId = `clip-${safeId}`;
+                const pts = line.points.split(" ");
+                const lastPt = pts[pts.length - 1];
+                const targetX = lastPt ? parseFloat(lastPt.split(",")[0]) : 0;
+                const prevX = this._prevClipX.get(line.id) ?? 0;
+                const needAnim = targetX > prevX;
+
+                return svg`<polyline class="line" clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
+              }
             )}
             ${group.segments.map(
               (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
@@ -439,6 +480,56 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
+  private _animateClipPaths(): void {
+    const root = this.renderRoot;
+    if (!root) return;
+
+    const polylines = root.querySelectorAll<SVGPolylineElement>('polyline[data-animate-clip="true"]');
+    if (polylines.length === 0) {
+      // Still need to ensure all rects have their correct final width if not animating
+      const allPolylines = root.querySelectorAll<SVGPolylineElement>("polyline[data-line-id]");
+      allPolylines.forEach((poly) => {
+        const lineId = poly.getAttribute("data-line-id");
+        if (!lineId) return;
+        const targetX = Number(poly.getAttribute("data-target-x"));
+        const safeId = lineId.replace(/[^a-zA-Z0-9]/g, "_");
+        const rect = root.querySelector(`#rect-${safeId}`);
+        if (rect instanceof SVGRectElement) {
+          rect.setAttribute("width", targetX.toString());
+          this._prevClipX.set(lineId, targetX);
+        }
+      });
+      return;
+    }
+
+    polylines.forEach((poly) => {
+      const lineId = poly.getAttribute("data-line-id");
+      const targetX = Number(poly.getAttribute("data-target-x"));
+      if (!lineId || !Number.isFinite(targetX)) return;
+
+      const prevX = this._prevClipX.get(lineId) ?? 0;
+      const safeId = lineId.replace(/[^a-zA-Z0-9]/g, "_");
+      const rect = root.querySelector(`#rect-${safeId}`);
+
+      if (rect instanceof SVGRectElement) {
+        // Force a stable starting state for the transition
+        rect.style.setProperty("transition", "none");
+        rect.setAttribute("width", prevX.toString());
+
+        // Force reflow
+        void rect.getBoundingClientRect();
+
+        // Apply transition to new target width
+        rect.style.setProperty("transition", "width 0.9s cubic-bezier(0.25, 0.1, 0.25, 1)");
+        rect.setAttribute("width", targetX.toString());
+
+        this._prevClipX.set(lineId, targetX);
+      }
+
+      poly.removeAttribute("data-animate-clip");
+    });
+  }
+
   private _renderChartBody(): TemplateResult {
     if (this._data.error) {
       const isTimeout = /timed?\s*out/i.test(this._data.error);
@@ -450,6 +541,9 @@ export class HaBetterHistory extends LitElement {
     }
 
     if (this._data.series.length === 0) {
+      if (this._data.loading) {
+        return html`<div class="chart-loading"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>`;
+      }
       return html`<div class="empty">${localize(this.hass, "empty")}</div>`;
     }
 
