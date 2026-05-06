@@ -220,6 +220,8 @@ export const chartStyles = css`
     font-size: 12px;
     pointer-events: none;
     box-sizing: border-box;
+    transition: left 90ms ease-out, top 90ms ease-out;
+    will-change: left, top, transform;
   }
 
   .tooltip-time {

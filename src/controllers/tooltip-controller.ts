@@ -17,6 +17,7 @@ export interface TooltipValue {
 
 export interface TooltipState {
   x: number;
+  tooltipX: number;
   y: number;
   activeTop: number;
   activeHeight: number;
@@ -169,16 +170,21 @@ export class TooltipController implements ReactiveController {
       this.tooltip?.time === selectedTime &&
       this.tooltip.activeTop === pt.activeTop &&
       this.tooltip.activeHeight === pt.activeHeight &&
-      this.tooltip.activeKey === pt.activeKey
+      this.tooltip.activeKey === pt.activeKey &&
+      Math.abs(this.tooltip.tooltipX - Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120)) < 1 &&
+      Math.abs(this.tooltip.y - Math.min(Math.max(pt.y, pt.activeTop + 28), pt.activeTop + pt.activeHeight - 28)) < 1
     ) {
       return;
     }
 
     const activeBottom = pt.activeTop + pt.activeHeight;
+    const tooltipX = Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120);
+    const tooltipY = Math.min(Math.max(pt.y, pt.activeTop + 28), activeBottom - 28);
 
     this.tooltip = {
       x: xFor(selectedTime, this._timeBounds),
-      y: Math.min(Math.max(pt.y, pt.activeTop + 28), activeBottom - 28),
+      tooltipX,
+      y: tooltipY,
       activeTop: pt.activeTop,
       activeHeight: pt.activeHeight,
       activeKey: pt.activeKey,
@@ -294,7 +300,8 @@ export class TooltipController implements ReactiveController {
   renderTooltip(): TemplateResult | typeof nothing {
     if (!this.tooltip) return nothing;
 
-    const leftPct = (this.tooltip.x / CHART_WIDTH) * 100;
+    const axisLeftPct = (this.tooltip.x / CHART_WIDTH) * 100;
+    const tooltipLeftPct = (this.tooltip.tooltipX / CHART_WIDTH) * 100;
     const estimatedHeight = 120;
     const activeBottom = this.tooltip.activeTop + this.tooltip.activeHeight;
     const spaceBelow = activeBottom - this.tooltip.y;
@@ -303,10 +310,10 @@ export class TooltipController implements ReactiveController {
       : "translate(-50%, 10px)";
 
     return html`
-      <div class="tooltip-axis-pointer" style=${`left:${leftPct}%;top:${this.tooltip.activeTop.toFixed(1)}px;height:${this.tooltip.activeHeight.toFixed(1)}px;`}></div>
+      <div class="tooltip-axis-pointer" style=${`left:${axisLeftPct}%;top:${this.tooltip.activeTop.toFixed(1)}px;height:${this.tooltip.activeHeight.toFixed(1)}px;`}></div>
       <div
         class="tooltip"
-        style=${`left:clamp(150px,${leftPct}%,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
+        style=${`left:clamp(150px,${tooltipLeftPct}%,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
       >
         <div class="tooltip-time">${new Date(this.tooltip.time).toLocaleString()}</div>
         ${this.tooltip.values.map(
