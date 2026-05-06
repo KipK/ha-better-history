@@ -1,6 +1,7 @@
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { HistorySourceKind, HistoryValueType } from "./value-type.js";
 import { asNumber, asString } from "./format.js";
+import { performanceNow, type PerformanceDetails } from "../utils/performance.js";
 
 export type { HistoryValueType, HistorySourceKind };
 
@@ -23,6 +24,13 @@ export interface HistorySeries {
   source: HistorySource;
   points: HistoryPoint[];
 }
+
+export interface HistoryPerformanceEvent {
+  event: string;
+  details: PerformanceDetails;
+}
+
+export type HistoryPerformanceCallback = (event: HistoryPerformanceEvent) => void;
 
 function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
@@ -251,7 +259,8 @@ export async function fetchHistory(
   sources: HistorySource[],
   start: Date,
   end: Date,
-  onProgress?: (series: HistorySeries[]) => void
+  onProgress?: (series: HistorySeries[]) => void,
+  onPerformance?: HistoryPerformanceCallback
 ): Promise<HistorySeries[]> {
   if (!hass.callWS && !hass.callApi) {
     throw new Error("Home Assistant history API is unavailable");
@@ -307,17 +316,45 @@ export async function fetchHistory(
     }
   }
 
+  onPerformance?.({
+    event: "history.start",
+    details: {
+      sourceCount: sources.length,
+      entityCount: allEntityIds.length,
+      batchCount: batches.length,
+      rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
+    }
+  });
+
   const allStates = new Map<string, HistoryState[]>();
   const entityDataEnd = new Map<string, Date>();
 
-  for (const batch of batches) {
+  for (const [batchIndex, batch] of batches.entries()) {
+    const batchStart = onPerformance ? performanceNow() : 0;
     const response = await batch.data();
+    const batchDurationMs = onPerformance ? performanceNow() - batchStart : 0;
 
     // Defer processing so the browser can handle events between network IO
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+    const normalizeStart = onPerformance ? performanceNow() : 0;
     const batchMap = statesByEntity(response, batch.entityIds);
+    const normalizeDurationMs = onPerformance ? performanceNow() - normalizeStart : 0;
+    const stateCount = onPerformance ? [...batchMap.values()].reduce((total, states) => total + states.length, 0) : 0;
 
+    onPerformance?.({
+      event: "history.batch",
+      details: {
+        batchIndex,
+        batchCount: batches.length,
+        entityCount: batch.entityIds.length,
+        stateCount,
+        requestDurationMs: Math.round(batchDurationMs),
+        normalizeDurationMs: Math.round(normalizeDurationMs)
+      }
+    });
+
+    const mergeStart = onPerformance ? performanceNow() : 0;
     for (const [entityId, states] of batchMap) {
       const existing = allStates.get(entityId);
       if (existing) {
@@ -330,13 +367,38 @@ export async function fetchHistory(
     for (const entityId of batch.entityIds) {
       entityDataEnd.set(entityId, batch.end);
     }
+    const mergeDurationMs = onPerformance ? performanceNow() - mergeStart : 0;
+
+    onPerformance?.({
+      event: "history.merge",
+      details: {
+        batchIndex,
+        entityCount: batch.entityIds.length,
+        stateCount,
+        mergeDurationMs: Math.round(mergeDurationMs)
+      }
+    });
 
     if (onProgress) {
-      onProgress(
+      const buildStart = onPerformance ? performanceNow() : 0;
+      const progressSeries = (
         sources
           .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
           .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, entityDataEnd.get(source.entityId) ?? end))
       );
+      const buildDurationMs = onPerformance ? performanceNow() - buildStart : 0;
+
+      onPerformance?.({
+        event: "history.progress_series",
+        details: {
+          batchIndex,
+          seriesCount: progressSeries.length,
+          pointCount: progressSeries.reduce((total, series) => total + series.points.length, 0),
+          buildDurationMs: Math.round(buildDurationMs)
+        }
+      });
+
+      onProgress(progressSeries);
 
       await new Promise<void>((resolve) => {
         const raf = requestAnimationFrame(() => resolve());
@@ -348,7 +410,20 @@ export async function fetchHistory(
     }
   }
 
-  return sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end));
+  const finalBuildStart = onPerformance ? performanceNow() : 0;
+  const finalSeries = sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end));
+  const finalBuildDurationMs = onPerformance ? performanceNow() - finalBuildStart : 0;
+
+  onPerformance?.({
+    event: "history.final_series",
+    details: {
+      seriesCount: finalSeries.length,
+      pointCount: finalSeries.reduce((total, series) => total + series.points.length, 0),
+      buildDurationMs: Math.round(finalBuildDurationMs)
+    }
+  });
+
+  return finalSeries;
 }
 
 function buildSeries(

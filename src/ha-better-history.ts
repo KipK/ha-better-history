@@ -31,6 +31,7 @@ import {
   renderEntityPicker
 } from "./ui/entity-picker.js";
 import { ensureHaComponents } from "./load-ha-components.js";
+import { logPerformance, performanceNow } from "./utils/performance.js";
 
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 
@@ -64,6 +65,7 @@ export class HaBetterHistory extends LitElement {
   @property() width?: string;
   @property() height?: string;
   @property() language?: string;
+  @property({ type: Boolean, attribute: "debug-performance" }) debugPerformance = false;
 
   @state() private _resolved?: ResolvedConfig;
   @state() private _hiddenSeriesIds: string[] = [];
@@ -167,6 +169,8 @@ export class HaBetterHistory extends LitElement {
   private _lastHassResolveTime = 0;
 
   protected willUpdate(changed: PropertyValues): void {
+    this._data.debugPerformance = this.debugPerformance || this.config?.debugPerformance === true;
+
     const startTime = this._effectiveStartDate().getTime();
     const endTime = this._effectiveEndDate().getTime();
 
@@ -181,7 +185,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language", "debugPerformance"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -374,7 +378,22 @@ export class HaBetterHistory extends LitElement {
     const all = this._buildRenderSeries();
     const visible = all.filter((s) => !this._hiddenSeriesIds.includes(s.id));
     const timeBounds = { start: startTime, end: Math.max(endTime, startTime + 1) };
+    const debugPerformance = this._data.debugPerformance;
+    const chartBuildStart = debugPerformance ? performanceNow() : 0;
     const data = buildChartData(all, visible, timeBounds, this._resolved?.disableClimateOverlay ?? false, maxXTicks);
+    const chartBuildDurationMs = debugPerformance ? performanceNow() - chartBuildStart : 0;
+
+    if (debugPerformance) {
+      logPerformance(debugPerformance, "chart.build_data", {
+        allSeriesCount: all.length,
+        visibleSeriesCount: visible.length,
+        pointCount: visible.reduce((total, series) => total + series.points.length, 0),
+        groupCount: data.numericScales.length,
+        segmentCount: data.segments.length,
+        lineCount: data.numericLines.length,
+        buildDurationMs: Math.round(chartBuildDurationMs)
+      });
+    }
 
     this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, containerWidth, data };
 

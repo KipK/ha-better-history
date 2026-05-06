@@ -25,6 +25,7 @@ export interface BetterHistoryConfig {
   series?: SeriesConfig[];
   defaultEntities?: string[];
   disableClimateOverlay?: boolean;
+  debugPerformance?: boolean;
 }
 
 export interface ResolvedSeries {
