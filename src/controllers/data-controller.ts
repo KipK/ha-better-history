@@ -9,15 +9,6 @@ function defer(cb: () => void): void {
   requestAnimationFrame(() => requestAnimationFrame(cb));
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out")), ms)
-    )
-  ]);
-}
-
 function formatError(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
@@ -71,8 +62,12 @@ export class DataController implements ReactiveController {
     }
     this.host.requestUpdate();
 
-    withTimeout(
-      fetchHistory(hass, sources, start, end, (partial) => {
+    fetchHistory(
+      hass,
+      sources,
+      start,
+      end,
+      (partial) => {
         if (id !== this._requestId) return;
         const updateStart = performanceNow();
         this.series = partial;
@@ -84,12 +79,14 @@ export class DataController implements ReactiveController {
             updateDurationMs: Math.round(performanceNow() - updateStart)
           });
         }
-      }, this.debugPerformance ? (event) => {
+      },
+      this.debugPerformance ? (event) => {
         logPerformance(this.debugPerformance, event.event, event.details);
-      } : undefined, {
-        isCancelled: () => id !== this._requestId
-      }),
-      FETCH_TIMEOUT_MS
+      } : undefined,
+      {
+        isCancelled: () => id !== this._requestId,
+        chunkTimeoutMs: FETCH_TIMEOUT_MS
+      }
     )
       .then((series) => {
         if (id !== this._requestId) return;
@@ -147,8 +144,12 @@ export class DataController implements ReactiveController {
     }
     this.host.requestUpdate();
 
-    withTimeout(
-      fetchHistory(hass, toFetch, start, end, (partial) => {
+    fetchHistory(
+      hass,
+      toFetch,
+      start,
+      end,
+      (partial) => {
         if (id !== this._requestId) return;
         const mergeStart = performanceNow();
         this._mergePartial(partial);
@@ -160,12 +161,14 @@ export class DataController implements ReactiveController {
             mergeDurationMs: Math.round(performanceNow() - mergeStart)
           });
         }
-      }, this.debugPerformance ? (event) => {
+      },
+      this.debugPerformance ? (event) => {
         logPerformance(this.debugPerformance, event.event, event.details);
-      } : undefined, {
-        isCancelled: () => id !== this._requestId
-      }),
-      FETCH_TIMEOUT_MS
+      } : undefined,
+      {
+        isCancelled: () => id !== this._requestId,
+        chunkTimeoutMs: FETCH_TIMEOUT_MS
+      }
     )
       .then((results) => {
         if (id !== this._requestId) return;

@@ -36,7 +36,14 @@ export type HistoryPerformanceCallback = (event: HistoryPerformanceEvent) => voi
 export interface HistoryFetchOptions {
   concurrency?: number;
   isCancelled?: () => boolean;
+  chunkTimeoutMs?: number;
+  maxChunkAttempts?: number;
+  chunkRetryBaseDelayMs?: number;
 }
+
+const DEFAULT_CHUNK_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_CHUNK_ATTEMPTS = 3;
+const DEFAULT_CHUNK_RETRY_BASE_DELAY_MS = 350;
 
 function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
@@ -71,12 +78,94 @@ export interface HistoryState {
 
 type HistoryResponse = HistoryState[][] | Record<string, HistoryState[]>;
 
+class HistoryChunkTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`History chunk timed out after ${timeoutMs}ms`);
+    this.name = "HistoryChunkTimeoutError";
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readPath(source: unknown, path: string[]): unknown {
   return path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), source);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  const status = error.status ?? error.statusCode ?? error.status_code;
+
+  return typeof status === "number" ? status : undefined;
+}
+
+function errorCode(error: unknown): string {
+  if (!isRecord(error)) {
+    return "";
+  }
+
+  const code = error.code;
+
+  return typeof code === "string" ? code.toLowerCase() : "";
+}
+
+function isRetryableHistoryError(error: unknown): boolean {
+  if (error instanceof HistoryChunkTimeoutError) {
+    return true;
+  }
+
+  const status = errorStatus(error);
+  if (status !== undefined) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+
+  const message = errorMessage(error).toLowerCase();
+  const code = errorCode(error);
+  const retryableText = `${code} ${message}`;
+
+  return retryableText.includes("timeout")
+    || retryableText.includes("timed out")
+    || retryableText.includes("network")
+    || retryableText.includes("failed to fetch")
+    || retryableText.includes("connection")
+    || retryableText.includes("temporarily unavailable")
+    || retryableText.includes("unavailable")
+    || retryableText.includes("aborted");
+}
+
+function jitteredBackoff(attempt: number, baseDelayMs: number): number {
+  const jitterMs = Math.floor(Math.random() * Math.max(1, baseDelayMs));
+
+  return baseDelayMs * 2 ** Math.max(0, attempt - 1) + jitterMs;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withChunkTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new HistoryChunkTimeoutError(timeoutMs)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export function valueType(value: unknown): HistoryValueType | undefined {
@@ -260,6 +349,75 @@ async function fetchHistoryBatch(
   );
 }
 
+async function fetchHistoryChunkWithRetry(
+  fetchChunk: () => Promise<HistoryResponse>,
+  options: {
+    taskId: string;
+    timeoutMs: number;
+    maxAttempts: number;
+    retryBaseDelayMs: number;
+    isCancelled?: () => boolean;
+    onPerformance?: HistoryPerformanceCallback;
+  }
+): Promise<HistoryResponse> {
+  let attempt = 1;
+
+  while (true) {
+    if (options.isCancelled?.()) {
+      throw new Error("History request cancelled");
+    }
+
+    const attemptStart = options.onPerformance ? performanceNow() : 0;
+
+    try {
+      options.onPerformance?.({
+        event: "history.chunk_attempt",
+        details: {
+          taskId: options.taskId,
+          attempt,
+          maxAttempts: options.maxAttempts,
+          timeoutMs: options.timeoutMs
+        }
+      });
+
+      const response = await withChunkTimeout(fetchChunk(), options.timeoutMs);
+
+      options.onPerformance?.({
+        event: "history.chunk_success",
+        details: {
+          taskId: options.taskId,
+          attempt,
+          durationMs: Math.round(performanceNow() - attemptStart)
+        }
+      });
+
+      return response;
+    } catch (error) {
+      const retryable = isRetryableHistoryError(error);
+      const canRetry = retryable && attempt < options.maxAttempts && !options.isCancelled?.();
+
+      options.onPerformance?.({
+        event: canRetry ? "history.chunk_retry" : "history.chunk_error",
+        details: {
+          taskId: options.taskId,
+          attempt,
+          maxAttempts: options.maxAttempts,
+          retryable,
+          error: errorMessage(error),
+          durationMs: Math.round(performanceNow() - attemptStart)
+        }
+      });
+
+      if (!canRetry) {
+        throw error;
+      }
+
+      await sleep(jitteredBackoff(attempt, options.retryBaseDelayMs));
+      attempt += 1;
+    }
+  }
+}
+
 export async function fetchHistory(
   hass: HomeAssistant,
   sources: HistorySource[],
@@ -290,13 +448,26 @@ export async function fetchHistory(
   }
 
   const batches: Batch[] = [];
+  const chunkTimeoutMs = Math.max(1, Math.floor(options.chunkTimeoutMs ?? DEFAULT_CHUNK_TIMEOUT_MS));
+  const maxChunkAttempts = Math.max(1, Math.floor(options.maxChunkAttempts ?? DEFAULT_MAX_CHUNK_ATTEMPTS));
+  const chunkRetryBaseDelayMs = Math.max(0, Math.floor(options.chunkRetryBaseDelayMs ?? DEFAULT_CHUNK_RETRY_BASE_DELAY_MS));
+  const runChunk = (taskId: string, fetchChunk: () => Promise<HistoryResponse>): Promise<HistoryResponse> =>
+    fetchHistoryChunkWithRetry(fetchChunk, {
+      taskId,
+      timeoutMs: chunkTimeoutMs,
+      maxAttempts: maxChunkAttempts,
+      retryBaseDelayMs: chunkRetryBaseDelayMs,
+      isCancelled: options.isCancelled,
+      onPerformance
+    });
 
   if (stateOnlyIds.length > 0) {
+    const id = `state:${stateOnlyIds.join(",")}:${start.toISOString()}:${end.toISOString()}`;
     batches.push({
-      id: `state:${stateOnlyIds.join(",")}:${start.toISOString()}:${end.toISOString()}`,
+      id,
       entityIds: stateOnlyIds,
       end,
-      run: () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
+      run: () => runChunk(id, () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true))
     });
   }
 
@@ -308,19 +479,21 @@ export async function fetchHistory(
       for (let t = start.getTime(); t < end.getTime(); t += CHUNK_MS) {
         const chunkStart = new Date(t);
         const chunkEnd = new Date(Math.min(t + CHUNK_MS, end.getTime()));
+        const id = `attr:${attrIds.join(",")}:${chunkStart.toISOString()}:${chunkEnd.toISOString()}`;
         batches.push({
-          id: `attr:${attrIds.join(",")}:${chunkStart.toISOString()}:${chunkEnd.toISOString()}`,
+          id,
           entityIds: attrIds,
           end: chunkEnd,
-          run: () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false)
+          run: () => runChunk(id, () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false))
         });
       }
     } else {
+      const id = `attr:${attrIds.join(",")}:${start.toISOString()}:${end.toISOString()}`;
       batches.push({
-        id: `attr:${attrIds.join(",")}:${start.toISOString()}:${end.toISOString()}`,
+        id,
         entityIds: attrIds,
         end,
-        run: () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
+        run: () => runChunk(id, () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false))
       });
     }
   }
@@ -331,6 +504,8 @@ export async function fetchHistory(
       sourceCount: sources.length,
       entityCount: allEntityIds.length,
       batchCount: batches.length,
+      chunkTimeoutMs,
+      maxChunkAttempts,
       rangeHours: Math.round((end.getTime() - start.getTime()) / 36_000) / 100
     }
   });
