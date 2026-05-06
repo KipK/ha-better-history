@@ -86,7 +86,9 @@ export class DataController implements ReactiveController {
         }
       }, this.debugPerformance ? (event) => {
         logPerformance(this.debugPerformance, event.event, event.details);
-      } : undefined),
+      } : undefined, {
+        isCancelled: () => id !== this._requestId
+      }),
       FETCH_TIMEOUT_MS
     )
       .then((series) => {
@@ -160,7 +162,9 @@ export class DataController implements ReactiveController {
         }
       }, this.debugPerformance ? (event) => {
         logPerformance(this.debugPerformance, event.event, event.details);
-      } : undefined),
+      } : undefined, {
+        isCancelled: () => id !== this._requestId
+      }),
       FETCH_TIMEOUT_MS
     )
       .then((results) => {

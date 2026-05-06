@@ -2,6 +2,7 @@ import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { HistorySourceKind, HistoryValueType } from "./value-type.js";
 import { asNumber, asString } from "./format.js";
 import { performanceNow, type PerformanceDetails } from "../utils/performance.js";
+import { runHistoryQueue, type HistoryQueueTask } from "./history-queue.js";
 
 export type { HistoryValueType, HistorySourceKind };
 
@@ -31,6 +32,11 @@ export interface HistoryPerformanceEvent {
 }
 
 export type HistoryPerformanceCallback = (event: HistoryPerformanceEvent) => void;
+
+export interface HistoryFetchOptions {
+  concurrency?: number;
+  isCancelled?: () => boolean;
+}
 
 function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
@@ -260,7 +266,8 @@ export async function fetchHistory(
   start: Date,
   end: Date,
   onProgress?: (series: HistorySeries[]) => void,
-  onPerformance?: HistoryPerformanceCallback
+  onPerformance?: HistoryPerformanceCallback,
+  options: HistoryFetchOptions = {}
 ): Promise<HistorySeries[]> {
   if (!hass.callWS && !hass.callApi) {
     throw new Error("Home Assistant history API is unavailable");
@@ -277,19 +284,19 @@ export async function fetchHistory(
   const stateOnlyIds = allEntityIds.filter((id) => !attrEntityIds.has(id));
   const attrIds = allEntityIds.filter((id) => attrEntityIds.has(id));
 
-  interface Batch {
+  interface Batch extends HistoryQueueTask<HistoryResponse> {
     entityIds: string[];
     end: Date;
-    data: () => Promise<HistoryResponse>;
   }
 
   const batches: Batch[] = [];
 
   if (stateOnlyIds.length > 0) {
     batches.push({
+      id: `state:${stateOnlyIds.join(",")}:${start.toISOString()}:${end.toISOString()}`,
       entityIds: stateOnlyIds,
       end,
-      data: () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
+      run: () => fetchHistoryBatch(hass, stateOnlyIds, start, end, true, true, true)
     });
   }
 
@@ -302,16 +309,18 @@ export async function fetchHistory(
         const chunkStart = new Date(t);
         const chunkEnd = new Date(Math.min(t + CHUNK_MS, end.getTime()));
         batches.push({
+          id: `attr:${attrIds.join(",")}:${chunkStart.toISOString()}:${chunkEnd.toISOString()}`,
           entityIds: attrIds,
           end: chunkEnd,
-          data: () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false)
+          run: () => fetchHistoryBatch(hass, attrIds, chunkStart, chunkEnd, false, false, false)
         });
       }
     } else {
       batches.push({
+        id: `attr:${attrIds.join(",")}:${start.toISOString()}:${end.toISOString()}`,
         entityIds: attrIds,
         end,
-        data: () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
+        run: () => fetchHistoryBatch(hass, attrIds, start, end, false, false, false)
       });
     }
   }
@@ -329,86 +338,103 @@ export async function fetchHistory(
   const allStates = new Map<string, HistoryState[]>();
   const entityDataEnd = new Map<string, Date>();
 
-  for (const [batchIndex, batch] of batches.entries()) {
-    const batchStart = onPerformance ? performanceNow() : 0;
-    const response = await batch.data();
-    const batchDurationMs = onPerformance ? performanceNow() - batchStart : 0;
+  await runHistoryQueue<HistoryResponse, Batch>(batches, {
+    concurrency: options.concurrency ?? 1,
+    isCancelled: options.isCancelled,
+    onEvent: (event) => {
+      onPerformance?.({
+        event: `history.${event.event}`,
+        details: {
+          taskId: event.taskId,
+          queuedCount: event.queuedCount,
+          activeCount: event.activeCount,
+          completedCount: event.completedCount
+        }
+      });
+    },
+    onResult: async ({ task: batch, value: response, durationMs: batchDurationMs }) => {
+      const batchIndex = batches.indexOf(batch);
 
-    // Defer processing so the browser can handle events between network IO
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-    const normalizeStart = onPerformance ? performanceNow() : 0;
-    const batchMap = statesByEntity(response, batch.entityIds);
-    const normalizeDurationMs = onPerformance ? performanceNow() - normalizeStart : 0;
-    const stateCount = onPerformance ? [...batchMap.values()].reduce((total, states) => total + states.length, 0) : 0;
-
-    onPerformance?.({
-      event: "history.batch",
-      details: {
-        batchIndex,
-        batchCount: batches.length,
-        entityCount: batch.entityIds.length,
-        stateCount,
-        requestDurationMs: Math.round(batchDurationMs),
-        normalizeDurationMs: Math.round(normalizeDurationMs)
+      if (options.isCancelled?.()) {
+        return;
       }
-    });
 
-    const mergeStart = onPerformance ? performanceNow() : 0;
-    for (const [entityId, states] of batchMap) {
-      const existing = allStates.get(entityId);
-      if (existing) {
-        existing.push(...states);
-      } else {
-        allStates.set(entityId, states);
-      }
-    }
+      // Defer processing so the browser can handle events between network IO
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    for (const entityId of batch.entityIds) {
-      entityDataEnd.set(entityId, batch.end);
-    }
-    const mergeDurationMs = onPerformance ? performanceNow() - mergeStart : 0;
-
-    onPerformance?.({
-      event: "history.merge",
-      details: {
-        batchIndex,
-        entityCount: batch.entityIds.length,
-        stateCount,
-        mergeDurationMs: Math.round(mergeDurationMs)
-      }
-    });
-
-    if (onProgress) {
-      const buildStart = onPerformance ? performanceNow() : 0;
-      const progressSeries = (
-        sources
-          .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
-          .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, entityDataEnd.get(source.entityId) ?? end))
-      );
-      const buildDurationMs = onPerformance ? performanceNow() - buildStart : 0;
+      const normalizeStart = onPerformance ? performanceNow() : 0;
+      const batchMap = statesByEntity(response, batch.entityIds);
+      const normalizeDurationMs = onPerformance ? performanceNow() - normalizeStart : 0;
+      const stateCount = onPerformance ? [...batchMap.values()].reduce((total, states) => total + states.length, 0) : 0;
 
       onPerformance?.({
-        event: "history.progress_series",
+        event: "history.batch",
         details: {
           batchIndex,
-          seriesCount: progressSeries.length,
-          pointCount: progressSeries.reduce((total, series) => total + series.points.length, 0),
-          buildDurationMs: Math.round(buildDurationMs)
+          batchCount: batches.length,
+          entityCount: batch.entityIds.length,
+          stateCount,
+          requestDurationMs: Math.round(batchDurationMs),
+          normalizeDurationMs: Math.round(normalizeDurationMs)
         }
       });
 
-      onProgress(progressSeries);
+      const mergeStart = onPerformance ? performanceNow() : 0;
+      for (const [entityId, states] of batchMap) {
+        const existing = allStates.get(entityId);
+        if (existing) {
+          existing.push(...states);
+        } else {
+          allStates.set(entityId, states);
+        }
+      }
 
-      await new Promise<void>((resolve) => {
-        const raf = requestAnimationFrame(() => resolve());
-        setTimeout(() => {
-          cancelAnimationFrame(raf);
-          resolve();
-        }, 120);
+      for (const entityId of batch.entityIds) {
+        entityDataEnd.set(entityId, batch.end);
+      }
+      const mergeDurationMs = onPerformance ? performanceNow() - mergeStart : 0;
+
+      onPerformance?.({
+        event: "history.merge",
+        details: {
+          batchIndex,
+          entityCount: batch.entityIds.length,
+          stateCount,
+          mergeDurationMs: Math.round(mergeDurationMs)
+        }
       });
+
+      if (onProgress) {
+        const buildStart = onPerformance ? performanceNow() : 0;
+        const progressSeries = (
+          sources
+            .filter((source) => (allStates.get(source.entityId)?.length ?? 0) > 0)
+            .map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, entityDataEnd.get(source.entityId) ?? end))
+        );
+        const buildDurationMs = onPerformance ? performanceNow() - buildStart : 0;
+
+        onPerformance?.({
+          event: "history.progress_series",
+          details: {
+            batchIndex,
+            seriesCount: progressSeries.length,
+            pointCount: progressSeries.reduce((total, series) => total + series.points.length, 0),
+            buildDurationMs: Math.round(buildDurationMs)
+          }
+        });
+
+        onProgress(progressSeries);
+
+        await new Promise<void>((resolve) => {
+          const raf = requestAnimationFrame(() => resolve());
+          setTimeout(() => {
+            cancelAnimationFrame(raf);
+            resolve();
+          }, 120);
+        });
+      }
     }
-  }
+  });
 
   const finalBuildStart = onPerformance ? performanceNow() : 0;
   const finalSeries = sources.map((source) => buildSeries(source, allStates.get(source.entityId) ?? [], hass, start, end));
