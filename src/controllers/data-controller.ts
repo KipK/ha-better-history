@@ -4,6 +4,7 @@ import type { HomeAssistant } from "../types/ha.js";
 import { logPerformance, performanceNow } from "../utils/performance.js";
 
 const FETCH_TIMEOUT_MS = 60000;
+const PROGRESS_UPDATE_THROTTLE_MS = 48;
 
 type SourceLoadState = "queued" | "loading" | "ready" | "partial" | "error";
 
@@ -37,6 +38,8 @@ export class DataController implements ReactiveController {
   private _prevKey = "";
   private _nextSessionId = 0;
   private _session?: HistoryLoadSession;
+  private _progressUpdateScheduled = false;
+  private _lastProgressUpdateMs = 0;
 
   constructor(host: ReactiveControllerHost) {
     this.host = host;
@@ -98,6 +101,24 @@ export class DataController implements ReactiveController {
     return series.filter((item) => session.sourceStates.has(item.source.id));
   }
 
+  private _requestProgressUpdate(session: HistoryLoadSession): void {
+    if (this._progressUpdateScheduled) return;
+
+    this._progressUpdateScheduled = true;
+    const elapsed = performanceNow() - this._lastProgressUpdateMs;
+    const delay = Math.max(0, PROGRESS_UPDATE_THROTTLE_MS - elapsed);
+
+    setTimeout(() => {
+      requestAnimationFrame(() => {
+        this._progressUpdateScheduled = false;
+        if (!this._isCurrentSession(session)) return;
+
+        this._lastProgressUpdateMs = performanceNow();
+        this.host.requestUpdate();
+      });
+    }, delay);
+  }
+
   fetch(hass: HomeAssistant | undefined, sources: HistorySource[], start: Date, end: Date): void {
     const key = `${sources.map((s) => s.id).join("|")}|${start.getTime()}|${end.getTime()}`;
 
@@ -142,7 +163,7 @@ export class DataController implements ReactiveController {
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
         }
-        this.host.requestUpdate();
+        this._requestProgressUpdate(session);
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.progress_update", {
             sessionId: session.id,
@@ -246,7 +267,7 @@ export class DataController implements ReactiveController {
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
         }
-        this.host.requestUpdate();
+        this._requestProgressUpdate(session);
         if (this.debugPerformance) {
           logPerformance(this.debugPerformance, "controller.add_sources_progress", {
             sessionId: session.id,

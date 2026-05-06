@@ -45,6 +45,7 @@ export interface HistoryFetchOptions {
 const DEFAULT_CHUNK_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_CHUNK_ATTEMPTS = 3;
 const DEFAULT_CHUNK_RETRY_BASE_DELAY_MS = 350;
+const DEFAULT_ATTRIBUTE_CHUNK_MS = 6 * 60 * 60 * 1000;
 
 function deduplicatePoints(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
@@ -150,6 +151,24 @@ function jitteredBackoff(attempt: number, baseDelayMs: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function yieldToBrowser(timeoutMs = 80): Promise<void> {
+  const idle = (globalThis as typeof globalThis & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+
+  if (idle) {
+    return new Promise((resolve) => idle(() => resolve(), { timeout: timeoutMs }));
+  }
+
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
 
 async function withChunkTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -679,20 +698,18 @@ export async function fetchHistory(
   }
 
   if (attrIds.length > 0) {
-    const CHUNK_MS = 24 * 60 * 60 * 1000;
-
     for (const entityId of attrIds) {
       for (const interval of accumulator.missingIntervals(entityId, start, end, "full")) {
         const span = interval.end.getTime() - interval.start.getTime();
 
-        if (span <= CHUNK_MS) {
+        if (span <= DEFAULT_ATTRIBUTE_CHUNK_MS) {
           addBatch(entityId, interval.start, interval.end, "full", false, false, false);
           continue;
         }
 
-        for (let t = interval.start.getTime(); t < interval.end.getTime(); t += CHUNK_MS) {
+        for (let t = interval.start.getTime(); t < interval.end.getTime(); t += DEFAULT_ATTRIBUTE_CHUNK_MS) {
           const chunkStart = new Date(t);
-          const chunkEnd = new Date(Math.min(t + CHUNK_MS, interval.end.getTime()));
+          const chunkEnd = new Date(Math.min(t + DEFAULT_ATTRIBUTE_CHUNK_MS, interval.end.getTime()));
           addBatch(entityId, chunkStart, chunkEnd, "full", false, false, false);
         }
       }
@@ -728,6 +745,7 @@ export async function fetchHistory(
       sourceCount: sources.length,
       entityCount: allEntityIds.length,
       batchCount: batches.length,
+      attributeChunkHours: DEFAULT_ATTRIBUTE_CHUNK_MS / 3_600_000,
       cachedSourceCount: sources.filter((source) =>
         accumulator.hasCoverage(source.entityId, start, end, source.kind === "entity_attribute" ? "full" : "state")
       ).length,
@@ -765,8 +783,7 @@ export async function fetchHistory(
         return;
       }
 
-      // Defer processing so the browser can handle events between network IO
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await yieldToBrowser();
 
       const normalizeStart = onPerformance ? performanceNow() : 0;
       const batchMap = statesByEntity(response, batch.entityIds);
@@ -804,6 +821,8 @@ export async function fetchHistory(
       });
 
       if (onProgress) {
+        await yieldToBrowser();
+
         const buildStart = onPerformance ? performanceNow() : 0;
         for (const source of sources) {
           if (changedEntityIds.has(source.entityId) || !seriesBySourceId.has(source.id)) {
@@ -829,13 +848,7 @@ export async function fetchHistory(
 
         onProgress(progressSeries);
 
-        await new Promise<void>((resolve) => {
-          const raf = requestAnimationFrame(() => resolve());
-          setTimeout(() => {
-            cancelAnimationFrame(raf);
-            resolve();
-          }, 120);
-        });
+        await yieldToBrowser(120);
       }
     }
   });
