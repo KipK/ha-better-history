@@ -33,6 +33,29 @@ function sourceCoverageKey(source: HistorySource): string {
   return `${source.kind === "entity_attribute" ? "full" : "state"}:${source.entityId}`;
 }
 
+function seriesContentEquals(left: HistorySeries[], right: HistorySeries[]): boolean {
+  if (left.length !== right.length) return false;
+
+  for (let i = 0; i < left.length; i++) {
+    const leftSeries = left[i];
+    const rightSeries = right[i];
+
+    if (leftSeries.source.id !== rightSeries.source.id) return false;
+    if (leftSeries.points.length !== rightSeries.points.length) return false;
+
+    for (let j = 0; j < leftSeries.points.length; j++) {
+      const leftPoint = leftSeries.points[j];
+      const rightPoint = rightSeries.points[j];
+
+      if (leftPoint.time !== rightPoint.time || leftPoint.value !== rightPoint.value) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 export class DataController implements ReactiveController {
   readonly host: ReactiveControllerHost;
 
@@ -135,6 +158,33 @@ export class DataController implements ReactiveController {
     return series.filter((item) => session.sourceStates.has(item.source.id));
   }
 
+  private _hasAccumulatorSeries(session: HistoryLoadSession, source: HistorySource): boolean {
+    return source.kind === "entity_attribute"
+      ? session.accumulator.hasFullStates(source.entityId)
+      : session.accumulator.hasStates(source.entityId);
+  }
+
+  private _availableSessionSeries(
+    session: HistoryLoadSession,
+    hass: HomeAssistant,
+    start: Date,
+    end: Date,
+    series: HistorySeries[]
+  ): HistorySeries[] {
+    const nextSeries = this._sessionSources(session, series);
+    const seen = new Set(nextSeries.map((item) => item.source.id));
+
+    for (const source of session.sources) {
+      if (seen.has(source.id) || !session.sourceStates.has(source.id)) continue;
+      if (!this._hasAccumulatorSeries(session, source)) continue;
+
+      nextSeries.push(session.accumulator.buildSeries(source, hass, start, end));
+      seen.add(source.id);
+    }
+
+    return nextSeries;
+  }
+
   private _requestProgressUpdate(session: HistoryLoadSession): void {
     if (this._progressUpdateScheduled) return;
 
@@ -192,7 +242,7 @@ export class DataController implements ReactiveController {
       (partial) => {
         if (!this._isCurrentSession(session)) return;
         const updateStart = performanceNow();
-        const nextPartial = this._sessionSources(session, partial);
+        const nextPartial = this._availableSessionSeries(session, hass, start, end, partial);
         this.series = this._mergeSeries(this.series.filter((series) => !session.sources.some((source) => source.id === series.source.id)), nextPartial);
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
@@ -221,8 +271,11 @@ export class DataController implements ReactiveController {
         defer(() => {
           if (!this._isCurrentSession(session)) return;
           const updateStart = performanceNow();
-          const nextSeries = this._sessionSources(session, series);
-          this.series = this._mergeSeries(this.series.filter((item) => !session.sources.some((source) => source.id === item.source.id)), nextSeries);
+          const nextSeries = this._availableSessionSeries(session, hass, start, end, series);
+          const mergedSeries = this._mergeSeries(this.series.filter((item) => !session.sources.some((source) => source.id === item.source.id)), nextSeries);
+          if (!seriesContentEquals(this.series, mergedSeries)) {
+            this.series = mergedSeries;
+          }
           for (const item of nextSeries) {
             session.sourceStates.set(item.source.id, "ready");
           }
@@ -287,6 +340,13 @@ export class DataController implements ReactiveController {
     }
 
     if (networkSources.length === 0) {
+      const availableSeries = this._availableSessionSeries(session, hass, start, end, []);
+      if (availableSeries.length > 0) {
+        this._mergePartial(availableSeries);
+        for (const item of availableSeries) {
+          session.sourceStates.set(item.source.id, "partial");
+        }
+      }
       this.loading = session.activeLoads > 0;
       this._requestProgressUpdate(session);
       if (this.debugPerformance) {
@@ -320,7 +380,7 @@ export class DataController implements ReactiveController {
       (partial) => {
         if (!this._isCurrentSession(session)) return;
         const mergeStart = performanceNow();
-        const nextPartial = this._sessionSources(session, partial);
+        const nextPartial = this._availableSessionSeries(session, hass, start, end, partial);
         this._mergePartial(nextPartial);
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
@@ -349,8 +409,11 @@ export class DataController implements ReactiveController {
         defer(() => {
           if (!this._isCurrentSession(session)) return;
           const mergeStart = performanceNow();
-          const nextResults = this._sessionSources(session, results);
-          this._mergePartial(nextResults);
+          const nextResults = this._availableSessionSeries(session, hass, start, end, results);
+          const mergedSeries = this._mergeSeries(this.series, nextResults);
+          if (!seriesContentEquals(this.series, mergedSeries)) {
+            this.series = mergedSeries;
+          }
           for (const item of nextResults) {
             session.sourceStates.set(item.source.id, "ready");
           }

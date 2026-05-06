@@ -151,17 +151,22 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
   const groups: GroupAccum[] = [];
 
   for (const s of series) {
-    if (s.points.length === 0) continue;
-
     if (s.valueType !== "number" && s.valueType !== "boolean") continue;
 
     const values = s.points.map((p) => Number(p.value)).filter((v) => Number.isFinite(v));
-
-    if (values.length === 0) continue;
-
-    const dataMin = s.valueType === "boolean" ? 0 : Math.min(...values);
-    const dataMax = s.valueType === "boolean" ? 1 : Math.max(...values);
-    const prec = s.valueType === "boolean" ? 0 : Math.max(...values.map((v) => valuePrecision(v)));
+    const fallbackMin = s.scaleMode === "manual" && s.scaleMin !== undefined ? s.scaleMin : 0;
+    const fallbackMax = s.scaleMode === "manual" && s.scaleMax !== undefined ? s.scaleMax : 1;
+    const dataMin = s.valueType === "boolean"
+      ? 0
+      : values.length > 0
+        ? Math.min(...values)
+        : Math.min(fallbackMin, fallbackMax);
+    const dataMax = s.valueType === "boolean"
+      ? 1
+      : values.length > 0
+        ? Math.max(...values)
+        : Math.max(fallbackMin, fallbackMax);
+    const prec = s.valueType === "boolean" || values.length === 0 ? 0 : Math.max(...values.map((v) => valuePrecision(v)));
 
     const groupKey = s.valueType === "boolean" ? "group:boolean" : s.scaleGroupKey;
 
@@ -173,7 +178,7 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
       group.max = Math.max(group.max, dataMax);
       group.precision = Math.max(group.precision, prec);
     } else {
-      group = { key: s.scaleGroupKey, ids: [s.id], min: dataMin, max: dataMax, precision: prec };
+      group = { key: groupKey, ids: [s.id], min: dataMin, max: dataMax, precision: prec };
       groups.push(group);
     }
 

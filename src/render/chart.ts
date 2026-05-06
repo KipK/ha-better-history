@@ -449,6 +449,26 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     bold: t.bold
   }));
 
+  if (data.numericScales.length === 0 && allNonNumeric.length > 0) {
+    const segSeries = visibleNonNumeric;
+    const segCount = segSeries.length;
+    const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
+    const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
+    const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
+
+    groups.push({
+      series: visibleNonNumeric,
+      allSeries: allNonNumeric,
+      svgHeight,
+      canvasHeight,
+      lines: [],
+      segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
+      yLabels: [],
+      xLabels,
+      heatingAreas: []
+    });
+  }
+
   for (let i = 0; i < data.numericScales.length; i++) {
     const scale = data.numericScales[i];
     const visibleNumeric = data.visibleSeries.filter((s) => scale.ids.has(s.id));

@@ -42,6 +42,7 @@ function isTemperatureUnit(unit: string): boolean {
 
 interface ChartRenderCache {
   seriesRef: HistorySeries[];
+  sourceKey: string;
   hiddenKey: string;
   startTime: number;
   endTime: number;
@@ -89,6 +90,8 @@ export class HaBetterHistory extends LitElement {
   private _prevStartTime = 0;
   private _prevEndTime = 0;
   private _prevContainerWidth = 0;
+  private _wasLoading = false;
+  private _suppressLineAnimation = false;
   private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
 
@@ -282,6 +285,7 @@ export class HaBetterHistory extends LitElement {
       this._positionEntityMenu();
     }
     this._animateClipPaths();
+    this._wasLoading = this._data.loading;
   }
 
   private _onDateRangeChanged(startDate: Date, endDate: Date): void {
@@ -323,8 +327,6 @@ export class HaBetterHistory extends LitElement {
     const result: RenderableSeries[] = this._resolved.series.flatMap((resolved) => {
       const fetched = this._data.series.find((s) => s.source.id === resolved.id);
 
-      if (!fetched) return [];
-
       return [
         {
           id: resolved.id,
@@ -335,7 +337,7 @@ export class HaBetterHistory extends LitElement {
           scaleMin: resolved.scaleMin,
           scaleMax: resolved.scaleMax,
           valueType: resolved.valueType,
-          points: fetched.points
+          points: fetched?.points ?? []
         }
       ];
     });
@@ -356,15 +358,23 @@ export class HaBetterHistory extends LitElement {
         scaleGroupKey,
         scaleMode: "auto",
         valueType: source.valueType,
-        points: fetched.points
+        points: fetched?.points ?? []
       });
     }
 
     return result;
   }
 
+  private _chartSourceKey(): string {
+    return [
+      ...(this._resolved?.series.map((source) => source.id) ?? []),
+      ...this._selectedSources.map((source) => source.id)
+    ].join("|");
+  }
+
   private _chartData(): ChartRenderData {
     const hiddenKey = this._hiddenSeriesIds.join("|");
+    const sourceKey = this._chartSourceKey();
     const cache = this._chartRenderCache;
     const startTime = this._resolved?.startDate.getTime() ?? 0;
     const endTime = this._resolved?.endDate.getTime() ?? 0;
@@ -373,6 +383,7 @@ export class HaBetterHistory extends LitElement {
     if (
       cache &&
       cache.seriesRef === this._data.series &&
+      cache.sourceKey === sourceKey &&
       cache.hiddenKey === hiddenKey &&
       cache.startTime === startTime &&
       cache.endTime === endTime &&
@@ -402,7 +413,7 @@ export class HaBetterHistory extends LitElement {
       });
     }
 
-    this._chartRenderCache = { seriesRef: this._data.series, hiddenKey, startTime, endTime, containerWidth, data };
+    this._chartRenderCache = { seriesRef: this._data.series, sourceKey, hiddenKey, startTime, endTime, containerWidth, data };
 
     return data;
   }
@@ -446,7 +457,7 @@ export class HaBetterHistory extends LitElement {
                 const lastPt = pts[pts.length - 1];
                 const targetX = lastPt ? parseFloat(lastPt.split(",")[0]) : 0;
                 const prevX = this._prevClipX.get(line.id) ?? 0;
-                const needAnim = targetX > prevX;
+                const needAnim = !this._suppressLineAnimation && targetX > prevX;
 
                 return svg`<polyline class="line" clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
               }
@@ -566,17 +577,13 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="empty">${localize(this.hass, "no_series")}</div>`;
     }
 
-    if (this._data.series.length === 0) {
-      if (this._data.loading) {
-        return html`<div class="chart-loading"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>`;
-      }
-      return html`<div class="empty">${localize(this.hass, "empty")}</div>`;
-    }
-
     const chartData = this._chartData();
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
     const groups = buildGraphGroups(chartData, this._maxXTicks());
+    const hasStructure = groups.length > 0;
+    const showStructure = hasStructure && (hasData || this._data.loading);
+    this._suppressLineAnimation = this._wasLoading && !this._data.loading;
     const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
 
     if (hasData && showTooltip) {
@@ -602,7 +609,7 @@ export class HaBetterHistory extends LitElement {
 
     return html`
       <div class="chart-surface">
-        ${hasData
+        ${showStructure
           ? html`
               <div class="chart-graphs"
                 @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
@@ -610,7 +617,10 @@ export class HaBetterHistory extends LitElement {
               >
                 ${groups.map((g) => this._renderGraphGroup(g))}
                 ${showTooltip ? this._tooltip.renderTooltip(totalHeight) : nothing}
+                ${this._data.loading ? html`<div class="chart-loading-overlay"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>` : nothing}
               </div>`
+          : this._data.loading
+            ? html`<div class="chart-loading"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>`
           : html`<div class="empty">${localize(this.hass, "empty")}</div>`}
       </div>
     `;
