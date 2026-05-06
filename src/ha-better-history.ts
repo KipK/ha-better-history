@@ -34,6 +34,7 @@ import { ensureHaComponents } from "./load-ha-components.js";
 import { logPerformance, performanceNow } from "./utils/performance.js";
 
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
+const SOURCE_ADD_BATCH_MS = 60;
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -88,6 +89,8 @@ export class HaBetterHistory extends LitElement {
   private _prevStartTime = 0;
   private _prevEndTime = 0;
   private _prevContainerWidth = 0;
+  private _pendingAddedSources: HistorySource[] = [];
+  private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
 
   @state() private _containerWidth = 0;
   private _resizeObserver?: ResizeObserver;
@@ -110,6 +113,10 @@ export class HaBetterHistory extends LitElement {
     document.removeEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
+    if (this._sourceAddBatchTimer !== undefined) {
+      clearTimeout(this._sourceAddBatchTimer);
+      this._sourceAddBatchTimer = undefined;
+    }
   }
 
   private _maxXTicks(): number {
@@ -783,11 +790,14 @@ export class HaBetterHistory extends LitElement {
     if (this._selectedSources.some((selected) => selected.id === source.id)) {
       return;
     }
+    if (this._pendingAddedSources.some((selected) => selected.id === source.id)) {
+      return;
+    }
     if ((this._resolved?.series ?? []).some((s) => s.id === source.id)) {
       return;
     }
 
-    this._selectedSources = [...this._selectedSources, source];
+    this._pendingAddedSources = [...this._pendingAddedSources, source];
     this._attributeMenuOpen = window.matchMedia("(hover: hover) and (pointer: fine)").matches ? this._attributeMenuOpen : false;
 
     this.dispatchEvent(
@@ -798,11 +808,31 @@ export class HaBetterHistory extends LitElement {
       })
     );
 
+    if (this._sourceAddBatchTimer !== undefined) {
+      clearTimeout(this._sourceAddBatchTimer);
+    }
+
+    this._sourceAddBatchTimer = setTimeout(() => this._flushPendingAddedSources(), SOURCE_ADD_BATCH_MS);
+  }
+
+  private _flushPendingAddedSources(): void {
+    this._sourceAddBatchTimer = undefined;
+    if (this._pendingAddedSources.length === 0) return;
+
+    const existing = new Set(this._selectedSources.map((source) => source.id));
+    const added = this._pendingAddedSources.filter((source) => !existing.has(source.id));
+
+    this._pendingAddedSources = [];
+
+    if (added.length === 0) return;
+
+    this._selectedSources = [...this._selectedSources, ...added];
     void this.requestUpdate();
   }
 
   private _removeSource(sourceId: string): void {
     const source = this._selectedSources.find((s) => s.id === sourceId);
+    this._pendingAddedSources = this._pendingAddedSources.filter((s) => s.id !== sourceId);
 
     if (!source || this._isDefaultSource(source)) {
       return;
