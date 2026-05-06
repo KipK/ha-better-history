@@ -147,6 +147,10 @@ export class TooltipController implements ReactiveController {
       return;
     }
 
+    if (this.tooltip?.time === selectedTime) {
+      return;
+    }
+
     this.tooltip = {
       x: xFor(selectedTime, this._timeBounds),
       y: Math.min(Math.max(pt.y, 28), this._chartHeight - 28),

@@ -50,6 +50,12 @@ interface ChartRenderCache {
   data: ChartRenderData;
 }
 
+interface GraphGroupRenderCache {
+  dataRef: ChartRenderData;
+  maxXTicks: number;
+  groups: GraphGroup[];
+}
+
 export class HaBetterHistory extends LitElement {
   static styles = chartStyles;
 
@@ -86,6 +92,7 @@ export class HaBetterHistory extends LitElement {
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
   private _chartRenderCache?: ChartRenderCache;
+  private _graphGroupRenderCache?: GraphGroupRenderCache;
   private _prevClipX = new Map<string, number>();
   private _prevStartTime = 0;
   private _prevEndTime = 0;
@@ -418,6 +425,20 @@ export class HaBetterHistory extends LitElement {
     return data;
   }
 
+  private _graphGroups(data: ChartRenderData): GraphGroup[] {
+    const maxXTicks = this._maxXTicks();
+    const cache = this._graphGroupRenderCache;
+
+    if (cache && cache.dataRef === data && cache.maxXTicks === maxXTicks) {
+      return cache.groups;
+    }
+
+    const groups = buildGraphGroups(data, maxXTicks);
+    this._graphGroupRenderCache = { dataRef: data, maxXTicks, groups };
+
+    return groups;
+  }
+
   private _renderGraphGroup(group: GraphGroup): TemplateResult {
     const showLegend = this._resolved?.showLegend ?? true;
 
@@ -585,7 +606,7 @@ export class HaBetterHistory extends LitElement {
     const chartData = this._chartData();
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
-    const groups = buildGraphGroups(chartData, this._maxXTicks());
+    const groups = this._graphGroups(chartData);
     const hasStructure = groups.length > 0;
     const showStructure = hasStructure && (hasData || this._data.loading);
     this._suppressLineAnimation = this._wasLoading && !this._data.loading;
