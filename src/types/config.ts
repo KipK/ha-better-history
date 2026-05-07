@@ -25,6 +25,7 @@ export interface BetterHistoryConfig {
   showEntityPicker?: boolean;
   showLegend?: boolean;
   showTooltip?: boolean;
+  forced?: boolean;
   width?: string;
   height?: string;
   lineMode?: BetterHistoryLineMode;
@@ -64,6 +65,7 @@ export interface ResolvedConfig {
   showEntityPicker: boolean;
   showLegend: boolean;
   showTooltip: boolean;
+  forced: boolean;
   width: string;
   height: string | undefined;
   backgroundColor: string | undefined;
