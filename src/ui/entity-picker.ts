@@ -224,10 +224,12 @@ function renderBrowserEntries(
   `;
 }
 
-function isAlreadyPresent(id: string, opts: EntityPickerRenderOpts): boolean {
-  const inSelected = opts.selectedSources.some((s) => s.id === id);
-  const inResolved = (opts.resolved?.series ?? []).some((s) => s.id === id);
-  return inSelected || inResolved;
+function isSelectedSource(id: string, opts: EntityPickerRenderOpts): boolean {
+  return opts.selectedSources.some((s) => s.id === id);
+}
+
+function isResolvedSource(id: string, opts: EntityPickerRenderOpts): boolean {
+  return (opts.resolved?.series ?? []).some((s) => s.id === id);
 }
 
 function isEntityAlreadyPresent(entityId: string, opts: EntityPickerRenderOpts): boolean {
@@ -259,9 +261,25 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
     `;
   }
 
-  if (isAlreadyPresent(source.id, opts) || isEntityAlreadyPresent(entity.entity_id, opts)) {
+  if (isSelectedSource(source.id, opts)) {
     return html`
-      <div class="entity-browser-entity entity-browser-entity--present">
+      <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--removable" @click=${() => opts.onSourceRemoved(source.id)}>
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
+      </div>
+    `;
+  }
+
+  if (isResolvedSource(source.id, opts)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--forced">
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
+      </div>
+    `;
+  }
+
+  if (isEntityAlreadyPresent(entity.entity_id, opts)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--disabled">
         <span class="entity-browser-entry-label">${entity.entity_id}</span>
       </div>
     `;
@@ -296,9 +314,18 @@ function renderTreeEntry(
 
   if (!source) return nothing;
 
-  if (isAlreadyPresent(source.id, opts)) {
+  if (isSelectedSource(source.id, opts)) {
     return html`
-      <div class="entity-browser-entry entity-browser-entry--present">
+      <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--removable" @click=${() => opts.onSourceRemoved(source.id)}>
+        <span class="entity-browser-entry-label">${key}</span>
+        <span class="entity-browser-entry-type">${type}</span>
+      </div>
+    `;
+  }
+
+  if (isResolvedSource(source.id, opts)) {
+    return html`
+      <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--forced">
         <span class="entity-browser-entry-label">${key}</span>
         <span class="entity-browser-entry-type">${type}</span>
       </div>

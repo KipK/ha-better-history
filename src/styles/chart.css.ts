@@ -557,6 +557,14 @@ export const chartStyles = css`
     background: color-mix(in srgb, var(--ha-color-amber-80, #ffb74d) 14%, transparent);
   }
 
+  .entity-browser-entry--removable {
+    cursor: pointer;
+  }
+
+  .entity-browser-entry--removable:hover {
+    background: color-mix(in srgb, var(--ha-color-amber-80, #ffb74d) 22%, transparent);
+  }
+
   .entity-browser-entry--present .entity-browser-entry-type,
   .entity-browser-entry--present .entity-browser-entry-arrow {
     color: inherit;
@@ -625,6 +633,14 @@ export const chartStyles = css`
 
   .entity-browser-entity--present:hover {
     background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 14%, transparent);
+  }
+
+  .entity-browser-entity--removable {
+    cursor: pointer;
+  }
+
+  .entity-browser-entity--removable:hover {
+    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 22%, transparent);
   }
 
   .entity-browser-entity-id {
