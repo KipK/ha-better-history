@@ -89,6 +89,11 @@ export const chartStyles = css`
     vector-effect: non-scaling-stroke;
   }
 
+  .column {
+    opacity: 0.62;
+    vector-effect: non-scaling-stroke;
+  }
+
   .segment {
     opacity: 0.7;
   }
@@ -259,10 +264,228 @@ export const chartStyles = css`
     width: 100%;
   }
 
+  .tools-toggle,
+  .tool-icon-button,
+  .mode-button,
+  .tool-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    background: transparent;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    cursor: pointer;
+    box-sizing: border-box;
+    font: inherit;
+  }
+
+  .tools-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--better-history-radius, 8px);
+    flex: 0 0 auto;
+  }
+
+  .tools-toggle[active],
+  .mode-button[active] {
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 18%, transparent);
+    border-color: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+  }
+
+  .tools-toggle ha-icon,
+  .tool-icon-button ha-icon,
+  .mode-button ha-icon,
+  .tool-action-button ha-icon {
+    --mdc-icon-size: 20px;
+  }
+
+  .tools-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    border-radius: var(--better-history-radius, 8px);
+    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 92%, var(--primary-text-color, #fff) 8%);
+  }
+
+  .tool-range {
+    min-width: 0;
+  }
+
+  .tool-range-head,
+  .tool-actions,
+  .range-values {
+    display: flex;
+    align-items: center;
+  }
+
+  .tool-range-head {
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .tool-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    font-size: 12px;
+  }
+
+  .tool-label ha-icon {
+    --mdc-icon-size: 18px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+  }
+
+  .tool-icon-button {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--better-history-radius, 8px);
+  }
+
+  .range-values {
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-size: 11px;
+  }
+
+  .range-slider-stack {
+    position: relative;
+    height: 32px;
+    display: flex;
+    align-items: center;
+  }
+
+  .range-slider-stack::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--better-history-border-color, var(--divider-color, #444));
+    transform: translateY(-50%);
+  }
+
+  .range-selection {
+    position: absolute;
+    top: 50%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .range-slider {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    cursor: ew-resize;
+    pointer-events: none;
+  }
+
+  .range-slider::-webkit-slider-runnable-track {
+    height: 32px;
+    background: transparent;
+  }
+
+  .range-slider::-moz-range-track {
+    height: 32px;
+    background: transparent;
+  }
+
+  .range-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 24px;
+    margin-top: 4px;
+    border: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    border-radius: 999px;
+    background: var(--better-history-bg, var(--card-background-color, #1e1e2e));
+    box-shadow: 0 2px 7px rgb(0 0 0 / 24%);
+    pointer-events: auto;
+  }
+
+  .range-slider::-moz-range-thumb {
+    width: 16px;
+    height: 24px;
+    border: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    border-radius: 999px;
+    background: var(--better-history-bg, var(--card-background-color, #1e1e2e));
+    box-shadow: 0 2px 7px rgb(0 0 0 / 24%);
+    pointer-events: auto;
+  }
+
+  .range-slider:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline-offset: 2px;
+  }
+
+  .range-slider:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline-offset: 2px;
+  }
+
+  .tool-actions {
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .mode-switch {
+    display: inline-flex;
+    overflow: hidden;
+    border-radius: var(--better-history-radius, 8px);
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+  }
+
+  .mode-button {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-right: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+  }
+
+  .mode-button:last-child {
+    border-right: 0;
+  }
+
+  .tool-action-button {
+    gap: 6px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--better-history-radius, 8px);
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+  }
+
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    .tools-toggle {
+      width: 100%;
+    }
+
+    .tools-panel {
+      grid-template-columns: 1fr;
+    }
+
+    .tool-actions {
+      justify-content: space-between;
     }
 
     .date-picker-wrapper {

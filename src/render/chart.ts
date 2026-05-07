@@ -38,6 +38,15 @@ export interface NumericLineRenderData {
   lineWidth: string;
 }
 
+export interface NumericColumnRenderData {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill: string;
+}
+
 export interface SegmentRenderData {
   id: string;
   x: number;
@@ -65,6 +74,7 @@ export interface ChartRenderData {
   plotBottom: number;
   chartHeight: number;
   numericLines: NumericLineRenderData[];
+  numericColumns: NumericColumnRenderData[];
   segments: SegmentRenderData[];
   heatingAreas: HeatingAreaRenderData[];
   yAxisLabels: YAxisLabelRenderData[];
@@ -79,6 +89,7 @@ export interface GraphGroup {
   svgHeight: number;
   canvasHeight: number;
   lines: NumericLineRenderData[];
+  columns: NumericColumnRenderData[];
   segments: SegmentRenderData[];
   yLabels: YAxisLabelRenderData[];
   rightYLabels: YAxisLabelRenderData[];
@@ -153,6 +164,7 @@ function buildNumericLines(
 ): NumericLineRenderData[] {
   return visibleSeries.flatMap((series) => {
     if (series.valueType !== "number" && series.valueType !== "boolean") return [];
+    if (series.lineMode === "column") return [];
 
     const scale = scaleFor(series, scales);
 
@@ -164,6 +176,48 @@ function buildNumericLines(
       : toStepPath(displayPoints, bounds, scale);
 
     return [{ id: series.id, color: series.color, points, pathLength, lineWidth: series.lineWidth }];
+  });
+}
+
+function columnBaseline(scale: NumericScale): number {
+  if (scale.min <= 0 && scale.max >= 0) return 0;
+
+  return scale.min > 0 ? scale.min : scale.max;
+}
+
+function buildNumericColumns(
+  visibleSeries: RenderableSeries[],
+  scales: NumericScale[],
+  bounds: { start: number; end: number }
+): NumericColumnRenderData[] {
+  return visibleSeries.flatMap((series) => {
+    if ((series.valueType !== "number" && series.valueType !== "boolean") || series.lineMode !== "column") return [];
+
+    const scale = scaleFor(series, scales);
+
+    if (!scale) return [];
+
+    const baselineY = yFor(columnBaseline(scale), scale);
+    const ranges = stateRanges(series, bounds);
+
+    return ranges.flatMap((range, index) => {
+      const value = Number(range.value);
+      if (!Number.isFinite(value)) return [];
+
+      const x = xFor(range.start, bounds);
+      const endX = xFor(range.end, bounds);
+      const valueY = yFor(value, scale);
+      const width = Math.max(endX - x, 1);
+
+      return [{
+        id: `${series.id}:${index}`,
+        x,
+        y: Math.min(valueY, baselineY),
+        width,
+        height: Math.max(Math.abs(baselineY - valueY), 1),
+        fill: series.color
+      }];
+    });
   });
 }
 
@@ -381,6 +435,7 @@ export function buildChartData(
     plotBottom,
     chartHeight: chartHeightFor(plotBottom, segmentCount),
     numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds),
+    numericColumns: buildNumericColumns(visibleSeries, numericScales, timeBounds),
     segments: buildSegments(visibleSeries, plotBottom, timeBounds),
     heatingAreas: disableClimateOverlay ? [] : buildClimateHeatingAreas(visibleSeries, numericScales, timeBounds),
     yAxisLabels: buildYAxisLabels(numericScales),
@@ -398,7 +453,7 @@ function buildGroupNumericLines(
   bounds: { start: number; end: number }
 ): NumericLineRenderData[] {
   return series
-    .filter((s) => s.valueType === "number" || s.valueType === "boolean")
+    .filter((s) => (s.valueType === "number" || s.valueType === "boolean") && s.lineMode !== "column")
     .flatMap((s) => {
       const scale = scaleFor(s, scales);
 
@@ -411,6 +466,42 @@ function buildGroupNumericLines(
         : toStepPath(displayPoints, bounds, localScale);
 
       return { id: s.id, color: s.color, points, pathLength, lineWidth: s.lineWidth };
+    });
+}
+
+function buildGroupNumericColumns(
+  series: RenderableSeries[],
+  scales: NumericScale[],
+  bounds: { start: number; end: number }
+): NumericColumnRenderData[] {
+  return series
+    .filter((s) => (s.valueType === "number" || s.valueType === "boolean") && s.lineMode === "column")
+    .flatMap((s) => {
+      const scale = scaleFor(s, scales);
+
+      if (!scale) return [];
+
+      const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
+      const baselineY = yFor(columnBaseline(localScale), localScale);
+      const ranges = stateRanges(s, bounds);
+
+      return ranges.flatMap((range, index) => {
+        const value = Number(range.value);
+        if (!Number.isFinite(value)) return [];
+
+        const x = xFor(range.start, bounds);
+        const endX = xFor(range.end, bounds);
+        const valueY = yFor(value, localScale);
+
+        return [{
+          id: `${s.id}:${index}`,
+          x,
+          y: Math.min(valueY, baselineY),
+          width: Math.max(endX - x, 1),
+          height: Math.max(Math.abs(baselineY - valueY), 1),
+          fill: s.color
+        }];
+      });
     });
 }
 
@@ -525,6 +616,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
       svgHeight,
       canvasHeight,
       lines: [],
+      columns: [],
       segments: buildGroupSegments(colored.visibleSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: [],
       rightYLabels: [],
@@ -563,6 +655,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
       svgHeight,
       canvasHeight,
       lines: buildGroupNumericLines(colored.visibleSeries, graphScales, bounds),
+      columns: buildGroupNumericColumns(colored.visibleSeries, graphScales, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(leftScale),
       rightYLabels: rightScale ? buildGroupYLabels(rightScale) : [],

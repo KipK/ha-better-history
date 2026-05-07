@@ -88,8 +88,12 @@ export class HaBetterHistory extends LitElement {
   @state() private _hiddenSeriesIds: string[] = [];
   @state() private _rangeStart?: Date;
   @state() private _rangeEnd?: Date;
+  @state() private _viewStart?: Date;
+  @state() private _viewEnd?: Date;
   @state() private _datePickerReady = false;
   @state() private _entityComponentsReady = false;
+  @state() private _toolsOpen = false;
+  @state() private _runtimeLineMode?: BetterHistoryLineMode;
 
   @state() private _attributeMenuOpen = false;
   @state() private _selectedEntityId?: string;
@@ -149,6 +153,25 @@ export class HaBetterHistory extends LitElement {
 
   private _effectiveEndDate(): Date {
     return this._rangeEnd ?? this.endDate ?? this.config?.endDate ?? new Date();
+  }
+
+  private _effectiveLineMode(): BetterHistoryLineMode | undefined {
+    return this._runtimeLineMode ?? this.config?.lineMode ?? this.lineMode;
+  }
+
+  private _effectiveViewRange(): { start: Date; end: Date } {
+    const loadedStart = this._resolved?.startDate ?? this._effectiveStartDate();
+    const loadedEnd = this._resolved?.endDate ?? this._effectiveEndDate();
+    const start = this._viewStart && this._viewStart.getTime() >= loadedStart.getTime()
+      ? this._viewStart
+      : loadedStart;
+    const end = this._viewEnd && this._viewEnd.getTime() <= loadedEnd.getTime()
+      ? this._viewEnd
+      : loadedEnd;
+
+    return end.getTime() > start.getTime()
+      ? { start, end }
+      : { start: loadedStart, end: loadedEnd };
   }
 
   private _pickerEntities(): HassEntity[] {
@@ -218,7 +241,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -242,7 +265,7 @@ export class HaBetterHistory extends LitElement {
         showTooltip: this.showTooltip,
         width: this.width,
         height: this.height,
-        lineMode: this.lineMode,
+        lineMode: this._effectiveLineMode(),
         lineWidth: this.lineWidth,
         backgroundColor: this.backgroundColor,
         title: this.graphTitle,
@@ -259,6 +282,11 @@ export class HaBetterHistory extends LitElement {
       if (!this._rangeStart && !this._rangeEnd) {
         this._rangeStart = resolved.startDate;
         this._rangeEnd = resolved.endDate;
+      }
+
+      if (!this._viewStart && !this._viewEnd) {
+        this._viewStart = resolved.startDate;
+        this._viewEnd = resolved.endDate;
       }
 
       const sources = this._fetchSources();
@@ -322,6 +350,8 @@ export class HaBetterHistory extends LitElement {
   private _onDateRangeChanged(startDate: Date, endDate: Date): void {
     this._rangeStart = startDate;
     this._rangeEnd = endDate;
+    this._viewStart = startDate;
+    this._viewEnd = endDate;
 
     this.dispatchEvent(
       new CustomEvent("range-changed", {
@@ -353,7 +383,9 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _defaultLineMode(): BetterHistoryLineMode {
-    return (this.config?.lineMode ?? this.lineMode) === "line" ? "line" : "stair";
+    const mode = this._effectiveLineMode();
+
+    return mode === "line" || mode === "column" ? mode : "stair";
   }
 
   private _defaultLineWidth(): string {
@@ -386,7 +418,7 @@ export class HaBetterHistory extends LitElement {
           scaleMode: resolved.scaleMode,
           scaleMin: resolved.scaleMin,
           scaleMax: resolved.scaleMax,
-          lineMode: resolved.lineMode,
+          lineMode: this._runtimeLineMode ?? resolved.lineMode,
           lineWidth: resolved.lineWidth,
           valueType: resolved.valueType,
           points: fetched?.points ?? []
@@ -456,8 +488,9 @@ export class HaBetterHistory extends LitElement {
     const hiddenKey = this._hiddenSeriesIds.join("|");
     const sourceKey = this._chartSourceKey();
     const cache = this._chartRenderCache;
-    const startTime = this._resolved?.startDate.getTime() ?? 0;
-    const endTime = this._resolved?.endDate.getTime() ?? 0;
+    const viewRange = this._effectiveViewRange();
+    const startTime = viewRange.start.getTime();
+    const endTime = viewRange.end.getTime();
     const containerWidth = this._containerWidth;
 
     if (
@@ -548,6 +581,9 @@ export class HaBetterHistory extends LitElement {
             </defs>
             ${group.heatingAreas.map(
               (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
+            )}
+            ${group.columns.map(
+              (col) => svg`<rect class="column" x=${col.x.toFixed(1)} y=${col.y.toFixed(1)} width=${col.width.toFixed(1)} height=${col.height.toFixed(1)} fill=${col.fill}></rect>`
             )}
             ${group.lines.map(
               (line) => {
@@ -784,6 +820,168 @@ export class HaBetterHistory extends LitElement {
     });
   }
 
+  private _rangePercent(date: Date | undefined, fallback: Date): number {
+    const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
+    const end = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+    const span = Math.max(end - start, 1);
+    const value = date?.getTime() ?? fallback.getTime();
+
+    return Math.round(((value - start) / span) * 1000);
+  }
+
+  private _dateFromRangePercent(percent: number): Date {
+    const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
+    const end = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+
+    return new Date(start + (Math.max(0, Math.min(1000, percent)) / 1000) * (end - start));
+  }
+
+  private _formatRangeDate(date: Date): string {
+    return date.toLocaleString(this._resolved?.language ?? undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  private _setViewRangePart(part: "start" | "end", event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    const next = this._dateFromRangePercent(Number(input.value));
+    const current = this._effectiveViewRange();
+    const minGap = 60_000;
+
+    if (part === "start") {
+      this._viewStart = new Date(Math.min(next.getTime(), current.end.getTime() - minGap));
+    } else {
+      this._viewEnd = new Date(Math.max(next.getTime(), current.start.getTime() + minGap));
+    }
+
+    this.dispatchEvent(
+      new CustomEvent("view-range-changed", {
+        detail: this._effectiveViewRange(),
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private _resetViewRange(): void {
+    if (!this._resolved) return;
+
+    this._viewStart = this._resolved.startDate;
+    this._viewEnd = this._resolved.endDate;
+
+    this.dispatchEvent(
+      new CustomEvent("view-range-changed", {
+        detail: { start: this._viewStart, end: this._viewEnd },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private _setRuntimeLineMode(mode: BetterHistoryLineMode): void {
+    this._runtimeLineMode = mode;
+  }
+
+  private _exportData(): void {
+    const viewRange = this._effectiveViewRange();
+    const series = this._buildRenderSeries()
+      .filter((item) => !this._hiddenSeriesIds.includes(item.id))
+      .map((item) => ({
+        id: item.id,
+        entityId: item.id.startsWith("attr:") ? item.id.slice(5).split(":")[0] : item.id.replace(/^state:/, ""),
+        attribute: item.id.startsWith("attr:") ? item.id.slice(5).split(":").slice(1).join(":") : undefined,
+        label: item.label,
+        unit: item.unit,
+        valueType: item.valueType,
+        lineMode: item.lineMode,
+        color: item.color,
+        points: item.points
+          .filter((point) => point.time >= viewRange.start.getTime() && point.time <= viewRange.end.getTime())
+          .map((point) => ({
+            timestamp: new Date(point.time).toISOString(),
+            value: point.value
+          }))
+      }));
+    const payload = {
+      format: "ha-better-history-series-v1",
+      exportedAt: new Date().toISOString(),
+      loadedRange: {
+        start: this._resolved?.startDate.toISOString(),
+        end: this._resolved?.endDate.toISOString()
+      },
+      viewRange: {
+        start: viewRange.start.toISOString(),
+        end: viewRange.end.toISOString()
+      },
+      series
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    anchor.href = url;
+    anchor.download = `ha-better-history-${stamp}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private _renderToolsPanel(): TemplateResult | typeof nothing {
+    if (!this._toolsOpen || !this._resolved) return nothing;
+
+    const viewRange = this._effectiveViewRange();
+    const startPercent = this._rangePercent(this._viewStart, this._resolved.startDate);
+    const endPercent = this._rangePercent(this._viewEnd, this._resolved.endDate);
+    const currentMode = this._defaultLineMode();
+
+    return html`
+      <div class="tools-panel">
+        <div class="tool-range">
+          <div class="tool-range-head">
+            <span class="tool-label"><ha-icon .icon=${"mdi:timeline-clock-outline"}></ha-icon>${localize(this.hass, "view_range")}</span>
+            <button class="tool-icon-button" title=${localize(this.hass, "reset_zoom")} @click=${() => this._resetViewRange()}>
+              <ha-icon .icon=${"mdi:restore"}></ha-icon>
+            </button>
+          </div>
+          <div class="range-values">
+            <span>${this._formatRangeDate(viewRange.start)}</span>
+            <span>${this._formatRangeDate(viewRange.end)}</span>
+          </div>
+          <div class="range-slider-stack">
+            <div class="range-selection" style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"></div>
+            <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
+            <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
+          </div>
+        </div>
+        <div class="tool-actions">
+          <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
+            ${[
+              ["stair", "mdi:stairs", "mode_stair"],
+              ["line", "mdi:chart-line", "mode_line"],
+              ["column", "mdi:chart-bar", "mode_column"]
+            ].map(([mode, icon, label]) => html`
+              <button
+                class="mode-button"
+                ?active=${currentMode === mode}
+                title=${localize(this.hass, label)}
+                @click=${() => this._setRuntimeLineMode(mode as BetterHistoryLineMode)}
+              >
+                <ha-icon .icon=${icon}></ha-icon>
+              </button>
+            `)}
+          </div>
+          <button class="tool-action-button" @click=${() => this._exportData()}>
+            <ha-icon .icon=${"mdi:download"}></ha-icon>
+            <span>${localize(this.hass, "export_data")}</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   render(): TemplateResult {
     const width = this._resolved?.width ?? "100%";
     const backgroundColor = this._resolved?.backgroundColor ?? "transparent";
@@ -801,8 +999,17 @@ export class HaBetterHistory extends LitElement {
           ? html`<div class="controls-bar">
               ${this._renderDatePicker()}
               ${this._renderEntityPickerUI()}
+              <button
+                class="tools-toggle"
+                title=${localize(this.hass, "tools")}
+                ?active=${this._toolsOpen}
+                @click=${() => { this._toolsOpen = !this._toolsOpen; }}
+              >
+                <ha-icon .icon=${"mdi:tools"}></ha-icon>
+              </button>
             </div>`
           : nothing}
+        ${this._renderToolsPanel()}
         <div class="chart-area">
           ${this._renderChartBody()}
         </div>

@@ -13,12 +13,28 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   en: {
     no_series: "No series configured",
     no_entity_selected: "No entity selected",
-    error_timeout: "The request timed out. Please try again."
+    error_timeout: "The request timed out. Please try again.",
+    tools: "Tools",
+    view_range: "View range",
+    reset_zoom: "Reset zoom",
+    line_mode: "Display mode",
+    mode_stair: "Stair",
+    mode_line: "Line",
+    mode_column: "Columns",
+    export_data: "Export"
   },
   fr: {
     no_series: "Aucune série configurée",
     no_entity_selected: "Aucune entité sélectionnée",
-    error_timeout: "La requête a expiré. Veuillez réessayer."
+    error_timeout: "La requête a expiré. Veuillez réessayer.",
+    tools: "Outils",
+    view_range: "Plage affichée",
+    reset_zoom: "Réinitialiser le zoom",
+    line_mode: "Mode d'affichage",
+    mode_stair: "Escalier",
+    mode_line: "Ligne",
+    mode_column: "Colonnes",
+    export_data: "Exporter"
   }
 };
 

@@ -34,7 +34,7 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `show-tooltip`       | `boolean` | `true`    | Multi-series tooltip on hover                     |
 | `width`              | `string`  | `"100%"`  | CSS width of the component wrapper                |
 | `height`             | `string`  | —         | CSS height; if omitted, computed from graph count |
-| `line-mode`          | `string`  | `"stair"` | Global numeric line mode: `"stair"` or `"line"`   |
+| `line-mode`          | `string`  | `"stair"` | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
 | `line-width`         | `string`  | `"2.5"`   | Global SVG stroke width for numeric lines         |
 | `background-color`   | `string`  | transparent | CSS background color for the component wrapper |
 | `graph-title`        | `string`  | —         | Optional title above the chart                    |
@@ -72,7 +72,7 @@ interface BetterHistoryConfig {
   showTooltip?: boolean;             // default: true
   width?: string;                    // default: "100%"
   height?: string;
-  lineMode?: "stair" | "line";       // default: "stair"
+  lineMode?: "stair" | "line" | "column"; // default: "stair"
   lineWidth?: number | string;       // default: "2.5"
   backgroundColor?: string;          // default: transparent
   title?: string;                    // omitted/empty = no title
@@ -106,7 +106,7 @@ interface SeriesConfig {
   scaleMode?: "auto" | "manual";     // default: "auto"
   scaleMin?: number;                 // only when scaleMode = "manual"
   scaleMax?: number;                 // only when scaleMode = "manual"
-  lineMode?: "stair" | "line";       // overrides global lineMode
+  lineMode?: "stair" | "line" | "column"; // overrides global lineMode
   lineWidth?: number | string;       // overrides global lineWidth
 }
 ```
@@ -149,7 +149,7 @@ If `color` is not set, the built-in palette cycles through: `#ff9800`, `#42a5f5`
 
 ## Line and title styling
 
-Numeric series render as stair-step lines by default to match Home Assistant state history. Set `lineMode: "line"` globally, or per `SeriesConfig`, to connect points with straight segments. `lineWidth` accepts an SVG stroke width such as `1.5`, `"2px"`, or `"0.18rem"`.
+Numeric series render as stair-step lines by default to match Home Assistant state history. Set `lineMode: "line"` globally, or per `SeriesConfig`, to connect points with straight segments. Set `lineMode: "column"` to render numeric values as time-span columns. `lineWidth` accepts an SVG stroke width such as `1.5`, `"2px"`, or `"0.18rem"` for line-based modes.
 
 Use top-level HTML attributes for simple global styling:
 
@@ -185,6 +185,7 @@ All events bubble and are composed.
 | Event             | Detail                                             | When                                                        |
 | ----------------- | -------------------------------------------------- | ----------------------------------------------------------- |
 | `range-changed`   | `{ startDate: Date, endDate: Date }`               | Date picker changes                                         |
+| `view-range-changed` | `{ start: Date, end: Date }`                    | Tools range zoom changes without refetching history         |
 | `series-toggled`  | `{ id: string, hidden: boolean }`                  | Legend item clicked                                         |
 | `series-added`    | `{ source: HistorySource }`                        | User adds a series via entity picker                        |
 | `series-removed`  | `{ sourceId: string }`                             | User removes a non-default series                           |
@@ -267,6 +268,38 @@ chart.config = {
 ```
 
 The entity picker lets users browse entity attributes and add/remove series at runtime. Non-default series are removable via chip buttons.
+
+### Viewer tools
+
+The tools button (`mdi:tools`) opens a compact viewer toolbar above the graph. It includes:
+
+- a time range selector that zooms inside the already loaded history range without refetching data;
+- a display mode switch for stair, line, and column rendering;
+- a JSON export button.
+
+Exports use the compact `ha-better-history-series-v1` format:
+
+```json
+{
+  "format": "ha-better-history-series-v1",
+  "exportedAt": "2026-05-07T13:24:00.000Z",
+  "loadedRange": { "start": "2026-05-07T00:00:00.000Z", "end": "2026-05-07T12:00:00.000Z" },
+  "viewRange": { "start": "2026-05-07T06:00:00.000Z", "end": "2026-05-07T09:00:00.000Z" },
+  "series": [
+    {
+      "id": "attr:climate.living:current_temperature",
+      "entityId": "climate.living",
+      "attribute": "current_temperature",
+      "label": "current_temperature",
+      "unit": "°C",
+      "valueType": "number",
+      "lineMode": "stair",
+      "color": "#42a5f5",
+      "points": [{ "timestamp": "2026-05-07T06:00:00.000Z", "value": 19.5 }]
+    }
+  ]
+}
+```
 
 ## CSS custom properties
 

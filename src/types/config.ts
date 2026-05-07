@@ -1,7 +1,7 @@
 import type { HistoryValueType } from "../data/value-type.js";
 
 export type AttributeUnitMap = Record<string, string>;
-export type BetterHistoryLineMode = "stair" | "line";
+export type BetterHistoryLineMode = "stair" | "line" | "column";
 
 export interface SeriesConfig {
   entity: string;

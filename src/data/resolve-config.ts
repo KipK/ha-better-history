@@ -43,7 +43,7 @@ function normalizeAttribute(attribute: string | string[] | undefined): string[] 
 }
 
 function normalizeLineMode(mode: BetterHistoryLineMode | undefined): BetterHistoryLineMode {
-  return mode === "line" ? "line" : "stair";
+  return mode === "line" || mode === "column" ? mode : "stair";
 }
 
 function normalizeLineWidth(lineWidth: number | string | undefined): string {
