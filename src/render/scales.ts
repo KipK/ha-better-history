@@ -3,6 +3,8 @@ import type { HistoryValueType } from "../data/value-type.js";
 
 export interface NumericScale {
   ids: Set<string>;
+  graphKey: string;
+  axis: "left" | "right";
   min: number;
   max: number;
   precision: number;
@@ -14,6 +16,7 @@ export interface NumericScale {
 // Structural subset of RenderableSeries — avoids circular import with chart.ts.
 interface ScaleInput {
   id: string;
+  unit?: string;
   scaleGroupKey: string;
   scaleMode: "auto" | "manual";
   scaleMin?: number;
@@ -137,31 +140,142 @@ export function plotBottomFor(numericScaleCount: number): number {
   return GRAPH_TOP + (n - 1) * GRAPH_STEP + GRAPH_HEIGHT + GRAPH_BOTTOM_PADDING;
 }
 
-export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
-  type GroupAccum = {
-    key: string;
-    ids: string[];
-    min: number;
-    max: number;
-    precision: number;
-    manualMin?: number;
-    manualMax?: number;
-  };
+type SeriesRange = {
+  id: string;
+  unit?: string;
+  min: number;
+  max: number;
+  precision: number;
+  order: number;
+};
 
+type GroupAccum = {
+  key: string;
+  series: SeriesRange[];
+};
+
+const SPLIT_MIN_RATIO = 0.15;
+const SPLIT_SPAN_RATIO = 8;
+
+function rangeSpan(series: SeriesRange): number {
+  return Math.max(series.max - series.min, 1e-9);
+}
+
+function rangeCenter(series: SeriesRange): number {
+  return (series.min + series.max) / 2;
+}
+
+function logValue(value: number): number {
+  return Math.log10(Math.max(Math.abs(value), 1e-9));
+}
+
+function rangeDistance(a: SeriesRange, b: SeriesRange): number {
+  const spanDistance = Math.abs(logValue(rangeSpan(a)) - logValue(rangeSpan(b)));
+  const centerDistance = Math.abs(logValue(rangeCenter(a)) - logValue(rangeCenter(b)));
+  const unitPenalty = a.unit && b.unit && a.unit !== b.unit ? 0.4 : 0;
+
+  return spanDistance + centerDistance * 0.6 + unitPenalty;
+}
+
+function shouldSplitGroup(series: SeriesRange[]): boolean {
+  if (series.length < 2) return false;
+
+  const min = Math.min(...series.map((s) => s.min));
+  const max = Math.max(...series.map((s) => s.max));
+  const globalSpan = Math.max(max - min, 1e-9);
+  const spans = series.map((s) => s.max - s.min).filter((span) => span > 1e-6);
+
+  if (spans.length < 2) return false;
+
+  const minSpan = Math.min(...spans);
+  const maxSpan = Math.max(...spans);
+  const minUsage = Math.min(...spans.map((span) => span / globalSpan));
+
+  return minUsage <= SPLIT_MIN_RATIO && (maxSpan / Math.max(minSpan, 1e-9) >= SPLIT_SPAN_RATIO || globalSpan / minSpan >= SPLIT_SPAN_RATIO);
+}
+
+function pickAxisAnchors(series: SeriesRange[]): [SeriesRange, SeriesRange] {
+  let bestLeft = series[0];
+  let bestRight = series[1];
+  let bestScore = -Infinity;
+
+  for (let i = 0; i < series.length; i++) {
+    for (let j = i + 1; j < series.length; j++) {
+      const score = rangeDistance(series[i], series[j]);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestLeft = series[i];
+        bestRight = series[j];
+      }
+    }
+  }
+
+  return bestLeft.order <= bestRight.order ? [bestLeft, bestRight] : [bestRight, bestLeft];
+}
+
+function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+  if (!shouldSplitGroup(series)) return [series, []];
+
+  const [leftAnchor, rightAnchor] = pickAxisAnchors(series);
+  const left: SeriesRange[] = [];
+  const right: SeriesRange[] = [];
+
+  for (const item of series) {
+    if (item.id === leftAnchor.id) {
+      left.push(item);
+    } else if (item.id === rightAnchor.id) {
+      right.push(item);
+    } else if (rangeDistance(item, leftAnchor) <= rangeDistance(item, rightAnchor)) {
+      left.push(item);
+    } else {
+      right.push(item);
+    }
+  }
+
+  return [left, right];
+}
+
+function scaleFromSeries(
+  graphKey: string,
+  axis: "left" | "right",
+  series: SeriesRange[],
+  top: number
+): NumericScale {
+  const min = Math.min(...series.map((s) => s.min));
+  const max = Math.max(...series.map((s) => s.max));
+  const precision = Math.max(...series.map((s) => s.precision));
+  const range = paddedRange(min, max, precision);
+  const ticks = computeNiceTicks(range.min, range.max);
+
+  return {
+    ids: new Set(series.map((s) => s.id)),
+    graphKey,
+    axis,
+    min: range.min,
+    max: range.max,
+    precision: Math.max(precision, tickPrecision(ticks)),
+    ticks,
+    top,
+    height: GRAPH_HEIGHT
+  };
+}
+
+export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
   const groups: GroupAccum[] = [];
 
-  for (const s of series) {
+  for (const [order, s] of series.entries()) {
     if (s.valueType !== "number" && s.valueType !== "boolean") continue;
 
     const values = s.points.map((p) => Number(p.value)).filter((v) => Number.isFinite(v));
     const fallbackMin = s.scaleMode === "manual" && s.scaleMin !== undefined ? s.scaleMin : 0;
     const fallbackMax = s.scaleMode === "manual" && s.scaleMax !== undefined ? s.scaleMax : 1;
-    const dataMin = s.valueType === "boolean"
+    let dataMin = s.valueType === "boolean"
       ? 0
       : values.length > 0
         ? Math.min(...values)
         : Math.min(fallbackMin, fallbackMax);
-    const dataMax = s.valueType === "boolean"
+    let dataMax = s.valueType === "boolean"
       ? 1
       : values.length > 0
         ? Math.max(...values)
@@ -172,45 +286,26 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
 
     let group = groups.find((g) => g.key === groupKey);
 
-    if (group) {
-      group.ids.push(s.id);
-      group.min = Math.min(group.min, dataMin);
-      group.max = Math.max(group.max, dataMax);
-      group.precision = Math.max(group.precision, prec);
-    } else {
-      group = { key: groupKey, ids: [s.id], min: dataMin, max: dataMax, precision: prec };
+    if (!group) {
+      group = { key: groupKey, series: [] };
       groups.push(group);
     }
 
     if (s.scaleMode === "manual") {
-      if (s.scaleMin !== undefined) {
-        group.manualMin = group.manualMin !== undefined ? Math.min(group.manualMin, s.scaleMin) : s.scaleMin;
-      }
-
-      if (s.scaleMax !== undefined) {
-        group.manualMax = group.manualMax !== undefined ? Math.max(group.manualMax, s.scaleMax) : s.scaleMax;
-      }
+      if (s.scaleMin !== undefined) dataMin = Math.min(dataMin, s.scaleMin);
+      if (s.scaleMax !== undefined) dataMax = Math.max(dataMax, s.scaleMax);
     }
+
+    group.series.push({ id: s.id, unit: s.unit, min: dataMin, max: dataMax, precision: prec, order });
   }
 
-  return groups.map((group, index) => {
-    let autoMin = group.min;
-    let autoMax = group.max;
+  return groups.flatMap((group, index) => {
+    const [left, right] = group.key === "group:boolean" ? [group.series, []] : splitGroupSeries(group.series);
+    const top = GRAPH_TOP + index * GRAPH_STEP;
+    const leftScale = scaleFromSeries(group.key, "left", left, top);
 
-    if (group.manualMin !== undefined) autoMin = Math.min(autoMin, group.manualMin);
-    if (group.manualMax !== undefined) autoMax = Math.max(autoMax, group.manualMax);
-
-    const range = paddedRange(autoMin, autoMax, group.precision);
-    const ticks = computeNiceTicks(range.min, range.max);
-
-    return {
-      ids: new Set(group.ids),
-      min: range.min,
-      max: range.max,
-      precision: Math.max(group.precision, tickPrecision(ticks)),
-      ticks,
-      top: GRAPH_TOP + index * GRAPH_STEP,
-      height: GRAPH_HEIGHT
-    };
+    return right.length > 0
+      ? [leftScale, scaleFromSeries(group.key, "right", right, top)]
+      : [leftScale];
   });
 }

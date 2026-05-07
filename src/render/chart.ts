@@ -18,6 +18,7 @@ export interface RenderableSeries {
   id: string;
   label: string;
   color: string;
+  unit?: string;
   scaleGroupKey: string;
   scaleMode: "auto" | "manual";
   scaleMin?: number;
@@ -70,11 +71,13 @@ export interface GraphGroup {
   series: RenderableSeries[];
   allSeries: RenderableSeries[];
   scale?: NumericScale;
+  scales: NumericScale[];
   svgHeight: number;
   canvasHeight: number;
   lines: NumericLineRenderData[];
   segments: SegmentRenderData[];
   yLabels: YAxisLabelRenderData[];
+  rightYLabels: YAxisLabelRenderData[];
   xLabels: XAxisLabelRenderData[];
   heatingAreas: HeatingAreaRenderData[];
 }
@@ -337,7 +340,8 @@ export function buildChartData(
   maxXTicks = 12
 ): ChartRenderData {
   const numericScales = numericScalesFor(allSeries);
-  const plotBottom = plotBottomFor(numericScales.length);
+  const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
+  const plotBottom = plotBottomFor(numericGraphCount);
   const segmentCount = allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
   const timeTicks = computeTimeTicks(timeBounds.start, timeBounds.end, maxXTicks);
   const span = timeBounds.end - timeBounds.start;
@@ -363,14 +367,17 @@ export function buildChartData(
 
 function buildGroupNumericLines(
   series: RenderableSeries[],
-  scale: NumericScale,
+  scales: NumericScale[],
   bounds: { start: number; end: number }
 ): NumericLineRenderData[] {
-  const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
-
   return series
     .filter((s) => s.valueType === "number" || s.valueType === "boolean")
-    .map((s) => {
+    .flatMap((s) => {
+      const scale = scaleFor(s, scales);
+
+      if (!scale) return [];
+
+      const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
       const { points, pathLength } = toStepPath(
         displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH),
         bounds,
@@ -459,40 +466,50 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     groups.push({
       series: visibleNonNumeric,
       allSeries: allNonNumeric,
+      scales: [],
       svgHeight,
       canvasHeight,
       lines: [],
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: [],
+      rightYLabels: [],
       xLabels,
       heatingAreas: []
     });
   }
 
-  for (let i = 0; i < data.numericScales.length; i++) {
-    const scale = data.numericScales[i];
-    const visibleNumeric = data.visibleSeries.filter((s) => scale.ids.has(s.id));
+  const graphKeys = [...new Set(data.numericScales.map((scale) => scale.graphKey))];
+
+  for (let i = 0; i < graphKeys.length; i++) {
+    const graphKey = graphKeys[i];
+    const graphScales = data.numericScales.filter((scale) => scale.graphKey === graphKey);
+    const leftScale = graphScales.find((scale) => scale.axis === "left") ?? graphScales[0];
+    const rightScale = graphScales.find((scale) => scale.axis === "right");
+    const graphIds = new Set(graphScales.flatMap((scale) => [...scale.ids]));
+    const visibleNumeric = data.visibleSeries.filter((s) => graphIds.has(s.id));
     const visibleGroup = i === 0 ? [...visibleNumeric, ...visibleNonNumeric] : visibleNumeric;
     const allGroup = i === 0
-      ? [...data.allSeries.filter((s) => scale.ids.has(s.id)), ...allNonNumeric]
-      : data.allSeries.filter((s) => scale.ids.has(s.id));
+      ? [...data.allSeries.filter((s) => graphIds.has(s.id)), ...allNonNumeric]
+      : data.allSeries.filter((s) => graphIds.has(s.id));
 
     const segSeries = visibleGroup.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
     const segCount = segSeries.length;
     const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
-    const yOffset = GRAPH_TOP - scale.top;
+    const yOffset = GRAPH_TOP - leftScale.top;
 
     groups.push({
       series: visibleGroup,
       allSeries: allGroup,
-      scale,
+      scale: leftScale,
+      scales: graphScales,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(visibleGroup, scale, bounds),
+      lines: buildGroupNumericLines(visibleGroup, graphScales, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
-      yLabels: buildGroupYLabels(scale),
+      yLabels: buildGroupYLabels(leftScale),
+      rightYLabels: rightScale ? buildGroupYLabels(rightScale) : [],
       xLabels,
       heatingAreas: i === 0
         ? data.heatingAreas.map((a) => ({ id: a.id, points: offsetPointsY(a.points, yOffset) }))

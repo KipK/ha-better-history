@@ -349,6 +349,7 @@ export class HaBetterHistory extends LitElement {
           id: resolved.id,
           label: resolved.label,
           color: resolved.color,
+          unit: resolved.unit,
           scaleGroupKey: resolved.scaleGroupKey,
           scaleMode: resolved.scaleMode,
           scaleMin: resolved.scaleMin,
@@ -374,6 +375,7 @@ export class HaBetterHistory extends LitElement {
         id: source.id,
         label: source.label,
         color: paletteColor(colorIndex),
+        unit: source.unit,
         scaleGroupKey,
         scaleMode: "auto",
         valueType: source.valueType,
@@ -530,6 +532,9 @@ export class HaBetterHistory extends LitElement {
                 return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
               })}
             <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
+            ${group.rightYLabels.length > 0
+              ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+              : nothing}
             <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
             ${group.scale
               ? group.yLabels.map(
@@ -538,11 +543,23 @@ export class HaBetterHistory extends LitElement {
                   `
                 )
               : nothing}
+            ${group.rightYLabels.map(
+              (label) => svg`
+                <line class="axis tick" x1=${PLOT_RIGHT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT + 4} y2=${label.y.toFixed(1)}></line>
+              `
+            )}
           </svg>
           ${group.yLabels.map(
             (label) => {
               const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
               return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
+            }
+          )}
+          ${group.rightYLabels.map(
+            (label) => {
+              const pct = ((PLOT_RIGHT / CHART_WIDTH) * 100).toFixed(2);
+              const width = (100 - Number(pct)).toFixed(2);
+              return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:${pct}%;width:${width}%;text-align:left;padding-left:6px;">${label.value}</span>`;
             }
           )}
           ${group.xLabels.map(
