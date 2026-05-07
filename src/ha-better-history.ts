@@ -886,7 +886,6 @@ export class HaBetterHistory extends LitElement {
     const sourceWithUnit = this._sourceWithAttributeUnit(source);
 
     this._pendingAddedSources = [...this._pendingAddedSources, sourceWithUnit];
-    this._attributeMenuOpen = window.matchMedia("(hover: hover) and (pointer: fine)").matches ? this._attributeMenuOpen : false;
 
     this.dispatchEvent(
       new CustomEvent("series-added", {
