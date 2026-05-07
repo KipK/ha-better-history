@@ -413,6 +413,31 @@ function formatTimeTick(time: number, span: number): string {
   return `${h}:${m}:${s}`;
 }
 
+function pointsForScaleBounds(points: HistoryPoint[], bounds: { start: number; end: number }): HistoryPoint[] {
+  const bounded: HistoryPoint[] = [];
+  let previous: HistoryPoint | undefined;
+
+  for (const point of points) {
+    if (point.time < bounds.start) {
+      previous = point;
+      continue;
+    }
+
+    if (point.time > bounds.end) break;
+
+    bounded.push(point);
+  }
+
+  return previous ? [previous, ...bounded] : bounded;
+}
+
+function seriesForScaleBounds(series: RenderableSeries[], bounds: { start: number; end: number }): RenderableSeries[] {
+  return series.map((item) => ({
+    ...item,
+    points: pointsForScaleBounds(item.points, bounds)
+  }));
+}
+
 export function buildChartData(
   allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
@@ -420,7 +445,7 @@ export function buildChartData(
   disableClimateOverlay = false,
   maxXTicks = 12
 ): ChartRenderData {
-  const numericScales = numericScalesFor(allSeries);
+  const numericScales = numericScalesFor(seriesForScaleBounds(allSeries, timeBounds));
   const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
   const plotBottom = plotBottomFor(numericGraphCount);
   const segmentCount = allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;

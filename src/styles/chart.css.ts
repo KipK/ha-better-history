@@ -280,8 +280,8 @@ export const chartStyles = css`
   }
 
   .tools-toggle {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--better-history-radius, 8px);
     flex: 0 0 auto;
   }
@@ -297,19 +297,19 @@ export const chartStyles = css`
   .tool-icon-button ha-icon,
   .mode-button ha-icon,
   .tool-action-button ha-icon {
-    --mdc-icon-size: 20px;
+    --mdc-icon-size: 18px;
   }
 
   .tools-panel {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
+    gap: 10px;
     align-items: end;
-    margin-bottom: 10px;
-    padding: 10px;
+    margin-bottom: 8px;
+    padding: 7px 8px;
     border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
     border-radius: var(--better-history-radius, 8px);
-    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 92%, var(--primary-text-color, #fff) 8%);
+    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 96%, var(--primary-text-color, #fff) 4%);
   }
 
   .tool-range {
@@ -326,7 +326,7 @@ export const chartStyles = css`
   .tool-range-head {
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .tool-label {
@@ -335,55 +335,65 @@ export const chartStyles = css`
     gap: 6px;
     min-width: 0;
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .tool-label ha-icon {
-    --mdc-icon-size: 18px;
+    --mdc-icon-size: 16px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
   }
 
   .tool-icon-button {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: var(--better-history-radius, 8px);
   }
 
   .range-values {
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 0;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .range-slider-stack {
     position: relative;
-    height: 32px;
+    height: 20px;
     display: flex;
     align-items: center;
+    padding: 0 2px;
   }
 
   .range-slider-stack::before {
     content: "";
     position: absolute;
-    left: 0;
-    right: 0;
+    left: 2px;
+    right: 2px;
     top: 50%;
-    height: 4px;
+    height: 3px;
     border-radius: 999px;
-    background: var(--better-history-border-color, var(--divider-color, #444));
+    background:
+      linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--better-history-border-color, var(--divider-color, #444)) 72%, transparent) 12%,
+        color-mix(in srgb, var(--better-history-border-color, var(--divider-color, #444)) 72%, transparent) 88%,
+        transparent
+      );
     transform: translateY(-50%);
+    box-shadow: inset 0 1px 1px rgb(0 0 0 / 14%);
   }
 
   .range-selection {
     position: absolute;
     top: 50%;
-    height: 6px;
+    height: 2px;
     border-radius: 999px;
-    background: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 82%, var(--primary-text-color, #fff) 18%);
     transform: translateY(-50%);
     pointer-events: none;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 26%, transparent);
   }
 
   .range-slider {
@@ -398,50 +408,54 @@ export const chartStyles = css`
   }
 
   .range-slider::-webkit-slider-runnable-track {
-    height: 32px;
+    height: 20px;
     background: transparent;
   }
 
   .range-slider::-moz-range-track {
-    height: 32px;
+    height: 20px;
     background: transparent;
   }
 
   .range-slider::-webkit-slider-thumb {
     appearance: none;
-    width: 16px;
-    height: 24px;
-    margin-top: 4px;
-    border: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    width: 5px;
+    height: 14px;
+    margin-top: 3px;
+    border: 0;
     border-radius: 999px;
-    background: var(--better-history-bg, var(--card-background-color, #1e1e2e));
-    box-shadow: 0 2px 7px rgb(0 0 0 / 24%);
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 86%, var(--primary-text-color, #fff) 14%);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, transparent),
+      0 1px 4px rgb(0 0 0 / 18%);
     pointer-events: auto;
   }
 
   .range-slider::-moz-range-thumb {
-    width: 16px;
-    height: 24px;
-    border: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    width: 5px;
+    height: 14px;
+    border: 0;
     border-radius: 999px;
-    background: var(--better-history-bg, var(--card-background-color, #1e1e2e));
-    box-shadow: 0 2px 7px rgb(0 0 0 / 24%);
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 86%, var(--primary-text-color, #fff) 14%);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, transparent),
+      0 1px 4px rgb(0 0 0 / 18%);
     pointer-events: auto;
   }
 
   .range-slider:focus-visible::-webkit-slider-thumb {
-    outline: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
-    outline-offset: 2px;
+    outline: 1px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline-offset: 3px;
   }
 
   .range-slider:focus-visible::-moz-range-thumb {
-    outline: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
-    outline-offset: 2px;
+    outline: 1px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline-offset: 3px;
   }
 
   .tool-actions {
     justify-content: flex-end;
-    gap: 8px;
+    gap: 6px;
   }
 
   .mode-switch {
@@ -452,8 +466,8 @@ export const chartStyles = css`
   }
 
   .mode-button {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     border: 0;
     border-right: 1px solid var(--better-history-border-color, var(--divider-color, #444));
   }
@@ -463,11 +477,12 @@ export const chartStyles = css`
   }
 
   .tool-action-button {
-    gap: 6px;
-    height: 36px;
-    padding: 0 10px;
+    gap: 5px;
+    height: 32px;
+    padding: 0 8px;
     border-radius: var(--better-history-radius, 8px);
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    font-size: 12px;
   }
 
   @media (hover: none) and (pointer: coarse) {
@@ -482,10 +497,28 @@ export const chartStyles = css`
 
     .tools-panel {
       grid-template-columns: 1fr;
+      padding: 8px;
     }
 
     .tool-actions {
       justify-content: space-between;
+    }
+
+    .range-slider-stack,
+    .range-slider::-webkit-slider-runnable-track,
+    .range-slider::-moz-range-track {
+      height: 30px;
+    }
+
+    .range-slider::-webkit-slider-thumb {
+      width: 14px;
+      height: 22px;
+      margin-top: 4px;
+    }
+
+    .range-slider::-moz-range-thumb {
+      width: 14px;
+      height: 22px;
     }
 
     .date-picker-wrapper {
