@@ -170,13 +170,40 @@ function buildNumericLines(
 
     if (!scale) return [];
 
-    const displayPoints = displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH);
+    const boundedPoints = numericPointsForRender(series.points, bounds, series.lineMode);
+    const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
     const { points, pathLength } = series.lineMode === "line"
       ? toLinePath(displayPoints, bounds, scale)
       : toStepPath(displayPoints, bounds, scale);
 
     return [{ id: series.id, color: series.color, points, pathLength, lineWidth: series.lineWidth }];
   });
+}
+
+function numericPointsForRender(
+  points: HistoryPoint[],
+  bounds: { start: number; end: number },
+  lineMode: BetterHistoryLineMode
+): HistoryPoint[] {
+  const numeric = points
+    .map((point) => ({ time: point.time, value: Number(point.value) }))
+    .filter((point) => Number.isFinite(point.value))
+    .sort((left, right) => left.time - right.time);
+  const bounded = numeric.filter((point) => point.time >= bounds.start && point.time <= bounds.end);
+
+  if (lineMode === "line") {
+    return bounded;
+  }
+
+  const previous = [...numeric].reverse().find((point) => point.time < bounds.start);
+  const result: HistoryPoint[] = previous && (bounded.length === 0 || bounded[0].time > bounds.start)
+    ? [{ time: bounds.start, value: previous.value }, ...bounded]
+    : bounded;
+  const last = result[result.length - 1];
+
+  return last && last.time < bounds.end
+    ? [...result, { time: bounds.end, value: last.value }]
+    : result;
 }
 
 function columnBaseline(scale: NumericScale): number {
@@ -485,7 +512,8 @@ function buildGroupNumericLines(
       if (!scale) return [];
 
       const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
-      const displayPoints = displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH);
+      const boundedPoints = numericPointsForRender(s.points, bounds, s.lineMode);
+      const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
       const { points, pathLength } = s.lineMode === "line"
         ? toLinePath(displayPoints, bounds, localScale)
         : toStepPath(displayPoints, bounds, localScale);
