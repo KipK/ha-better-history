@@ -1,6 +1,7 @@
 import type { HistoryValueType } from "../data/value-type.js";
 
 export type AttributeUnitMap = Record<string, string>;
+export type BetterHistoryLineMode = "stair" | "line";
 
 export interface SeriesConfig {
   entity: string;
@@ -12,6 +13,8 @@ export interface SeriesConfig {
   scaleMode?: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  lineMode?: BetterHistoryLineMode;
+  lineWidth?: number | string;
 }
 
 export interface BetterHistoryConfig {
@@ -24,6 +27,13 @@ export interface BetterHistoryConfig {
   showTooltip?: boolean;
   width?: string;
   height?: string;
+  lineMode?: BetterHistoryLineMode;
+  lineWidth?: number | string;
+  backgroundColor?: string;
+  title?: string;
+  titleFontFamily?: string;
+  titleFontSize?: string;
+  titleColor?: string;
   series?: SeriesConfig[];
   defaultEntities?: string[];
   disableClimateOverlay?: boolean;
@@ -42,6 +52,8 @@ export interface ResolvedSeries {
   scaleMode: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  lineMode: BetterHistoryLineMode;
+  lineWidth: string;
   valueType: HistoryValueType;
 }
 
@@ -54,6 +66,11 @@ export interface ResolvedConfig {
   showTooltip: boolean;
   width: string;
   height: string | undefined;
+  backgroundColor: string | undefined;
+  title: string | undefined;
+  titleFontFamily: string | undefined;
+  titleFontSize: string | undefined;
+  titleColor: string | undefined;
   language: string | undefined;
   series: ResolvedSeries[];
   disableClimateOverlay: boolean;

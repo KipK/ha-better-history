@@ -4,6 +4,7 @@ import { displayNumericPoints } from "./downsample.js";
 import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
 import type { HistoryPoint } from "../data/history.js";
 import type { HistoryValueType } from "../data/value-type.js";
+import type { BetterHistoryLineMode } from "../types/config.js";
 
 export const CHART_WIDTH = 720;
 export const PLOT_LEFT = 40;
@@ -23,6 +24,8 @@ export interface RenderableSeries {
   scaleMode: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  lineMode: BetterHistoryLineMode;
+  lineWidth: string;
   valueType: HistoryValueType;
   points: HistoryPoint[];
 }
@@ -32,6 +35,7 @@ export interface NumericLineRenderData {
   color: string;
   points: string;
   pathLength: number;
+  lineWidth: string;
 }
 
 export interface SegmentRenderData {
@@ -154,13 +158,12 @@ function buildNumericLines(
 
     if (!scale) return [];
 
-    const { points, pathLength } = toStepPath(
-      displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH),
-      bounds,
-      scale
-    );
+    const displayPoints = displayNumericPoints(series.points, bounds, PLOT_LEFT, PLOT_WIDTH);
+    const { points, pathLength } = series.lineMode === "line"
+      ? toLinePath(displayPoints, bounds, scale)
+      : toStepPath(displayPoints, bounds, scale);
 
-    return [{ id: series.id, color: series.color, points, pathLength }];
+    return [{ id: series.id, color: series.color, points, pathLength, lineWidth: series.lineWidth }];
   });
 }
 
@@ -248,6 +251,30 @@ function toStepPath(
   }
 
   return { points: result.join(" "), pathLength: length };
+}
+
+function toLinePath(
+  pts: Array<{ time: number; value: number }>,
+  bounds: { start: number; end: number },
+  scale: NumericScale
+): { points: string; pathLength: number } {
+  if (pts.length === 0) return { points: "", pathLength: 0 };
+
+  let length = 0;
+  let previous: { x: number; y: number } | undefined;
+  const points = pts.map((point) => {
+    const x = xFor(point.time, bounds);
+    const y = yFor(point.value, scale);
+
+    if (previous) {
+      length += Math.hypot(x - previous.x, y - previous.y);
+    }
+    previous = { x, y };
+
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  return { points: points.join(" "), pathLength: length };
 }
 
 function formatTickValue(value: number, precision: number): string {
@@ -378,13 +405,12 @@ function buildGroupNumericLines(
       if (!scale) return [];
 
       const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
-      const { points, pathLength } = toStepPath(
-        displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH),
-        bounds,
-        localScale
-      );
+      const displayPoints = displayNumericPoints(s.points, bounds, PLOT_LEFT, PLOT_WIDTH);
+      const { points, pathLength } = s.lineMode === "line"
+        ? toLinePath(displayPoints, bounds, localScale)
+        : toStepPath(displayPoints, bounds, localScale);
 
-      return { id: s.id, color: s.color, points, pathLength };
+      return { id: s.id, color: s.color, points, pathLength, lineWidth: s.lineWidth };
     });
 }
 

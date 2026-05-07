@@ -20,7 +20,7 @@ import {
 import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
 import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
-import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
+import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig } from "./types/config.js";
 import type { HistorySeries, HistorySource } from "./data/history.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
@@ -74,6 +74,13 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
   @property() width?: string;
   @property() height?: string;
+  @property({ attribute: "line-mode" }) lineMode?: BetterHistoryLineMode;
+  @property({ attribute: "line-width" }) lineWidth?: string;
+  @property({ attribute: "background-color" }) backgroundColor?: string;
+  @property({ attribute: "graph-title" }) graphTitle?: string;
+  @property({ attribute: "title-font-family" }) titleFontFamily?: string;
+  @property({ attribute: "title-font-size" }) titleFontSize?: string;
+  @property({ attribute: "title-color" }) titleColor?: string;
   @property() language?: string;
   @property({ type: Boolean, attribute: "debug-performance" }) debugPerformance = false;
 
@@ -211,7 +218,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language", "debugPerformance", "attributeUnits"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -235,6 +242,13 @@ export class HaBetterHistory extends LitElement {
         showTooltip: this.showTooltip,
         width: this.width,
         height: this.height,
+        lineMode: this.lineMode,
+        lineWidth: this.lineWidth,
+        backgroundColor: this.backgroundColor,
+        title: this.graphTitle,
+        titleFontFamily: this.titleFontFamily,
+        titleFontSize: this.titleFontSize,
+        titleColor: this.titleColor,
         language: this.language,
         hass: this.hass,
         attributeUnits: this.attributeUnits
@@ -338,6 +352,24 @@ export class HaBetterHistory extends LitElement {
     return source.unit ? `unit:${source.unit}` : `series:${source.id}`;
   }
 
+  private _defaultLineMode(): BetterHistoryLineMode {
+    return (this.config?.lineMode ?? this.lineMode) === "line" ? "line" : "stair";
+  }
+
+  private _defaultLineWidth(): string {
+    const lineWidth = this.config?.lineWidth ?? this.lineWidth;
+
+    if (typeof lineWidth === "number") {
+      return Number.isFinite(lineWidth) && lineWidth >= 0 ? String(lineWidth) : "2.5";
+    }
+
+    if (typeof lineWidth === "string" && lineWidth.trim() !== "") {
+      return lineWidth.trim();
+    }
+
+    return "2.5";
+  }
+
   private _buildRenderSeries(): RenderableSeries[] {
     if (!this._resolved) return [];
 
@@ -354,6 +386,8 @@ export class HaBetterHistory extends LitElement {
           scaleMode: resolved.scaleMode,
           scaleMin: resolved.scaleMin,
           scaleMax: resolved.scaleMax,
+          lineMode: resolved.lineMode,
+          lineWidth: resolved.lineWidth,
           valueType: resolved.valueType,
           points: fetched?.points ?? []
         }
@@ -378,6 +412,8 @@ export class HaBetterHistory extends LitElement {
         unit: source.unit,
         scaleGroupKey,
         scaleMode: "auto",
+        lineMode: this._defaultLineMode(),
+        lineWidth: this._defaultLineWidth(),
         valueType: source.valueType,
         points: fetched?.points ?? []
       });
@@ -397,6 +433,8 @@ export class HaBetterHistory extends LitElement {
         source.scaleMode,
         source.scaleMin ?? "",
         source.scaleMax ?? "",
+        source.lineMode,
+        source.lineWidth,
         source.valueType
       ].join("~")) ?? []),
       ...this._selectedSources.map((source) => {
@@ -406,7 +444,9 @@ export class HaBetterHistory extends LitElement {
           effectiveSource.label,
           effectiveSource.kind,
           effectiveSource.unit ?? "",
-          effectiveSource.valueType
+          effectiveSource.valueType,
+          this._defaultLineMode(),
+          this._defaultLineWidth()
         ].join("~");
       })
     ].join("|");
@@ -519,7 +559,7 @@ export class HaBetterHistory extends LitElement {
                 const prevX = this._prevClipX.get(line.id) ?? 0;
                 const needAnim = !this._suppressLineAnimation && targetX > prevX;
 
-                return svg`<polyline class="line" clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
+                return svg`<polyline class="line" clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color} stroke-width=${line.lineWidth}></polyline>`;
               }
             )}
             ${group.segments.map(
@@ -746,9 +786,17 @@ export class HaBetterHistory extends LitElement {
 
   render(): TemplateResult {
     const width = this._resolved?.width ?? "100%";
+    const backgroundColor = this._resolved?.backgroundColor ?? "transparent";
+    const title = this._resolved?.title?.trim();
+    const titleStyle = [
+      this._resolved?.titleFontFamily ? `font-family:${this._resolved.titleFontFamily};` : "",
+      this._resolved?.titleFontSize ? `font-size:${this._resolved.titleFontSize};` : "",
+      this._resolved?.titleColor ? `color:${this._resolved.titleColor};` : ""
+    ].join("");
 
     return html`
-      <div class="root" style="width:${width};">
+      <div class="root" style="width:${width};background:${backgroundColor};">
+        ${title ? html`<div class="graph-title" style=${titleStyle}>${title}</div>` : nothing}
         ${this.showControls
           ? html`<div class="controls-bar">
               ${this._renderDatePicker()}

@@ -15,6 +15,15 @@ export const chartStyles = css`
     flex-direction: column;
   }
 
+  .graph-title {
+    margin: 0 0 8px;
+    color: var(--better-history-title-color, var(--primary-text-color, inherit));
+    font-family: var(--better-history-title-font-family, inherit);
+    font-size: var(--better-history-title-font-size, var(--ha-font-size-xl, 20px));
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
   .chart-area {
     flex: 1;
     min-height: 0;

@@ -1,6 +1,6 @@
 import { attributeSource, entityStateSource, type HistorySource } from "./history.js";
 import { paletteColor, CLIMATE_ATTR_COLORS } from "../render/colors.js";
-import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
+import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./attribute-units.js";
@@ -18,6 +18,7 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
 }
 
 const DEFAULT_HOURS = 24;
+const DEFAULT_LINE_WIDTH = "2.5";
 
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 
@@ -39,6 +40,22 @@ function normalizeAttribute(attribute: string | string[] | undefined): string[] 
   if (attribute === undefined) return undefined;
 
   return Array.isArray(attribute) ? attribute : attribute.split(".");
+}
+
+function normalizeLineMode(mode: BetterHistoryLineMode | undefined): BetterHistoryLineMode {
+  return mode === "line" ? "line" : "stair";
+}
+
+function normalizeLineWidth(lineWidth: number | string | undefined): string {
+  if (typeof lineWidth === "number") {
+    return Number.isFinite(lineWidth) && lineWidth >= 0 ? String(lineWidth) : DEFAULT_LINE_WIDTH;
+  }
+
+  if (typeof lineWidth === "string" && lineWidth.trim() !== "") {
+    return lineWidth.trim();
+  }
+
+  return DEFAULT_LINE_WIDTH;
 }
 
 function seriesId(entity: string, attribute?: string[]): string {
@@ -92,7 +109,14 @@ function scaleGroupKey(id: string, unit: string | undefined, scaleGroup: string 
   return `series:${id}`;
 }
 
-function seriesFromConfig(cfg: SeriesConfig, index: number, hass: HomeAssistant | undefined, attributeUnits?: AttributeUnitMap): ResolvedSeries {
+function seriesFromConfig(
+  cfg: SeriesConfig,
+  index: number,
+  hass: HomeAssistant | undefined,
+  attributeUnits?: AttributeUnitMap,
+  defaultLineMode?: BetterHistoryLineMode,
+  defaultLineWidth?: number | string
+): ResolvedSeries {
   const attribute = normalizeAttribute(cfg.attribute);
   const id = seriesId(cfg.entity, attribute);
   const vt = resolveValueType(hass, cfg.entity, attribute);
@@ -109,11 +133,19 @@ function seriesFromConfig(cfg: SeriesConfig, index: number, hass: HomeAssistant 
     scaleMode: cfg.scaleMode ?? "auto",
     scaleMin: cfg.scaleMin,
     scaleMax: cfg.scaleMax,
+    lineMode: normalizeLineMode(cfg.lineMode ?? defaultLineMode),
+    lineWidth: normalizeLineWidth(cfg.lineWidth ?? defaultLineWidth),
     valueType: vt
   };
 }
 
-function seriesFromEntityId(entityId: string, index: number, hass: HomeAssistant | undefined): ResolvedSeries | undefined {
+function seriesFromEntityId(
+  entityId: string,
+  index: number,
+  hass: HomeAssistant | undefined,
+  defaultLineMode?: BetterHistoryLineMode,
+  defaultLineWidth?: number | string
+): ResolvedSeries | undefined {
   const hassEntity = hass?.states[entityId];
 
   if (!hassEntity) {
@@ -126,6 +158,8 @@ function seriesFromEntityId(entityId: string, index: number, hass: HomeAssistant
       color: paletteColor(index),
       scaleGroupKey: `series:${id}`,
       scaleMode: "auto",
+      lineMode: normalizeLineMode(defaultLineMode),
+      lineWidth: normalizeLineWidth(defaultLineWidth),
       valueType: "number"
     };
   }
@@ -142,6 +176,8 @@ function seriesFromEntityId(entityId: string, index: number, hass: HomeAssistant
     unit: source.unit,
     scaleGroupKey: scaleGroupKey(source.id, source.unit, undefined, source.valueType),
     scaleMode: "auto",
+    lineMode: normalizeLineMode(defaultLineMode),
+    lineWidth: normalizeLineWidth(defaultLineWidth),
     valueType: source.valueType
   };
 }
@@ -185,6 +221,8 @@ function expandClimateSeries(
       unit: attrUnit,
       scaleGroupKey: scaleGroupKey(id, attrUnit, scaleGroup, vt),
       scaleMode: "auto" as const,
+      lineMode: s.lineMode,
+      lineWidth: s.lineWidth,
       valueType: vt
     };
   });
@@ -237,6 +275,13 @@ export interface ResolveConfigOpts {
   showTooltip?: boolean;
   width?: string;
   height?: string;
+  lineMode?: BetterHistoryLineMode;
+  lineWidth?: number | string;
+  backgroundColor?: string;
+  title?: string;
+  titleFontFamily?: string;
+  titleFontSize?: string;
+  titleColor?: string;
   language?: string;
   hass?: HomeAssistant;
   attributeUnits?: AttributeUnitMap;
@@ -250,16 +295,18 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   const endDate = config?.endDate ?? opts.endDate ?? new Date();
   const hours = config?.hours ?? opts.hours ?? DEFAULT_HOURS;
   const startDate = config?.startDate ?? opts.startDate ?? new Date(endDate.getTime() - hours * 3600000);
+  const lineMode = config?.lineMode ?? opts.lineMode;
+  const lineWidth = config?.lineWidth ?? opts.lineWidth;
 
   let series: ResolvedSeries[];
 
   if (config?.series && config.series.length > 0) {
-    series = config.series.map((cfg, index) => seriesFromConfig(cfg, index, hass, attributeUnits));
+    series = config.series.map((cfg, index) => seriesFromConfig(cfg, index, hass, attributeUnits, lineMode, lineWidth));
   } else {
     const entityIds = config?.defaultEntities ?? opts.entities ?? [];
 
     series = entityIds
-      .map((entityId, index) => seriesFromEntityId(entityId, index, hass))
+      .map((entityId, index) => seriesFromEntityId(entityId, index, hass, lineMode, lineWidth))
       .filter((s): s is ResolvedSeries => s !== undefined);
   }
 
@@ -278,6 +325,11 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
     showTooltip: config?.showTooltip ?? opts.showTooltip ?? true,
     width: config?.width ?? opts.width ?? "100%",
     height: config?.height ?? opts.height,
+    backgroundColor: config?.backgroundColor ?? opts.backgroundColor,
+    title: config?.title ?? opts.title,
+    titleFontFamily: config?.titleFontFamily ?? opts.titleFontFamily,
+    titleFontSize: config?.titleFontSize ?? opts.titleFontSize,
+    titleColor: config?.titleColor ?? opts.titleColor,
     language: opts.language ?? hass?.locale?.language ?? hass?.language,
     series,
     disableClimateOverlay: config?.disableClimateOverlay ?? false

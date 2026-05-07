@@ -34,6 +34,13 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `show-tooltip`       | `boolean` | `true`    | Multi-series tooltip on hover                     |
 | `width`              | `string`  | `"100%"`  | CSS width of the component wrapper                |
 | `height`             | `string`  | —         | CSS height; if omitted, computed from graph count |
+| `line-mode`          | `string`  | `"stair"` | Global numeric line mode: `"stair"` or `"line"`   |
+| `line-width`         | `string`  | `"2.5"`   | Global SVG stroke width for numeric lines         |
+| `background-color`   | `string`  | transparent | CSS background color for the component wrapper |
+| `graph-title`        | `string`  | —         | Optional title above the chart                    |
+| `title-font-family`  | `string`  | HA theme  | Optional title font-family override               |
+| `title-font-size`    | `string`  | HA theme  | Optional title font-size override                 |
+| `title-color`        | `string`  | HA theme  | Optional title color override                     |
 | `language`           | `string`  | HA locale | Language code for labels (`"en"`, `"fr"`, …)      |
 
 ### JS-only properties
@@ -65,6 +72,13 @@ interface BetterHistoryConfig {
   showTooltip?: boolean;             // default: true
   width?: string;                    // default: "100%"
   height?: string;
+  lineMode?: "stair" | "line";       // default: "stair"
+  lineWidth?: number | string;       // default: "2.5"
+  backgroundColor?: string;          // default: transparent
+  title?: string;                    // omitted/empty = no title
+  titleFontFamily?: string;          // default: HA/theme font
+  titleFontSize?: string;            // default: HA/theme title size
+  titleColor?: string;               // default: HA/theme text color
 
   // Data
   series?: SeriesConfig[];           // explicit series list
@@ -92,6 +106,8 @@ interface SeriesConfig {
   scaleMode?: "auto" | "manual";     // default: "auto"
   scaleMin?: number;                 // only when scaleMode = "manual"
   scaleMax?: number;                 // only when scaleMode = "manual"
+  lineMode?: "stair" | "line";       // overrides global lineMode
+  lineWidth?: number | string;       // overrides global lineWidth
 }
 ```
 
@@ -130,6 +146,37 @@ A numeric attribute with a temperature unit (`°C`, `°F`, `K`) is automatically
 ## Colors
 
 If `color` is not set, the built-in palette cycles through: `#ff9800`, `#42a5f5`, `#66bb6a`, `#ec407a`, `#ab47bc`, `#26a69a`.
+
+## Line and title styling
+
+Numeric series render as stair-step lines by default to match Home Assistant state history. Set `lineMode: "line"` globally, or per `SeriesConfig`, to connect points with straight segments. `lineWidth` accepts an SVG stroke width such as `1.5`, `"2px"`, or `"0.18rem"`.
+
+Use top-level HTML attributes for simple global styling:
+
+```html
+<ha-better-history
+  graph-title="Living room"
+  line-mode="line"
+  line-width="2"
+  background-color="transparent"
+></ha-better-history>
+```
+
+Use `config` for per-series overrides:
+
+```js
+chart.config = {
+  title: "Living room",
+  titleFontSize: "18px",
+  titleColor: "var(--primary-text-color)",
+  lineMode: "stair",
+  lineWidth: 2.5,
+  series: [
+    { entity: "climate.living", attribute: "current_temperature", lineMode: "line", lineWidth: 2 },
+    { entity: "climate.living", attribute: "temperature", lineWidth: 3 }
+  ]
+};
+```
 
 ## Events
 
@@ -234,6 +281,9 @@ Override these on the host element to customize appearance.
 | `--better-history-accent-color` | `--accent-color`          |
 | `--better-history-radius`       | `8px`                     |
 | `--better-history-font-family`  | `inherit`                 |
+| `--better-history-title-color`  | `--primary-text-color`    |
+| `--better-history-title-font-family` | `inherit`            |
+| `--better-history-title-font-size` | `--ha-font-size-xl, 20px` |
 
 ## Loading / setup
 
