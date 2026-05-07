@@ -170,9 +170,10 @@ export class HaBetterHistory extends LitElement {
     }
 
     for (const s of this._selectedSources) {
-      if (!seen.has(s.id)) {
-        seen.add(s.id);
-        sources.push(s);
+      const source = this._sourceWithAttributeUnit(s);
+      if (!seen.has(source.id)) {
+        seen.add(source.id);
+        sources.push(source);
       }
     }
 
@@ -352,7 +353,9 @@ export class HaBetterHistory extends LitElement {
       ];
     });
 
-    for (const source of this._selectedSources) {
+    for (const selectedSource of this._selectedSources) {
+      const source = this._sourceWithAttributeUnit(selectedSource);
+
       if (result.some((s) => s.id === source.id)) continue;
 
       const fetched = this._data.series.find((s) => s.source.id === source.id);
@@ -377,8 +380,27 @@ export class HaBetterHistory extends LitElement {
 
   private _chartSourceKey(): string {
     return [
-      ...(this._resolved?.series.map((source) => source.id) ?? []),
-      ...this._selectedSources.map((source) => source.id)
+      ...(this._resolved?.series.map((source) => [
+        source.id,
+        source.label,
+        source.color,
+        source.unit ?? "",
+        source.scaleGroupKey,
+        source.scaleMode,
+        source.scaleMin ?? "",
+        source.scaleMax ?? "",
+        source.valueType
+      ].join("~")) ?? []),
+      ...this._selectedSources.map((source) => {
+        const effectiveSource = this._sourceWithAttributeUnit(source);
+        return [
+          effectiveSource.id,
+          effectiveSource.label,
+          effectiveSource.kind,
+          effectiveSource.unit ?? "",
+          effectiveSource.valueType
+        ].join("~");
+      })
     ].join("|");
   }
 
@@ -827,9 +849,10 @@ export class HaBetterHistory extends LitElement {
   };
 
   private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
-    if (source.kind !== "entity_attribute" || source.unit || !source.path) return source;
+    if (source.kind !== "entity_attribute" || !source.path) return source;
     const unit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
-    return unit ? { ...source, unit } : source;
+    if (!unit || source.unit === unit) return source;
+    return { ...source, unit };
   }
 
   private _addSource(source: HistorySource): void {
@@ -843,12 +866,14 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
-    this._pendingAddedSources = [...this._pendingAddedSources, this._sourceWithAttributeUnit(source)];
+    const sourceWithUnit = this._sourceWithAttributeUnit(source);
+
+    this._pendingAddedSources = [...this._pendingAddedSources, sourceWithUnit];
     this._attributeMenuOpen = window.matchMedia("(hover: hover) and (pointer: fine)").matches ? this._attributeMenuOpen : false;
 
     this.dispatchEvent(
       new CustomEvent("series-added", {
-        detail: { source },
+        detail: { source: sourceWithUnit },
         bubbles: true,
         composed: true
       })

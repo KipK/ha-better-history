@@ -230,7 +230,13 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   const hasTempGroup = series.some((s) => s.scaleGroupKey === "group:temperature");
   if (hasTempGroup) {
     series = series.map((s) => {
-      if (s.valueType === "number" && s.unit && isTemperatureUnit(s.unit) && s.scaleGroupKey.startsWith("unit:")) {
+      if (
+        s.valueType === "number"
+        && s.unit
+        && isTemperatureUnit(s.unit)
+        && s.scaleGroupKey.startsWith("unit:")
+        && !(s.scaleMode === "manual" && (s.scaleMin !== undefined || s.scaleMax !== undefined))
+      ) {
         return { ...s, scaleGroupKey: "group:temperature" };
       }
       return s;
