@@ -27,12 +27,15 @@ export const chartStyles = css`
   .chart-area {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .chart-surface {
     position: relative;
     overflow-y: auto;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
   }
 
   svg {
