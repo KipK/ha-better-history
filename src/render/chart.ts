@@ -1,4 +1,4 @@
-import { PALETTE } from "./colors.js";
+import { graphColor, graphColorKey, PALETTE } from "./colors.js";
 import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, PLOT_PADDING, type NumericScale } from "./scales.js";
 import { displayNumericPoints } from "./downsample.js";
 import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
@@ -443,6 +443,33 @@ function offsetPointsY(points: string, yOffset: number): string {
     .join(" ");
 }
 
+function withGraphUniqueColors(
+  allSeries: RenderableSeries[],
+  visibleSeries: RenderableSeries[],
+  graphIndex: number
+): { allSeries: RenderableSeries[]; visibleSeries: RenderableSeries[] } {
+  const used = new Set<string>();
+  const colorById = new Map<string, string>();
+
+  const recoloredAll = allSeries.map((series, index) => {
+    const color = graphColor(series.color, used, graphIndex * PALETTE.length + index);
+
+    used.add(graphColorKey(color));
+    colorById.set(series.id, color);
+
+    return color === series.color ? series : { ...series, color };
+  });
+
+  return {
+    allSeries: recoloredAll,
+    visibleSeries: visibleSeries.map((series) => {
+      const color = colorById.get(series.id);
+
+      return color && color !== series.color ? { ...series, color } : series;
+    })
+  };
+}
+
 export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
@@ -463,14 +490,16 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
 
+    const colored = withGraphUniqueColors(allNonNumeric, visibleNonNumeric, 0);
+
     groups.push({
-      series: visibleNonNumeric,
-      allSeries: allNonNumeric,
+      series: colored.visibleSeries,
+      allSeries: colored.allSeries,
       scales: [],
       svgHeight,
       canvasHeight,
       lines: [],
-      segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
+      segments: buildGroupSegments(colored.visibleSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: [],
       rightYLabels: [],
       xLabels,
@@ -491,8 +520,9 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     const allGroup = i === 0
       ? [...data.allSeries.filter((s) => graphIds.has(s.id)), ...allNonNumeric]
       : data.allSeries.filter((s) => graphIds.has(s.id));
+    const colored = withGraphUniqueColors(allGroup, visibleGroup, i);
 
-    const segSeries = visibleGroup.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
+    const segSeries = colored.visibleSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
     const segCount = segSeries.length;
     const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + GRAPH_HEIGHT + segArea + 18;
@@ -500,13 +530,13 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     const yOffset = GRAPH_TOP - leftScale.top;
 
     groups.push({
-      series: visibleGroup,
-      allSeries: allGroup,
+      series: colored.visibleSeries,
+      allSeries: colored.allSeries,
       scale: leftScale,
       scales: graphScales,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(visibleGroup, graphScales, bounds),
+      lines: buildGroupNumericLines(colored.visibleSeries, graphScales, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(leftScale),
       rightYLabels: rightScale ? buildGroupYLabels(rightScale) : [],

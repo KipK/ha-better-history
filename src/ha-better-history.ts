@@ -662,16 +662,9 @@ export class HaBetterHistory extends LitElement {
     const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
 
     if (hasData && showTooltip) {
-      const tooltipSeries: SyncedSeries[] = [
-        ...(this._resolved?.series.map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? []),
-        ...this._selectedSources
-          .filter((src) => !this._resolved?.series.some((r) => r.id === src.id))
-          .map((src, i) => ({
-            id: src.id,
-            label: src.label,
-            color: paletteColor(this._resolved!.series.length + i)
-          }))
-      ];
+      const tooltipSeries: SyncedSeries[] = groups.flatMap((group) =>
+        group.allSeries.map((s) => ({ id: s.id, label: s.label, color: s.color }))
+      );
 
       this._tooltip.sync(
         tooltipSeries,

@@ -104,6 +104,10 @@ function readPath(source: unknown, path: string[]): unknown {
   return path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), source);
 }
 
+function attributeDisplayName(path: string[]): string {
+  return path[path.length - 1] ?? "";
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -243,7 +247,7 @@ export function attributeSource(entity: HassEntity, path: string[], label?: stri
     id: `attr:${entity.entity_id}:${path.join(".")}`,
     kind: "entity_attribute",
     entityId: entity.entity_id,
-    label: label ?? path.join("."),
+    label: label ?? attributeDisplayName(path),
     path,
     valueType: type
   };

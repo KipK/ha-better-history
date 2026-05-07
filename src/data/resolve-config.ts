@@ -45,6 +45,10 @@ function seriesId(entity: string, attribute?: string[]): string {
   return attribute ? `attr:${entity}:${attribute.join(".")}` : `state:${entity}`;
 }
 
+function attributeDisplayName(attribute: string[]): string {
+  return attribute[attribute.length - 1] ?? "";
+}
+
 function resolveValueType(hass: HomeAssistant | undefined, entity: string, attribute?: string[]): HistoryValueType {
   const hassEntity = hass?.states[entity];
 
@@ -59,7 +63,7 @@ function resolveValueType(hass: HomeAssistant | undefined, entity: string, attri
 
 function resolveLabel(hass: HomeAssistant | undefined, entity: string, attribute?: string[], label?: string): string {
   if (label) return label;
-  if (attribute) return attribute.join(".");
+  if (attribute) return attributeDisplayName(attribute);
 
   const friendly = hass?.states[entity]?.attributes.friendly_name;
 
