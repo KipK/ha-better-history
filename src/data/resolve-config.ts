@@ -3,7 +3,7 @@ import { paletteColor, CLIMATE_ATTR_COLORS } from "../render/colors.js";
 import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
-import { unitForAttributePath } from "./attribute-units.js";
+import { isAttributeTemperatureUnit, unitForAttributePath } from "./attribute-units.js";
 
 export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
   return {
@@ -25,6 +25,10 @@ const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
+}
+
+function isManualBoundedSeries(series: ResolvedSeries): boolean {
+  return series.scaleMode === "manual" && (series.scaleMin !== undefined || series.scaleMax !== undefined);
 }
 
 function truncateDate(d: Date): Date {
@@ -184,6 +188,39 @@ function expandClimateSeries(
   return [s, ...attributeSeries];
 }
 
+function resolvedTemperatureUnit(series: ResolvedSeries[]): string | undefined {
+  return series.find((s) => s.scaleGroupKey === "group:temperature" && s.unit && isTemperatureUnit(s.unit))?.unit
+    ?? series.find((s) => s.unit && isTemperatureUnit(s.unit))?.unit;
+}
+
+function normalizeTemperatureUnitSeries(series: ResolvedSeries[]): ResolvedSeries[] {
+  const tempUnit = resolvedTemperatureUnit(series);
+  const hasTempGroup = series.some((s) => s.scaleGroupKey === "group:temperature");
+
+  return series.map((s) => {
+    const semanticTemperature = isAttributeTemperatureUnit(s.unit);
+    const unit = semanticTemperature && tempUnit ? tempUnit : s.unit;
+    let scaleGroupKey = semanticTemperature && unit && s.scaleGroupKey === "unit:temperature"
+      ? `unit:${unit}`
+      : s.scaleGroupKey;
+
+    if (
+      hasTempGroup
+      && s.valueType === "number"
+      && unit
+      && isTemperatureUnit(unit)
+      && scaleGroupKey.startsWith("unit:")
+      && !isManualBoundedSeries(s)
+    ) {
+      scaleGroupKey = "group:temperature";
+    }
+
+    return unit !== s.unit || scaleGroupKey !== s.scaleGroupKey
+      ? { ...s, unit, scaleGroupKey }
+      : s;
+  });
+}
+
 export interface ResolveConfigOpts {
   config?: BetterHistoryConfig;
   entities?: string[];
@@ -226,22 +263,7 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
 
   series = series.flatMap((s) => expandClimateSeries(s, () => nextColorIndex++, hass));
 
-  // Normalize temperature-unit series into group:temperature when that group exists
-  const hasTempGroup = series.some((s) => s.scaleGroupKey === "group:temperature");
-  if (hasTempGroup) {
-    series = series.map((s) => {
-      if (
-        s.valueType === "number"
-        && s.unit
-        && isTemperatureUnit(s.unit)
-        && s.scaleGroupKey.startsWith("unit:")
-        && !(s.scaleMode === "manual" && (s.scaleMin !== undefined || s.scaleMax !== undefined))
-      ) {
-        return { ...s, scaleGroupKey: "group:temperature" };
-      }
-      return s;
-    });
-  }
+  series = normalizeTemperatureUnitSeries(series);
 
   return {
     startDate: truncateDate(startDate),

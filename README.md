@@ -101,12 +101,14 @@ HA attributes have no native unit in history responses. Use `attributeUnits` to 
 
 ```ts
 history.attributeUnits = {
-  "specific_states.ema_temperature": "°C",
+  "specific_states.ema_temperature": "temperature",
   "power_percent": "%"
 };
 ```
 
 Keys are dot-separated paths from `entity.attributes` (e.g. `"specific_states.ema_temperature"`). Matching is exact — no wildcards, no entity-id prefix. Values are the unit string to display.
+
+Use the special value `"temperature"` for attributes that should use the active temperature unit. When a temperature graph exists, the component resolves it to the configured temperature unit such as `°C` or `°F`, so the attribute shares the same graph without hard-coding Celsius/Fahrenheit.
 
 Unit resolution priority for a series:
 1. `SeriesConfig.unit` (explicit, including empty string to suppress the unit)

@@ -22,7 +22,7 @@ import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
 import type { HistorySeries, HistorySource } from "./data/history.js";
-import { unitForAttributePath } from "./data/attribute-units.js";
+import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
 import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
 import {
@@ -182,6 +182,12 @@ export class HaBetterHistory extends LitElement {
 
   private _isDefaultSource(source: HistorySource): boolean {
     return (this._resolved?.series ?? []).some((s) => s.id === source.id);
+  }
+
+  private _resolvedTemperatureUnit(): string | undefined {
+    return this._resolved?.series.find(
+      (s) => s.scaleGroupKey === "group:temperature" && s.unit && isTemperatureUnit(s.unit)
+    )?.unit;
   }
 
   private _lastFetchKey = "";
@@ -850,7 +856,8 @@ export class HaBetterHistory extends LitElement {
 
   private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
     if (source.kind !== "entity_attribute" || !source.path) return source;
-    const unit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
+    const mappedUnit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
+    const unit = isAttributeTemperatureUnit(mappedUnit) ? this._resolvedTemperatureUnit() ?? mappedUnit : mappedUnit;
     if (!unit || source.unit === unit) return source;
     return { ...source, unit };
   }
