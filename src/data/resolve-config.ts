@@ -1,8 +1,9 @@
 import { attributeSource, entityStateSource, type HistorySource } from "./history.js";
 import { paletteColor, CLIMATE_ATTR_COLORS } from "../render/colors.js";
-import type { BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
+import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig, ResolvedSeries, SeriesConfig } from "../types/config.js";
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
+import { unitForAttributePath } from "./attribute-units.js";
 
 export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
   return {
@@ -19,6 +20,12 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
 const DEFAULT_HOURS = 24;
 
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
+
+const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
+
+function isTemperatureUnit(unit: string): boolean {
+  return TEMPERATURE_UNIT_RE.test(unit);
+}
 
 function truncateDate(d: Date): Date {
   return new Date(Math.floor(d.getTime() / 1000) * 1000);
@@ -55,9 +62,15 @@ function resolveLabel(hass: HomeAssistant | undefined, entity: string, attribute
   return typeof friendly === "string" && friendly !== "" ? friendly : entity;
 }
 
-function resolveUnit(hass: HomeAssistant | undefined, entity: string, attribute?: string[], override?: string): string | undefined {
+function resolveUnit(
+  hass: HomeAssistant | undefined,
+  entity: string,
+  attribute?: string[],
+  override?: string,
+  attributeUnits?: AttributeUnitMap
+): string | undefined {
   if (override !== undefined) return override || undefined;
-  if (attribute) return undefined;
+  if (attribute) return unitForAttributePath(attribute, attributeUnits);
 
   const unit = hass?.states[entity]?.attributes.unit_of_measurement;
 
@@ -71,11 +84,11 @@ function scaleGroupKey(id: string, unit: string | undefined, scaleGroup: string 
   return `series:${id}`;
 }
 
-function seriesFromConfig(cfg: SeriesConfig, index: number, hass: HomeAssistant | undefined): ResolvedSeries {
+function seriesFromConfig(cfg: SeriesConfig, index: number, hass: HomeAssistant | undefined, attributeUnits?: AttributeUnitMap): ResolvedSeries {
   const attribute = normalizeAttribute(cfg.attribute);
   const id = seriesId(cfg.entity, attribute);
   const vt = resolveValueType(hass, cfg.entity, attribute);
-  const unit = resolveUnit(hass, cfg.entity, attribute, cfg.unit);
+  const unit = resolveUnit(hass, cfg.entity, attribute, cfg.unit, attributeUnits);
 
   return {
     id,
@@ -185,10 +198,13 @@ export interface ResolveConfigOpts {
   height?: string;
   language?: string;
   hass?: HomeAssistant;
+  attributeUnits?: AttributeUnitMap;
 }
 
 export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   const { config, hass } = opts;
+
+  const attributeUnits = opts.attributeUnits ?? config?.attributeUnits;
 
   const endDate = config?.endDate ?? opts.endDate ?? new Date();
   const hours = config?.hours ?? opts.hours ?? DEFAULT_HOURS;
@@ -197,7 +213,7 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   let series: ResolvedSeries[];
 
   if (config?.series && config.series.length > 0) {
-    series = config.series.map((cfg, index) => seriesFromConfig(cfg, index, hass));
+    series = config.series.map((cfg, index) => seriesFromConfig(cfg, index, hass, attributeUnits));
   } else {
     const entityIds = config?.defaultEntities ?? opts.entities ?? [];
 
@@ -209,6 +225,17 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
   let nextColorIndex = series.length;
 
   series = series.flatMap((s) => expandClimateSeries(s, () => nextColorIndex++, hass));
+
+  // Normalize temperature-unit series into group:temperature when that group exists
+  const hasTempGroup = series.some((s) => s.scaleGroupKey === "group:temperature");
+  if (hasTempGroup) {
+    series = series.map((s) => {
+      if (s.valueType === "number" && s.unit && isTemperatureUnit(s.unit) && s.scaleGroupKey.startsWith("unit:")) {
+        return { ...s, scaleGroupKey: "group:temperature" };
+      }
+      return s;
+    });
+  }
 
   return {
     startDate: truncateDate(startDate),

@@ -38,13 +38,14 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 
 ### JS-only properties
 
-| Property    | Type                  | Default     | Description                                |
-| ----------- | --------------------- | ----------- | ------------------------------------------ |
-| `hass`      | `HomeAssistant`       | —           | **Required.** The Home Assistant object    |
-| `config`    | `BetterHistoryConfig` | `undefined` | Full declarative configuration             |
-| `entities`  | `string[]`            | `undefined` | Shortcut: entity IDs to plot their `state` |
-| `startDate` | `Date`                | `undefined` | Lower bound (overrides `hours`)            |
-| `endDate`   | `Date`                | `undefined` | Upper bound (default: now)                 |
+| Property         | Type                  | Default     | Description                                        |
+| ---------------- | --------------------- | ----------- | -------------------------------------------------- |
+| `hass`           | `HomeAssistant`       | —           | **Required.** The Home Assistant object            |
+| `config`         | `BetterHistoryConfig` | `undefined` | Full declarative configuration                     |
+| `entities`       | `string[]`            | `undefined` | Shortcut: entity IDs to plot their `state`         |
+| `startDate`      | `Date`                | `undefined` | Lower bound (overrides `hours`)                    |
+| `endDate`        | `Date`                | `undefined` | Upper bound (default: now)                         |
+| `attributeUnits` | `AttributeUnitMap`    | `undefined` | Map from attribute dot-paths to display units      |
 
 ## `BetterHistoryConfig`
 
@@ -69,6 +70,9 @@ interface BetterHistoryConfig {
   series?: SeriesConfig[];           // explicit series list
   defaultEntities?: string[];        // shown in entity picker when enabled
   disableClimateOverlay?: boolean;   // default: false
+
+  // Attribute units
+  attributeUnits?: AttributeUnitMap; // map attribute dot-paths to display units
 }
 ```
 
@@ -90,6 +94,28 @@ interface SeriesConfig {
   scaleMax?: number;                 // only when scaleMode = "manual"
 }
 ```
+
+## Attribute units
+
+HA attributes have no native unit in history responses. Use `attributeUnits` to map attribute dot-paths to display units. This drives both axis grouping and label display.
+
+```ts
+history.attributeUnits = {
+  "specific_states.ema_temperature": "°C",
+  "power_percent": "%"
+};
+```
+
+Keys are dot-separated paths from `entity.attributes` (e.g. `"specific_states.ema_temperature"`). Matching is exact — no wildcards, no entity-id prefix. Values are the unit string to display.
+
+Unit resolution priority for a series:
+1. `SeriesConfig.unit` (explicit, including empty string to suppress the unit)
+2. `.attributeUnits` property
+3. `config.attributeUnits`
+4. `unit_of_measurement` for entity-state series
+5. No unit
+
+A numeric attribute with a temperature unit (`°C`, `°F`, `K`) is automatically placed in the same graph as other temperature series when a `group:temperature` group already exists. Likewise, attributes added via the entity picker receive their unit from the map before scale grouping is applied.
 
 ## Scale grouping rules
 

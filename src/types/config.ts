@@ -1,5 +1,7 @@
 import type { HistoryValueType } from "../data/value-type.js";
 
+export type AttributeUnitMap = Record<string, string>;
+
 export interface SeriesConfig {
   entity: string;
   attribute?: string | string[];
@@ -26,6 +28,7 @@ export interface BetterHistoryConfig {
   defaultEntities?: string[];
   disableClimateOverlay?: boolean;
   debugPerformance?: boolean;
+  attributeUnits?: AttributeUnitMap;
 }
 
 export interface ResolvedSeries {

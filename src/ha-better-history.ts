@@ -20,8 +20,9 @@ import {
 import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
 import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
-import type { BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
+import type { AttributeUnitMap, BetterHistoryConfig, ResolvedConfig } from "./types/config.js";
 import type { HistorySeries, HistorySource } from "./data/history.js";
+import { unitForAttributePath } from "./data/attribute-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
 import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
 import {
@@ -62,6 +63,7 @@ export class HaBetterHistory extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistant;
   @property({ attribute: false }) config?: BetterHistoryConfig;
   @property({ attribute: false }) entities?: string[];
+  @property({ attribute: false }) attributeUnits?: AttributeUnitMap;
   @property({ type: Number }) hours = 24;
   @property({ attribute: false }) startDate?: Date;
   @property({ attribute: false }) endDate?: Date;
@@ -202,7 +204,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language", "debugPerformance"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "language", "debugPerformance", "attributeUnits"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -227,7 +229,8 @@ export class HaBetterHistory extends LitElement {
         width: this.width,
         height: this.height,
         language: this.language,
-        hass: this.hass
+        hass: this.hass,
+        attributeUnits: this.attributeUnits
       });
 
       this._resolved = resolved;
@@ -823,6 +826,12 @@ export class HaBetterHistory extends LitElement {
     this._closeAttributeMenu();
   };
 
+  private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
+    if (source.kind !== "entity_attribute" || source.unit || !source.path) return source;
+    const unit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
+    return unit ? { ...source, unit } : source;
+  }
+
   private _addSource(source: HistorySource): void {
     if (this._selectedSources.some((selected) => selected.id === source.id)) {
       return;
@@ -834,7 +843,7 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
-    this._pendingAddedSources = [...this._pendingAddedSources, source];
+    this._pendingAddedSources = [...this._pendingAddedSources, this._sourceWithAttributeUnit(source)];
     this._attributeMenuOpen = window.matchMedia("(hover: hover) and (pointer: fine)").matches ? this._attributeMenuOpen : false;
 
     this.dispatchEvent(
