@@ -29,6 +29,7 @@ interface EntityPickerRenderOpts {
   path: string[];
   selectedSources: HistorySource[];
   resolved?: ResolvedConfig;
+  loading: boolean;
   getItems: () => unknown[];
   getAdditionalItems: (search?: string) => unknown[];
   onEntityPickerOpened(): void;
@@ -71,6 +72,14 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           if (entityId) opts.onEntitySelected(entityId);
         }}
       ></ha-generic-picker>
+      ${opts.loading
+        ? html`
+            <div class="history-loading-indicator" role="status" aria-label=${localize(opts.hass, "loading")}>
+              <span class="history-loading-spinner"></span>
+              <span class="history-loading-text">${localize(opts.hass, "loading")}</span>
+            </div>
+          `
+        : nothing}
       ${opts.selectedSources.length > 0 ? html`
         <div class="entity-row">
           ${opts.selectedSources.map((source) => renderChip(source, opts))}
@@ -303,4 +312,3 @@ function renderTreeEntry(
     </div>
   `;
 }
-

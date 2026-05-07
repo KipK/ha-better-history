@@ -26,14 +26,6 @@ export const chartStyles = css`
     height: 100%;
   }
 
-  .chart-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    box-sizing: border-box;
-  }
-
   svg {
     width: 100%;
     display: block;
@@ -115,15 +107,6 @@ export const chartStyles = css`
     z-index: 1;
   }
 
-  .chart-loading-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-
   .tooltip-axis-pointer {
     position: absolute;
     top: 0;
@@ -133,16 +116,6 @@ export const chartStyles = css`
     pointer-events: none;
     transform: translateX(-0.5px);
     z-index: 2;
-  }
-
-  .chart-loading-label {
-    font-size: 11px;
-    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
-    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 92%, #000 8%);
-    padding: 3px 10px;
-    border-radius: 10px;
-    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
-    opacity: 0.88;
   }
 
   .chart-graphs {
@@ -309,10 +282,52 @@ export const chartStyles = css`
     position: relative;
     flex: 1 1 0;
     min-width: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  .entity-trigger {
+    width: 100%;
+  }
+
+  .history-loading-indicator {
+    position: absolute;
+    top: 16px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, var(--primary-color, #03a9f4) 12%);
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    box-shadow: 0 2px 8px rgb(0 0 0 / 14%);
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: none;
+    transform: translateY(-50%);
+    z-index: 1;
+  }
+
+  .history-loading-spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--better-history-muted-color, var(--secondary-text-color, #888)) 28%, transparent);
+    border-top-color: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    box-sizing: border-box;
+    animation: better-history-spin 850ms linear infinite;
+  }
+
+  @keyframes better-history-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .entity-row {

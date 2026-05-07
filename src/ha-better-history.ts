@@ -685,10 +685,9 @@ export class HaBetterHistory extends LitElement {
               >
                 ${groups.map((g) => this._renderGraphGroup(g))}
                 ${showTooltip ? this._tooltip.renderTooltip() : nothing}
-                ${this._data.loading ? html`<div class="chart-loading-overlay"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>` : nothing}
               </div>`
           : this._data.loading
-            ? html`<div class="chart-loading"><span class="chart-loading-label">${localize(this.hass, "loading")}</span></div>`
+            ? nothing
           : html`<div class="empty">${localize(this.hass, "empty")}</div>`}
       </div>
     `;
@@ -732,6 +731,7 @@ export class HaBetterHistory extends LitElement {
       path: this._path,
       selectedSources: this._selectedSources,
       resolved: this._resolved,
+      loading: this._data.loading,
       getItems: this._getEntityPickerItems,
       getAdditionalItems: this._getAdditionalEntityPickerItems,
       onEntityPickerOpened: () => this._onEntityPickerOpened(),
