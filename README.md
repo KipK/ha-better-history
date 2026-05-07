@@ -32,7 +32,6 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `show-entity-picker` | `boolean` | `false`   | Show entity picker + attribute browser            |
 | `show-legend`        | `boolean` | `true`    | Legend below the chart                            |
 | `show-tooltip`       | `boolean` | `true`    | Multi-series tooltip on hover                     |
-| `forced`             | `boolean` | `true`    | Keep preconfigured entities/attributes non-removable |
 | `width`              | `string`  | `"100%"`  | CSS width of the component wrapper                |
 | `height`             | `string`  | —         | CSS height; if omitted, computed from graph count |
 | `line-mode`          | `string`  | `"stair"` | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
@@ -71,7 +70,6 @@ interface BetterHistoryConfig {
   showEntityPicker?: boolean;        // default: false
   showLegend?: boolean;              // default: true
   showTooltip?: boolean;             // default: true
-  forced?: boolean;                  // default: true
   width?: string;                    // default: "100%"
   height?: string;
   lineMode?: "stair" | "line" | "column"; // default: "stair"
@@ -270,8 +268,6 @@ chart.config = {
 ```
 
 The entity picker lets users browse entity attributes and add/remove series at runtime. Non-default series are removable via chip buttons.
-
-Preconfigured `series` and `defaultEntities` are shown as chips when the entity picker is enabled. By default they are forced and have no close button. Set `forced: false` or `forced="false"` to let users remove those preselected chips from the viewer.
 
 ### Viewer tools
 

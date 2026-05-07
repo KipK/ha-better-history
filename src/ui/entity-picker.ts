@@ -28,9 +28,7 @@ interface EntityPickerRenderOpts {
   selectedEntityId?: string;
   path: string[];
   selectedSources: HistorySource[];
-  chipSources: HistorySource[];
   resolved?: ResolvedConfig;
-  forced: boolean;
   loading: boolean;
   getItems: () => unknown[];
   getAdditionalItems: (search?: string) => unknown[];
@@ -82,9 +80,9 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
             </div>
           `
         : nothing}
-      ${opts.chipSources.length > 0 ? html`
+      ${opts.selectedSources.length > 0 ? html`
         <div class="entity-row">
-          ${opts.chipSources.map((source) => renderChip(source, opts))}
+          ${opts.selectedSources.map((source) => renderChip(source, opts))}
         </div>
       ` : nothing}
     </div>
@@ -136,7 +134,7 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
           : html`<ha-icon .icon=${attrValueTypeIcon(source.valueType)}></ha-icon>`}
       </span>
       <span class="source-chip-label">${source.label}</span>
-      ${!isDefault || !opts.forced
+      ${!isDefault
         ? html`<button
             class="source-chip-remove"
             @click=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
@@ -272,14 +270,6 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   }
 
   if (isResolvedSource(source.id, opts)) {
-    if (!opts.forced) {
-      return html`
-        <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--removable" @click=${() => opts.onSourceRemoved(source.id)}>
-          <span class="entity-browser-entry-label">${entity.entity_id}</span>
-        </div>
-      `;
-    }
-
     return html`
       <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--forced">
         <span class="entity-browser-entry-label">${entity.entity_id}</span>
@@ -334,15 +324,6 @@ function renderTreeEntry(
   }
 
   if (isResolvedSource(source.id, opts)) {
-    if (!opts.forced) {
-      return html`
-        <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--removable" @click=${() => opts.onSourceRemoved(source.id)}>
-          <span class="entity-browser-entry-label">${key}</span>
-          <span class="entity-browser-entry-type">${type}</span>
-        </div>
-      `;
-    }
-
     return html`
       <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--forced">
         <span class="entity-browser-entry-label">${key}</span>
