@@ -83,6 +83,7 @@ export class HaBetterHistory extends LitElement {
   @property({ attribute: "title-color" }) titleColor?: string;
   @property() language?: string;
   @property({ type: Boolean, attribute: "debug-performance" }) debugPerformance = false;
+  @property({ type: Boolean, attribute: "tools-open" }) toolsOpen = false;
 
   @state() private _resolved?: ResolvedConfig;
   @state() private _hiddenSeriesIds: string[] = [];
@@ -92,7 +93,6 @@ export class HaBetterHistory extends LitElement {
   @state() private _viewEnd?: Date;
   @state() private _datePickerReady = false;
   @state() private _entityComponentsReady = false;
-  @state() private _toolsOpen = false;
   @state() private _runtimeLineMode?: BetterHistoryLineMode;
 
   @state() private _attributeMenuOpen = false;
@@ -930,7 +930,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _renderToolsPanel(): TemplateResult | typeof nothing {
-    if (!this._toolsOpen || !this._resolved) return nothing;
+    if (!this.toolsOpen || !this._resolved) return nothing;
 
     const viewRange = this._effectiveViewRange();
     const startPercent = this._rangePercent(this._viewStart, this._resolved.startDate);
@@ -999,14 +999,6 @@ export class HaBetterHistory extends LitElement {
           ? html`<div class="controls-bar">
               ${this._renderDatePicker()}
               ${this._renderEntityPickerUI()}
-              <button
-                class="tools-toggle"
-                title=${localize(this.hass, "tools")}
-                ?active=${this._toolsOpen}
-                @click=${() => { this._toolsOpen = !this._toolsOpen; }}
-              >
-                <ha-icon .icon=${"mdi:tools"}></ha-icon>
-              </button>
             </div>`
           : nothing}
         ${this._renderToolsPanel()}

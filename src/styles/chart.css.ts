@@ -267,7 +267,6 @@ export const chartStyles = css`
     width: 100%;
   }
 
-  .tools-toggle,
   .tool-icon-button,
   .mode-button,
   .tool-action-button {
@@ -282,21 +281,12 @@ export const chartStyles = css`
     font: inherit;
   }
 
-  .tools-toggle {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--better-history-radius, 8px);
-    flex: 0 0 auto;
-  }
-
-  .tools-toggle[active],
   .mode-button[active] {
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
     background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 18%, transparent);
     border-color: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
   }
 
-  .tools-toggle ha-icon,
   .tool-icon-button ha-icon,
   .mode-button ha-icon,
   .tool-action-button ha-icon {
@@ -362,7 +352,7 @@ export const chartStyles = css`
 
   .range-slider-stack {
     position: relative;
-    height: 20px;
+    height: 24px;
     display: flex;
     align-items: center;
     padding: 0 2px;
@@ -411,19 +401,19 @@ export const chartStyles = css`
   }
 
   .range-slider::-webkit-slider-runnable-track {
-    height: 20px;
+    height: 24px;
     background: transparent;
   }
 
   .range-slider::-moz-range-track {
-    height: 20px;
+    height: 24px;
     background: transparent;
   }
 
   .range-slider::-webkit-slider-thumb {
     appearance: none;
-    width: 5px;
-    height: 14px;
+    width: 12px;
+    height: 18px;
     margin-top: 3px;
     border: 0;
     border-radius: 999px;
@@ -435,8 +425,8 @@ export const chartStyles = css`
   }
 
   .range-slider::-moz-range-thumb {
-    width: 5px;
-    height: 14px;
+    width: 12px;
+    height: 18px;
     border: 0;
     border-radius: 999px;
     background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 86%, var(--primary-text-color, #fff) 14%);
@@ -492,10 +482,6 @@ export const chartStyles = css`
     .controls-bar {
       flex-direction: column;
       align-items: stretch;
-    }
-
-    .tools-toggle {
-      width: 100%;
     }
 
     .tools-panel {

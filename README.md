@@ -42,6 +42,7 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `title-font-size`    | `string`  | HA theme  | Optional title font-size override                 |
 | `title-color`        | `string`  | HA theme  | Optional title color override                     |
 | `language`           | `string`  | HA locale | Language code for labels (`"en"`, `"fr"`, …)      |
+| `tools-open`         | `boolean` | `false`   | Open/close the viewer tools panel from outside    |
 
 ### JS-only properties
 
@@ -271,11 +272,18 @@ The entity picker lets users browse entity attributes and add/remove series at r
 
 ### Viewer tools
 
-The tools button (`mdi:tools`) opens a compact viewer toolbar above the graph. It includes:
+The viewer toolbar appears above the graph when `tools-open` is `true`. It includes:
 
 - a time range selector that zooms inside the already loaded history range without refetching data;
 - a display mode switch for stair, line, and column rendering;
 - a JSON export button.
+
+The panel has no built-in toggle button — visibility is fully controlled by the parent via the `tools-open` attribute (or `.toolsOpen` property). A typical integration adds a `mdi:tools` icon button in its own header and binds its state:
+
+```html
+<button @click=${() => this._toolsOpen = !this._toolsOpen}>tools</button>
+<ha-better-history .toolsOpen=${this._toolsOpen}></ha-better-history>
+```
 
 Exports use the compact `ha-better-history-series-v1` format:
 
