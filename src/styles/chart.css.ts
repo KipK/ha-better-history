@@ -546,6 +546,23 @@ export const chartStyles = css`
     background: transparent;
   }
 
+  .entity-browser-entry--present {
+    cursor: default;
+    color: var(--ha-color-amber-80, #ffb74d);
+    background: color-mix(in srgb, var(--ha-color-amber-80, #ffb74d) 14%, transparent);
+    box-shadow: inset 3px 0 0 var(--ha-color-amber-80, #ffb74d);
+  }
+
+  .entity-browser-entry--present:hover {
+    background: color-mix(in srgb, var(--ha-color-amber-80, #ffb74d) 14%, transparent);
+  }
+
+  .entity-browser-entry--present .entity-browser-entry-type,
+  .entity-browser-entry--present .entity-browser-entry-arrow {
+    color: inherit;
+    opacity: 0.78;
+  }
+
   .entity-browser-entry-label {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -600,11 +617,14 @@ export const chartStyles = css`
 
   .entity-browser-entity--present {
     cursor: default;
-    opacity: 0.45;
+    color: var(--ha-color-green-80, #81c784);
+    border-color: color-mix(in srgb, var(--ha-color-green-80, #81c784) 62%, var(--better-history-border-color, var(--divider-color, #444)));
+    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 14%, transparent);
+    box-shadow: inset 3px 0 0 var(--ha-color-green-80, #81c784);
   }
 
   .entity-browser-entity--present:hover {
-    background: transparent;
+    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 14%, transparent);
   }
 
   .entity-browser-entity-id {

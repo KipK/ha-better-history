@@ -298,7 +298,7 @@ function renderTreeEntry(
 
   if (isAlreadyPresent(source.id, opts)) {
     return html`
-      <div class="entity-browser-entry entity-browser-entry--disabled">
+      <div class="entity-browser-entry entity-browser-entry--present">
         <span class="entity-browser-entry-label">${key}</span>
         <span class="entity-browser-entry-type">${type}</span>
       </div>
