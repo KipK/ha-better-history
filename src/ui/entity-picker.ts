@@ -28,6 +28,7 @@ interface EntityPickerRenderOpts {
   selectedEntityId?: string;
   path: string[];
   selectedSources: HistorySource[];
+  draggingSourceId?: string;
   resolved?: ResolvedConfig;
   loading: boolean;
   getItems: () => unknown[];
@@ -37,6 +38,10 @@ interface EntityPickerRenderOpts {
   onEntitySelected(entityId: string): void;
   onSourceAdded(source: HistorySource): void;
   onSourceRemoved(sourceId: string): void;
+  onSourceDragStart(sourceId: string, event: DragEvent): void;
+  onSourceDragOver(sourceId: string | undefined, event: DragEvent): void;
+  onSourceDragEnd(): void;
+  onSourceDrop(sourceId: string | undefined, event: DragEvent): void;
   onBreadcrumbClick(path: string[]): void;
   onCloseMenu(): void;
 }
@@ -81,7 +86,11 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           `
         : nothing}
       ${opts.selectedSources.length > 0 ? html`
-        <div class="entity-row">
+        <div
+          class="entity-row"
+          @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
+          @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
+        >
           ${opts.selectedSources.map((source) => renderChip(source, opts))}
         </div>
       ` : nothing}
@@ -125,9 +134,18 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
   const isEntity = source.kind === "entity_state";
   const entity = opts.hass?.states[source.entityId];
   const chipClass = isEntity ? "entity-source-chip" : "attr-source-chip";
+  const isDragging = opts.draggingSourceId === source.id;
 
   return html`
-    <div class="source-chip ${chipClass}">
+    <div
+      class="source-chip ${chipClass}"
+      draggable=${!isDefault}
+      ?dragging=${isDragging}
+      @dragstart=${(e: DragEvent) => opts.onSourceDragStart(source.id, e)}
+      @dragend=${() => opts.onSourceDragEnd()}
+      @dragover=${(e: DragEvent) => { if (!isDefault) opts.onSourceDragOver(source.id, e); }}
+      @drop=${(e: DragEvent) => opts.onSourceDrop(source.id, e)}
+    >
       <span class="source-chip-icon">
         ${isEntity && entity
           ? html`<ha-icon .icon=${entityDomainIcon(entity)}></ha-icon>`

@@ -103,6 +103,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _selectedSources: HistorySource[] = [];
   @state() private _customEntityIds: string[] = [];
   @state() private _entityPickerOpen = false;
+  @state() private _draggingSourceId?: string;
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
@@ -117,6 +118,8 @@ export class HaBetterHistory extends LitElement {
   private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
   private _liveNowTimer?: ReturnType<typeof setInterval>;
+  private _dragStartSourceIds?: string[];
+  private _dragDropCommitted = false;
   private _lastPickerOverlayOpen = false;
 
   @state() private _containerWidth = 0;
@@ -901,6 +904,7 @@ export class HaBetterHistory extends LitElement {
       selectedEntityId: this._selectedEntityId,
       path: this._path,
       selectedSources: this._selectedSources,
+      draggingSourceId: this._draggingSourceId,
       resolved: this._resolved,
       loading: this._data.loading,
       getItems: this._getEntityPickerItems,
@@ -910,6 +914,10 @@ export class HaBetterHistory extends LitElement {
       onEntitySelected: (entityId) => this._onEntitySelected(entityId),
       onSourceAdded: (source) => this._addSource(source),
       onSourceRemoved: (sourceId) => this._removeSource(sourceId),
+      onSourceDragStart: (sourceId, event) => this._onSourceDragStart(sourceId, event),
+      onSourceDragOver: (sourceId, event) => this._onSourceDragOver(sourceId, event),
+      onSourceDragEnd: () => this._onSourceDragEnd(),
+      onSourceDrop: (sourceId, event) => this._onSourceDrop(sourceId, event),
       onBreadcrumbClick: (path) => { this._path = path; },
       onCloseMenu: () => this._closeAttributeMenu(),
     });
@@ -1368,6 +1376,94 @@ export class HaBetterHistory extends LitElement {
       })
     );
 
+    void this.requestUpdate();
+  }
+
+  private _onSourceDragStart(sourceId: string, event: DragEvent): void {
+    const source = this._selectedSources.find((item) => item.id === sourceId);
+
+    if (!source || this._isDefaultSource(source)) {
+      event.preventDefault();
+      return;
+    }
+
+    this._draggingSourceId = sourceId;
+    this._dragStartSourceIds = this._selectedSources.map((item) => item.id);
+    this._dragDropCommitted = false;
+    event.dataTransfer?.setData("text/plain", sourceId);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+    }
+  }
+
+  private _onSourceDragEnd(): void {
+    if (!this._dragDropCommitted && this._dragStartSourceIds) {
+      const order = new Map(this._dragStartSourceIds.map((id, index) => [id, index]));
+
+      this._selectedSources = [...this._selectedSources].sort(
+        (left, right) => (order.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
+
+    this._draggingSourceId = undefined;
+    this._dragStartSourceIds = undefined;
+    this._dragDropCommitted = false;
+  }
+
+  private _onSourceDragOver(targetSourceId: string | undefined, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+
+    const draggedId = this._draggingSourceId ?? event.dataTransfer?.getData("text/plain");
+    if (!draggedId) return;
+
+    this._previewSourceOrder(draggedId, targetSourceId);
+  }
+
+  private _onSourceDrop(targetSourceId: string | undefined, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const draggedId = this._draggingSourceId ?? event.dataTransfer?.getData("text/plain");
+    if (!draggedId) return;
+
+    this._previewSourceOrder(draggedId, targetSourceId);
+    this._dragDropCommitted = true;
+    this.dispatchEvent(
+      new CustomEvent("series-reordered", {
+        detail: { sourceIds: this._selectedSources.map((source) => source.id) },
+        bubbles: true,
+        composed: true
+      })
+    );
+
+    void this.requestUpdate();
+  }
+
+  private _previewSourceOrder(draggedId: string, targetSourceId: string | undefined): void {
+    if (draggedId === targetSourceId) return;
+
+    const dragged = this._selectedSources.find((source) => source.id === draggedId);
+    if (!dragged || this._isDefaultSource(dragged)) return;
+
+    const withoutDragged = this._selectedSources.filter((source) => source.id !== draggedId);
+    const targetIndex = targetSourceId
+      ? withoutDragged.findIndex((source) => source.id === targetSourceId)
+      : withoutDragged.length;
+
+    if (targetIndex < 0) return;
+
+    const nextSources = [
+      ...withoutDragged.slice(0, targetIndex),
+      dragged,
+      ...withoutDragged.slice(targetIndex)
+    ];
+    if (nextSources.map((source) => source.id).join("|") === this._selectedSources.map((source) => source.id).join("|")) return;
+
+    this._selectedSources = nextSources;
     void this.requestUpdate();
   }
 }

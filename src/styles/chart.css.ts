@@ -726,6 +726,20 @@ export const chartStyles = css`
     -webkit-user-select: none;
   }
 
+  .source-chip[draggable="true"] {
+    cursor: grab;
+  }
+
+  .source-chip[draggable="true"]:active {
+    cursor: grabbing;
+  }
+
+  .source-chip[dragging] {
+    opacity: 0.48;
+    outline: 2px solid var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline-offset: 2px;
+  }
+
   .source-chip.entity-source-chip {
     border-color: var(--ha-color-green-80, #81c784);
   }

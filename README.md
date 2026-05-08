@@ -192,6 +192,7 @@ All events bubble and are composed.
 | `series-toggled`  | `{ id: string, hidden: boolean }`                  | Legend item clicked                                         |
 | `series-added`    | `{ source: HistorySource }`                        | User adds a series via entity picker                        |
 | `series-removed`  | `{ sourceId: string }`                             | User removes a non-default series                           |
+| `series-reordered` | `{ sourceIds: string[] }`                         | User drags selected source chips into a new order            |
 | `tooltip-changed` | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
 | `picker-overlay-changed` | `{ open: boolean }`                         | Entity picker or attribute browser overlay opens/closes      |
 
@@ -275,7 +276,7 @@ chart.config = {
 </script>
 ```
 
-The entity picker lets users browse entity attributes and add/remove series at runtime. Non-default series are removable via chip buttons.
+The entity picker lets users browse entity attributes and add/remove series at runtime. Non-default series are removable via chip buttons. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 
 ### Viewer tools
 
