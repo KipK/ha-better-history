@@ -191,6 +191,7 @@ All events bubble and are composed.
 | `series-added`    | `{ source: HistorySource }`                        | User adds a series via entity picker                        |
 | `series-removed`  | `{ sourceId: string }`                             | User removes a non-default series                           |
 | `tooltip-changed` | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
+| `picker-overlay-changed` | `{ open: boolean }`                         | Entity picker or attribute browser overlay opens/closes      |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
 

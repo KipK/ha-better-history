@@ -114,6 +114,7 @@ export class HaBetterHistory extends LitElement {
   private _suppressLineAnimation = false;
   private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
+  private _lastPickerOverlayOpen = false;
 
   @state() private _containerWidth = 0;
   private _resizeObserver?: ResizeObserver;
@@ -343,8 +344,25 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
+    if (changed.has("_attributeMenuOpen") || changed.has("_entityPickerOpen")) {
+      this._emitPickerOverlayState();
+    }
     this._animateClipPaths();
     this._wasLoading = this._data.loading;
+  }
+
+  private _emitPickerOverlayState(): void {
+    const open = this._attributeMenuOpen || this._entityPickerOpen;
+    if (open === this._lastPickerOverlayOpen) return;
+
+    this._lastPickerOverlayOpen = open;
+    this.dispatchEvent(
+      new CustomEvent("picker-overlay-changed", {
+        detail: { open },
+        bubbles: true,
+        composed: true
+      })
+    );
   }
 
   private _onDateRangeChanged(startDate: Date, endDate: Date): void {
