@@ -36,6 +36,7 @@ import { logPerformance, performanceNow } from "./utils/performance.js";
 
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
+const LIVE_NOW_UPDATE_MS = 1000;
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -91,6 +92,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _rangeEnd?: Date;
   @state() private _viewStart?: Date;
   @state() private _viewEnd?: Date;
+  @state() private _liveNow = Date.now();
   @state() private _datePickerReady = false;
   @state() private _entityComponentsReady = false;
   @state() private _runtimeLineMode?: BetterHistoryLineMode;
@@ -114,6 +116,7 @@ export class HaBetterHistory extends LitElement {
   private _suppressLineAnimation = false;
   private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
+  private _liveNowTimer?: ReturnType<typeof setInterval>;
   private _lastPickerOverlayOpen = false;
 
   @state() private _containerWidth = 0;
@@ -141,6 +144,7 @@ export class HaBetterHistory extends LitElement {
       clearTimeout(this._sourceAddBatchTimer);
       this._sourceAddBatchTimer = undefined;
     }
+    this._stopLiveClock();
   }
 
   private _maxXTicks(): number {
@@ -153,7 +157,55 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _effectiveEndDate(): Date {
+    const requestedEnd = this._requestedEndDate();
+    const liveNow = this._liveNow || Date.now();
+
+    return requestedEnd.getTime() > liveNow ? new Date(liveNow) : requestedEnd;
+  }
+
+  private _requestedEndDate(): Date {
     return this._rangeEnd ?? this.endDate ?? this.config?.endDate ?? new Date();
+  }
+
+  private _rangeExtendsFuture(): boolean {
+    return this._requestedEndDate().getTime() > Date.now();
+  }
+
+  private _syncLiveClock(): void {
+    if (!this._rangeExtendsFuture()) {
+      this._stopLiveClock();
+      return;
+    }
+
+    if (this._liveNowTimer !== undefined) return;
+
+    const now = Date.now();
+    if (this._viewEnd) {
+      this._viewEnd = new Date(now);
+    }
+    this._liveNow = now;
+    this._liveNowTimer = setInterval(() => {
+      if (!this._rangeExtendsFuture()) {
+        this._stopLiveClock();
+        return;
+      }
+
+      const previousLiveEnd = this._effectiveEndDate().getTime();
+      const pinnedToLiveEnd = !this._viewEnd || Math.abs(this._viewEnd.getTime() - previousLiveEnd) <= LIVE_NOW_UPDATE_MS * 2;
+      const nextNow = Date.now();
+
+      this._liveNow = nextNow;
+      if (pinnedToLiveEnd) {
+        this._viewEnd = new Date(nextNow);
+      }
+    }, LIVE_NOW_UPDATE_MS);
+  }
+
+  private _stopLiveClock(): void {
+    if (this._liveNowTimer === undefined) return;
+
+    clearInterval(this._liveNowTimer);
+    this._liveNowTimer = undefined;
   }
 
   private _effectiveLineMode(): BetterHistoryLineMode | undefined {
@@ -162,7 +214,9 @@ export class HaBetterHistory extends LitElement {
 
   private _effectiveViewRange(): { start: Date; end: Date } {
     const loadedStart = this._resolved?.startDate ?? this._effectiveStartDate();
-    const loadedEnd = this._resolved?.endDate ?? this._effectiveEndDate();
+    const loadedEnd = this._rangeExtendsFuture()
+      ? this._effectiveEndDate()
+      : this._resolved?.endDate ?? this._effectiveEndDate();
     const start = this._viewStart && this._viewStart.getTime() >= loadedStart.getTime()
       ? this._viewStart
       : loadedStart;
@@ -230,9 +284,28 @@ export class HaBetterHistory extends LitElement {
 
     const startTime = this._effectiveStartDate().getTime();
     const endTime = this._effectiveEndDate().getTime();
+    const futureRange = this._rangeExtendsFuture();
 
-    if (startTime !== this._prevStartTime || endTime !== this._prevEndTime || this._containerWidth !== this._prevContainerWidth) {
-      this._prevClipX.clear();
+    this._syncLiveClock();
+
+    if (changed.has("hass") && futureRange) {
+      this._data.updateLivePoints(this.hass, this._lastFetchSources, new Date(startTime), new Date(endTime));
+    }
+
+    const timeChanged = startTime !== this._prevStartTime || endTime !== this._prevEndTime;
+    const containerChanged = this._containerWidth !== this._prevContainerWidth;
+    const explicitRangeChanged = changed.has("_rangeStart")
+      || changed.has("_rangeEnd")
+      || changed.has("startDate")
+      || changed.has("endDate")
+      || changed.has("config")
+      || changed.has("hours");
+    const liveRangeTick = futureRange && timeChanged && !containerChanged && !explicitRangeChanged;
+
+    if (timeChanged || containerChanged) {
+      if (!liveRangeTick) {
+        this._prevClipX.clear();
+      }
       this._prevStartTime = startTime;
       this._prevEndTime = endTime;
       this._prevContainerWidth = this._containerWidth;
@@ -250,6 +323,10 @@ export class HaBetterHistory extends LitElement {
       if (hassOnly) {
         const now = Date.now();
         const rounded = Math.floor(now / 1000) * 1000;
+        if (futureRange && this._lastFetchKey) {
+          this._lastHassResolveTime = rounded;
+          return;
+        }
         if (rounded === this._lastHassResolveTime && this._lastFetchKey) return;
         this._lastHassResolveTime = rounded;
       }
@@ -840,7 +917,9 @@ export class HaBetterHistory extends LitElement {
 
   private _rangePercent(date: Date | undefined, fallback: Date): number {
     const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
-    const end = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+    const end = this._rangeExtendsFuture()
+      ? this._effectiveEndDate().getTime()
+      : this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
     const span = Math.max(end - start, 1);
     const value = date?.getTime() ?? fallback.getTime();
 
@@ -849,7 +928,9 @@ export class HaBetterHistory extends LitElement {
 
   private _loadedRangeMs(): { start: number; end: number; span: number } {
     const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
-    const rawEnd = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+    const rawEnd = this._rangeExtendsFuture()
+      ? this._effectiveEndDate().getTime()
+      : this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
     const end = Math.max(rawEnd, start + 1);
 
     return { start, end, span: end - start };
@@ -883,7 +964,9 @@ export class HaBetterHistory extends LitElement {
 
   private _dateFromRangePercent(percent: number): Date {
     const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
-    const end = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+    const end = this._rangeExtendsFuture()
+      ? this._effectiveEndDate().getTime()
+      : this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
 
     return new Date(start + (Math.max(0, Math.min(1000, percent)) / 1000) * (end - start));
   }
@@ -959,7 +1042,7 @@ export class HaBetterHistory extends LitElement {
     if (!this._resolved) return;
 
     this._viewStart = this._resolved.startDate;
-    this._viewEnd = this._resolved.endDate;
+    this._viewEnd = this._rangeExtendsFuture() ? this._effectiveEndDate() : this._resolved.endDate;
 
     this.dispatchEvent(
       new CustomEvent("view-range-changed", {
@@ -999,7 +1082,7 @@ export class HaBetterHistory extends LitElement {
       exportedAt: new Date().toISOString(),
       loadedRange: {
         start: this._resolved?.startDate.toISOString(),
-        end: this._resolved?.endDate.toISOString()
+        end: (this._rangeExtendsFuture() ? this._effectiveEndDate() : this._resolved?.endDate)?.toISOString()
       },
       viewRange: {
         start: viewRange.start.toISOString(),

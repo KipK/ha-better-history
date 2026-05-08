@@ -324,27 +324,42 @@ function statesByEntity(history: HistoryResponse, entityIds: string[]): Map<stri
   return result;
 }
 
-function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, end: Date): HistoryPoint[] {
+export function currentSourcePoint(
+  hass: HomeAssistant,
+  source: HistorySource,
+  fallbackTime = Date.now()
+): HistoryPoint | undefined {
   const entity = hass.states[source.entityId];
 
   if (!entity) {
-    return [];
+    return undefined;
   }
 
   const state: HistoryState = {
     entity_id: entity.entity_id,
     state: entity.state,
-    last_changed: start.toISOString(),
+    last_changed: entity.last_changed,
+    last_updated: entity.last_updated,
     attributes: entity.attributes
   };
   const value = valueFromState(state, source);
+  const entityTime = timeFromState(state);
+  const time = Number.isFinite(entityTime) ? entityTime : fallbackTime;
 
-  return value === undefined
-    ? []
-    : [
-        { time: start.getTime(), value },
-        { time: Math.min(end.getTime(), Date.now()), value }
-      ];
+  return value === undefined || !Number.isFinite(time) ? undefined : { time, value };
+}
+
+function currentPoint(hass: HomeAssistant, source: HistorySource, start: Date, end: Date): HistoryPoint[] {
+  const point = currentSourcePoint(hass, source, start.getTime());
+
+  if (!point) {
+    return [];
+  }
+
+  return [
+    { time: start.getTime(), value: point.value },
+    { time: Math.min(end.getTime(), Date.now()), value: point.value }
+  ];
 }
 
 type HistoryCoverageKind = "state" | "full";

@@ -55,6 +55,8 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `endDate`        | `Date`                | `undefined` | Upper bound (default: now)                         |
 | `attributeUnits` | `AttributeUnitMap`    | `undefined` | Map from attribute dot-paths to display units      |
 
+If `endDate` is in the future, the component fetches and renders only up to the current time. The visible time axis then advances live until the requested end is reached, using current `hass.states` updates for entity and attribute points instead of refetching Home Assistant history for every update.
+
 ## `BetterHistoryConfig`
 
 The `config` property accepts a `BetterHistoryConfig` object. Every field is optional — the component does something reasonable when nothing is provided.

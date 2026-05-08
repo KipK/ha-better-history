@@ -1,5 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchHistory, HistoryDataAccumulator, type HistorySeries, type HistorySource } from "../data/history.js";
+import { currentSourcePoint, fetchHistory, HistoryDataAccumulator, type HistoryPoint, type HistorySeries, type HistorySource } from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 import { logPerformance, performanceNow } from "../utils/performance.js";
 
@@ -54,6 +54,29 @@ function seriesContentEquals(left: HistorySeries[], right: HistorySeries[]): boo
   }
 
   return true;
+}
+
+function mergeLivePoint(points: HistoryPoint[], point: HistoryPoint): HistoryPoint[] {
+  const existingIndex = points.findIndex((item) => item.time === point.time);
+
+  if (existingIndex !== -1) {
+    if (points[existingIndex].value === point.value) {
+      return points;
+    }
+
+    const next = [...points];
+    next[existingIndex] = point;
+
+    return next;
+  }
+
+  const previous = [...points].reverse().find((item) => item.time < point.time);
+
+  if (previous?.value === point.value) {
+    return points;
+  }
+
+  return [...points, point].sort((left, right) => left.time - right.time);
 }
 
 export class DataController implements ReactiveController {
@@ -445,6 +468,43 @@ export class DataController implements ReactiveController {
           });
         }
       });
+  }
+
+  updateLivePoints(
+    hass: HomeAssistant | undefined,
+    sources: HistorySource[],
+    start: Date,
+    end: Date
+  ): void {
+    if (!hass || sources.length === 0 || this.series.length === 0) return;
+
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    let changed = false;
+    const bySourceId = new Map(sources.map((source) => [source.id, source]));
+    const nextSeries = this.series.map((series) => {
+      const source = bySourceId.get(series.source.id);
+      if (!source) return series;
+
+      const current = currentSourcePoint(hass, source, endTime);
+      if (!current) return series;
+
+      const livePoint = {
+        ...current,
+        time: Math.min(Math.max(current.time, startTime), endTime)
+      };
+      const points = mergeLivePoint(series.points, livePoint);
+      if (points === series.points) return series;
+
+      changed = true;
+
+      return { ...series, points };
+    });
+
+    if (changed) {
+      this.series = nextSeries;
+      this.host.requestUpdate();
+    }
   }
 
   private _mergeSeries(base: HistorySeries[], partial: HistorySeries[]): HistorySeries[] {
