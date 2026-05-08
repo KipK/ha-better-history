@@ -385,12 +385,31 @@ export const chartStyles = css`
   .range-selection {
     position: absolute;
     top: 50%;
-    height: 2px;
+    height: 12px;
     border-radius: 999px;
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 16%, transparent);
+    transform: translateY(-50%);
+    cursor: grab;
+    pointer-events: auto;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 26%, transparent);
+    touch-action: none;
+    z-index: 1;
+  }
+
+  .range-selection::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 50%;
+    height: 2px;
+    border-radius: inherit;
     background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 82%, var(--primary-text-color, #fff) 18%);
     transform: translateY(-50%);
-    pointer-events: none;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 26%, transparent);
+  }
+
+  .range-selection[dragging] {
+    cursor: grabbing;
   }
 
   .range-slider {
@@ -402,6 +421,7 @@ export const chartStyles = css`
     background: transparent;
     cursor: ew-resize;
     pointer-events: none;
+    z-index: 2;
   }
 
   .range-slider::-webkit-slider-runnable-track {
@@ -501,6 +521,10 @@ export const chartStyles = css`
     .range-slider::-webkit-slider-runnable-track,
     .range-slider::-moz-range-track {
       height: 30px;
+    }
+
+    .range-selection {
+      height: 18px;
     }
 
     .range-slider::-webkit-slider-thumb {

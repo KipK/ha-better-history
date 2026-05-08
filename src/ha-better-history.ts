@@ -829,6 +829,40 @@ export class HaBetterHistory extends LitElement {
     return Math.round(((value - start) / span) * 1000);
   }
 
+  private _loadedRangeMs(): { start: number; end: number; span: number } {
+    const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
+    const rawEnd = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
+    const end = Math.max(rawEnd, start + 1);
+
+    return { start, end, span: end - start };
+  }
+
+  private _minViewSpanMs(): number {
+    const { span } = this._loadedRangeMs();
+
+    return Math.min(60_000, Math.max(1, Math.floor(span / 1000)));
+  }
+
+  private _setViewRangeMs(startMs: number, endMs: number): void {
+    const loaded = this._loadedRangeMs();
+    const minSpan = this._minViewSpanMs();
+    const requestedSpan = Math.max(endMs - startMs, minSpan);
+    const span = Math.min(requestedSpan, loaded.span);
+    const start = Math.min(Math.max(startMs, loaded.start), loaded.end - span);
+    const end = start + span;
+
+    this._viewStart = new Date(start);
+    this._viewEnd = new Date(end);
+
+    this.dispatchEvent(
+      new CustomEvent("view-range-changed", {
+        detail: { start: this._viewStart, end: this._viewEnd },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   private _dateFromRangePercent(percent: number): Date {
     const start = this._resolved?.startDate.getTime() ?? this._effectiveStartDate().getTime();
     const end = this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
@@ -849,21 +883,58 @@ export class HaBetterHistory extends LitElement {
     const input = event.currentTarget as HTMLInputElement;
     const next = this._dateFromRangePercent(Number(input.value));
     const current = this._effectiveViewRange();
-    const minGap = 60_000;
+    const loaded = this._loadedRangeMs();
+    const minSpan = this._minViewSpanMs();
 
     if (part === "start") {
-      this._viewStart = new Date(Math.min(next.getTime(), current.end.getTime() - minGap));
+      const end = current.end.getTime();
+      this._setViewRangeMs(Math.min(Math.max(next.getTime(), loaded.start), end - minSpan), end);
     } else {
-      this._viewEnd = new Date(Math.max(next.getTime(), current.start.getTime() + minGap));
+      const start = current.start.getTime();
+      this._setViewRangeMs(start, Math.max(Math.min(next.getTime(), loaded.end), start + minSpan));
     }
+  }
 
-    this.dispatchEvent(
-      new CustomEvent("view-range-changed", {
-        detail: this._effectiveViewRange(),
-        bubbles: true,
-        composed: true
-      })
-    );
+  private _onRangeSelectionPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+
+    const selection = event.currentTarget as HTMLElement;
+    const stack = selection.closest(".range-slider-stack");
+    if (!(stack instanceof HTMLElement)) return;
+
+    const rect = stack.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const loaded = this._loadedRangeMs();
+    const current = this._effectiveViewRange();
+    const viewStart = current.start.getTime();
+    const viewSpan = current.end.getTime() - viewStart;
+    if (viewSpan >= loaded.span - 1) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    selection.setPointerCapture(event.pointerId);
+    selection.toggleAttribute("dragging", true);
+
+    const move = (moveEvent: PointerEvent): void => {
+      moveEvent.preventDefault();
+      const delta = ((moveEvent.clientX - startX) / rect.width) * loaded.span;
+      const nextStart = Math.min(Math.max(viewStart + delta, loaded.start), loaded.end - viewSpan);
+
+      this._setViewRangeMs(nextStart, nextStart + viewSpan);
+    };
+    const cleanup = (): void => {
+      selection.toggleAttribute("dragging", false);
+      selection.removeEventListener("pointermove", move);
+      selection.removeEventListener("pointerup", cleanup);
+      selection.removeEventListener("pointercancel", cleanup);
+    };
+
+    selection.addEventListener("pointermove", move);
+    selection.addEventListener("pointerup", cleanup);
+    selection.addEventListener("pointercancel", cleanup);
   }
 
   private _resetViewRange(): void {
@@ -951,7 +1022,11 @@ export class HaBetterHistory extends LitElement {
             <span>${this._formatRangeDate(viewRange.end)}</span>
           </div>
           <div class="range-slider-stack">
-            <div class="range-selection" style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"></div>
+            <div
+              class="range-selection"
+              style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
+              @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
+            ></div>
             <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
             <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
           </div>

@@ -282,6 +282,8 @@ The viewer toolbar appears above the graph when `tools-open` is `true`. It inclu
 - a display mode switch for stair, line, and column rendering;
 - a JSON export button.
 
+Drag the highlighted range selection to pan the zoomed graph through the loaded period while keeping the same visible duration. The minimum zoom span adapts to the loaded range, so very small history windows remain movable.
+
 The panel has no built-in toggle button — visibility is fully controlled by the parent via the `tools-open` attribute (or `.toolsOpen` property). A typical integration adds a `mdi:tools` icon button in its own header and binds its state:
 
 ```html
