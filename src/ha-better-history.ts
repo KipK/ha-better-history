@@ -1006,6 +1006,7 @@ export class HaBetterHistory extends LitElement {
     const viewRange = this._effectiveViewRange();
     const startPercent = this._rangePercent(this._viewStart, this._resolved.startDate);
     const endPercent = this._rangePercent(this._viewEnd, this._resolved.endDate);
+    const selectionCenterPercent = (startPercent + endPercent) / 20;
     const currentMode = this._defaultLineMode();
 
     return html`
@@ -1025,6 +1026,10 @@ export class HaBetterHistory extends LitElement {
             <div
               class="range-selection"
               style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
+            ></div>
+            <div
+              class="range-selection-hit"
+              style="left:clamp(18px, ${selectionCenterPercent}%, calc(100% - 18px));"
               @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
             ></div>
             <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />

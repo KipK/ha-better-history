@@ -389,14 +389,18 @@ export const chartStyles = css`
     border-radius: 999px;
     background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 16%, transparent);
     transform: translateY(-50%);
-    cursor: grab;
-    pointer-events: auto;
+    pointer-events: none;
     box-shadow: 0 0 8px color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 26%, transparent);
-    touch-action: none;
     z-index: 1;
   }
 
-  .range-selection::before {
+  .range-selection,
+  .range-selection-hit {
+    min-width: 0;
+  }
+
+  .range-selection::before,
+  .range-selection-hit::before {
     content: "";
     position: absolute;
     left: 6px;
@@ -408,7 +412,27 @@ export const chartStyles = css`
     transform: translateY(-50%);
   }
 
-  .range-selection[dragging] {
+  .range-selection-hit {
+    position: absolute;
+    top: 50%;
+    width: max(36px, 8%);
+    height: 22px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 8%, transparent);
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+
+  .range-selection-hit::before {
+    left: 12px;
+    right: 12px;
+    opacity: 0.42;
+  }
+
+  .range-selection-hit[dragging] {
     cursor: grabbing;
   }
 
@@ -525,6 +549,11 @@ export const chartStyles = css`
 
     .range-selection {
       height: 18px;
+    }
+
+    .range-selection-hit {
+      width: max(44px, 12%);
+      height: 30px;
     }
 
     .range-slider::-webkit-slider-thumb {
