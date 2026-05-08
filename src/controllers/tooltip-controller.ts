@@ -19,6 +19,7 @@ export interface TooltipState {
   x: number;
   tooltipX: number;
   y: number;
+  placement: "above" | "below";
   activeTop: number;
   activeHeight: number;
   activeKey: string;
@@ -45,6 +46,7 @@ interface PointerChartPoint {
   activeHeight: number;
   activeIds: Set<string>;
   activeKey: string;
+  touchLike: boolean;
 }
 
 export class TooltipController implements ReactiveController {
@@ -172,19 +174,20 @@ export class TooltipController implements ReactiveController {
       this.tooltip.activeHeight === pt.activeHeight &&
       this.tooltip.activeKey === pt.activeKey &&
       Math.abs(this.tooltip.tooltipX - Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120)) < 1 &&
-      Math.abs(this.tooltip.y - Math.min(Math.max(pt.y, pt.activeTop + 28), pt.activeTop + pt.activeHeight - 28)) < 1
+      Math.abs(this.tooltip.y - this._tooltipY(pt)) < 1 &&
+      this.tooltip.placement === this._placement(pt)
     ) {
       return;
     }
 
-    const activeBottom = pt.activeTop + pt.activeHeight;
     const tooltipX = Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120);
-    const tooltipY = Math.min(Math.max(pt.y, pt.activeTop + 28), activeBottom - 28);
+    const tooltipY = this._tooltipY(pt);
 
     this.tooltip = {
       x: xFor(selectedTime, this._timeBounds),
       tooltipX,
       y: tooltipY,
+      placement: this._placement(pt),
       activeTop: pt.activeTop,
       activeHeight: pt.activeHeight,
       activeKey: pt.activeKey,
@@ -194,6 +197,28 @@ export class TooltipController implements ReactiveController {
 
     this._host.requestUpdate();
     this._emit();
+  }
+
+  private _placement(pt: PointerChartPoint): "above" | "below" {
+    const activeBottom = pt.activeTop + pt.activeHeight;
+
+    if (pt.touchLike) {
+      return pt.y < pt.activeTop + pt.activeHeight / 2 ? "above" : "below";
+    }
+
+    return activeBottom - pt.y < 120 ? "above" : "below";
+  }
+
+  private _tooltipY(pt: PointerChartPoint): number {
+    const activeBottom = pt.activeTop + pt.activeHeight;
+
+    if (pt.touchLike) {
+      return this._placement(pt) === "above"
+        ? activeBottom - 10
+        : pt.activeTop + 10;
+    }
+
+    return Math.min(Math.max(pt.y, pt.activeTop + 28), activeBottom - 28);
   }
 
   private _emit(): void {
@@ -293,7 +318,8 @@ export class TooltipController implements ReactiveController {
       activeTop,
       activeHeight: canvasRect.height,
       activeIds,
-      activeKey: [...activeIds].join("|")
+      activeKey: [...activeIds].join("|"),
+      touchLike: event.pointerType === "touch" || window.matchMedia("(hover: none) and (pointer: coarse)").matches
     };
   }
 
@@ -302,10 +328,7 @@ export class TooltipController implements ReactiveController {
 
     const axisLeftPct = (this.tooltip.x / CHART_WIDTH) * 100;
     const tooltipLeftPct = (this.tooltip.tooltipX / CHART_WIDTH) * 100;
-    const estimatedHeight = 120;
-    const activeBottom = this.tooltip.activeTop + this.tooltip.activeHeight;
-    const spaceBelow = activeBottom - this.tooltip.y;
-    const placement = spaceBelow < estimatedHeight
+    const placement = this.tooltip.placement === "above"
       ? "translate(-50%, calc(-100% - 10px))"
       : "translate(-50%, 10px)";
 

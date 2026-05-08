@@ -465,6 +465,37 @@ function seriesForScaleBounds(series: RenderableSeries[], bounds: { start: numbe
   }));
 }
 
+function scaleGroupKeyFor(series: RenderableSeries): string {
+  return series.valueType === "boolean" ? "group:boolean" : series.scaleGroupKey;
+}
+
+function seriesForVisibleScaleBounds(
+  allSeries: RenderableSeries[],
+  visibleSeries: RenderableSeries[],
+  bounds: { start: number; end: number }
+): RenderableSeries[] {
+  const visibleByGroup = new Map<string, RenderableSeries[]>();
+  const allByGroup = new Map<string, RenderableSeries[]>();
+
+  for (const series of allSeries) {
+    if (series.valueType !== "number" && series.valueType !== "boolean") continue;
+
+    const groupKey = scaleGroupKeyFor(series);
+    allByGroup.set(groupKey, [...(allByGroup.get(groupKey) ?? []), series]);
+  }
+
+  for (const series of visibleSeries) {
+    if (series.valueType !== "number" && series.valueType !== "boolean") continue;
+
+    const groupKey = scaleGroupKeyFor(series);
+    visibleByGroup.set(groupKey, [...(visibleByGroup.get(groupKey) ?? []), series]);
+  }
+
+  return [...allByGroup.entries()].flatMap(([groupKey, groupSeries]) =>
+    seriesForScaleBounds(visibleByGroup.get(groupKey) ?? groupSeries, bounds)
+  );
+}
+
 export function buildChartData(
   allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
@@ -472,7 +503,7 @@ export function buildChartData(
   disableClimateOverlay = false,
   maxXTicks = 12
 ): ChartRenderData {
-  const numericScales = numericScalesFor(seriesForScaleBounds(allSeries, timeBounds));
+  const numericScales = numericScalesFor(seriesForVisibleScaleBounds(allSeries, visibleSeries, timeBounds));
   const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
   const plotBottom = plotBottomFor(numericGraphCount);
   const segmentCount = allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
@@ -686,11 +717,15 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
     const leftScale = graphScales.find((scale) => scale.axis === "left") ?? graphScales[0];
     const rightScale = graphScales.find((scale) => scale.axis === "right");
     const graphIds = new Set(graphScales.flatMap((scale) => [...scale.ids]));
+    const allNumericGraph = data.allSeries.filter((s) =>
+      (s.valueType === "number" || s.valueType === "boolean") &&
+      scaleGroupKeyFor(s) === graphKey
+    );
     const visibleNumeric = data.visibleSeries.filter((s) => graphIds.has(s.id));
     const visibleGroup = i === 0 ? [...visibleNumeric, ...visibleNonNumeric] : visibleNumeric;
     const allGroup = i === 0
-      ? [...data.allSeries.filter((s) => graphIds.has(s.id)), ...allNonNumeric]
-      : data.allSeries.filter((s) => graphIds.has(s.id));
+      ? [...allNumericGraph, ...allNonNumeric]
+      : allNumericGraph;
     const colored = withGraphUniqueColors(allGroup, visibleGroup, i);
 
     const segSeries = colored.visibleSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");

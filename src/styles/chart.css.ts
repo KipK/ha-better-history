@@ -6,6 +6,8 @@ export const chartStyles = css`
     flex-direction: column;
     min-height: 360px;
     font-family: var(--better-history-font-family, inherit);
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .root {
@@ -13,6 +15,8 @@ export const chartStyles = css`
     min-height: 0;
     display: flex;
     flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .graph-title {
@@ -665,6 +669,8 @@ export const chartStyles = css`
     max-width: 100%;
     overflow: hidden;
     flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .source-chip.entity-source-chip {
