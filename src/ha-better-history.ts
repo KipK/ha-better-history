@@ -1206,6 +1206,10 @@ export class HaBetterHistory extends LitElement {
     if (!this._attributeMenuOpen || this._entityPickerOpen) return;
     const menu = this.renderRoot?.querySelector(".entity-menu");
     if (menu && event.composedPath().includes(menu as EventTarget)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
     this._closeAttributeMenu();
   };
 
