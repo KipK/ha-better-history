@@ -20,6 +20,7 @@
   "sideEffects": ["dist/define.js"],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "dev": "vite --config vite.config.dev.ts"
   },
