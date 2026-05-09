@@ -129,6 +129,8 @@ export class HaBetterHistory extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     ensureHaComponents();
+    document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
+    document.addEventListener("mousedown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0;
@@ -141,6 +143,8 @@ export class HaBetterHistory extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    document.removeEventListener("pointerdown", this._handleDocumentPointerDown, true);
+    document.removeEventListener("mousedown", this._handleDocumentPointerDown, true);
     document.removeEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
@@ -1291,6 +1295,9 @@ export class HaBetterHistory extends LitElement {
     }
     this._selectedEntityId = entityId;
     this._path = [];
+    // Selecting an entity closes the HA picker overlay; ensure state stays in sync
+    // even if `picker-closed` is not delivered.
+    this._entityPickerOpen = false;
     this._attributeMenuOpen = true;
   }
 
@@ -1303,16 +1310,53 @@ export class HaBetterHistory extends LitElement {
     this._entityPickerOpen = false;
   }
 
+  // When the attribute browser is open, swallow outside pointer/mouse events
+  // before HA's dialog scrim handler fires. Otherwise mwc-dialog's scrim logic
+  // (which reacts to pointerdown) would close the parent dialog when the user
+  // only meant to dismiss the attribute browser.
+  private _handleDocumentPointerDown = (event: Event): void => {
+    if (!this._attributeMenuOpen) return;
+    if (this._isEventInsideAttributeOverlay(event)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+
   private _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen || this._entityPickerOpen) return;
-    const menu = this.renderRoot?.querySelector(".entity-menu");
-    if (menu && event.composedPath().includes(menu as EventTarget)) return;
+    if (!this._attributeMenuOpen) return;
+    if (this._isEventInsideAttributeOverlay(event)) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     this._closeAttributeMenu();
   };
+
+  private _isEventInsideAttributeOverlay(event: Event): boolean {
+    const path = event.composedPath();
+    const menu = this.renderRoot?.querySelector(".entity-menu");
+    if (menu && path.includes(menu as EventTarget)) return true;
+
+    // ha-generic-picker renders its dropdown overlay outside the dialog DOM.
+    // Treat any click landing inside a HA picker/overlay surface as "inside",
+    // so the attribute browser stays open while the user interacts with it.
+    for (const target of path) {
+      if (!(target instanceof HTMLElement)) continue;
+      const tag = target.localName;
+      if (
+        tag === "ha-generic-picker" ||
+        tag === "ha-combo-box" ||
+        tag === "vaadin-combo-box-overlay" ||
+        tag === "mwc-menu-surface" ||
+        tag === "ha-md-list" ||
+        tag === "md-menu"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
     if (source.kind !== "entity_attribute" || !source.path) return source;
