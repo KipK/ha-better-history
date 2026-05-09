@@ -38,6 +38,10 @@ export interface NumericLineRenderData {
   lineWidth: string;
 }
 
+interface NumericLineRenderOptions {
+  extendStairToEnd: boolean;
+}
+
 export interface NumericColumnRenderData {
   id: string;
   x: number;
@@ -70,6 +74,7 @@ export interface ChartRenderData {
   allSeries: RenderableSeries[];
   visibleSeries: RenderableSeries[];
   timeBounds: { start: number; end: number };
+  extendStairToEnd: boolean;
   numericScales: NumericScale[];
   plotBottom: number;
   chartHeight: number;
@@ -160,7 +165,8 @@ function chartHeightFor(plotBottom: number, segmentCount: number): number {
 function buildNumericLines(
   visibleSeries: RenderableSeries[],
   scales: NumericScale[],
-  bounds: { start: number; end: number }
+  bounds: { start: number; end: number },
+  options: NumericLineRenderOptions
 ): NumericLineRenderData[] {
   return visibleSeries.flatMap((series) => {
     if (series.valueType !== "number" && series.valueType !== "boolean") return [];
@@ -170,7 +176,7 @@ function buildNumericLines(
 
     if (!scale) return [];
 
-    const boundedPoints = numericPointsForRender(series.points, bounds, series.lineMode);
+    const boundedPoints = numericPointsForRender(series.points, bounds, series.lineMode, options);
     const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
     const { points, pathLength } = series.lineMode === "line"
       ? toLinePath(displayPoints, bounds, scale)
@@ -183,7 +189,8 @@ function buildNumericLines(
 function numericPointsForRender(
   points: HistoryPoint[],
   bounds: { start: number; end: number },
-  lineMode: BetterHistoryLineMode
+  lineMode: BetterHistoryLineMode,
+  options: NumericLineRenderOptions
 ): HistoryPoint[] {
   const numeric = points
     .map((point) => ({ time: point.time, value: Number(point.value) }))
@@ -201,7 +208,7 @@ function numericPointsForRender(
     : bounded;
   const last = result[result.length - 1];
 
-  return last && last.time < bounds.end
+  return options.extendStairToEnd && last && last.time < bounds.end
     ? [...result, { time: bounds.end, value: last.value }]
     : result;
 }
@@ -501,8 +508,10 @@ export function buildChartData(
   visibleSeries: RenderableSeries[],
   timeBounds: { start: number; end: number },
   disableClimateOverlay = false,
-  maxXTicks = 12
+  maxXTicks = 12,
+  extendStairToEnd = true
 ): ChartRenderData {
+  const lineRenderOptions = { extendStairToEnd };
   const numericScales = numericScalesFor(seriesForVisibleScaleBounds(allSeries, visibleSeries, timeBounds));
   const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
   const plotBottom = plotBottomFor(numericGraphCount);
@@ -514,10 +523,11 @@ export function buildChartData(
     allSeries,
     visibleSeries,
     timeBounds,
+    extendStairToEnd,
     numericScales,
     plotBottom,
     chartHeight: chartHeightFor(plotBottom, segmentCount),
-    numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds),
+    numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds, lineRenderOptions),
     numericColumns: buildNumericColumns(visibleSeries, numericScales, timeBounds),
     segments: buildSegments(visibleSeries, plotBottom, timeBounds),
     heatingAreas: disableClimateOverlay ? [] : buildClimateHeatingAreas(visibleSeries, numericScales, timeBounds),
@@ -533,7 +543,8 @@ export function buildChartData(
 function buildGroupNumericLines(
   series: RenderableSeries[],
   scales: NumericScale[],
-  bounds: { start: number; end: number }
+  bounds: { start: number; end: number },
+  options: NumericLineRenderOptions
 ): NumericLineRenderData[] {
   return series
     .filter((s) => (s.valueType === "number" || s.valueType === "boolean") && s.lineMode !== "column")
@@ -543,7 +554,7 @@ function buildGroupNumericLines(
       if (!scale) return [];
 
       const localScale: NumericScale = { ...scale, top: GRAPH_TOP };
-      const boundedPoints = numericPointsForRender(s.points, bounds, s.lineMode);
+      const boundedPoints = numericPointsForRender(s.points, bounds, s.lineMode, options);
       const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
       const { points, pathLength } = s.lineMode === "line"
         ? toLinePath(displayPoints, bounds, localScale)
@@ -742,7 +753,9 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12): GraphGr
       scales: graphScales,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(colored.visibleSeries, graphScales, bounds),
+      lines: buildGroupNumericLines(colored.visibleSeries, graphScales, bounds, {
+        extendStairToEnd: data.extendStairToEnd
+      }),
       columns: buildGroupNumericColumns(colored.visibleSeries, graphScales, bounds),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + GRAPH_HEIGHT + 10, bounds),
       yLabels: buildGroupYLabels(leftScale),

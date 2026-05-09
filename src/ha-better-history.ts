@@ -48,6 +48,7 @@ interface ChartRenderCache {
   hiddenKey: string;
   startTime: number;
   endTime: number;
+  extendStairToEnd: boolean;
   containerWidth: number;
   data: ChartRenderData;
 }
@@ -590,6 +591,7 @@ export class HaBetterHistory extends LitElement {
     const startTime = viewRange.start.getTime();
     const endTime = viewRange.end.getTime();
     const containerWidth = this._containerWidth;
+    const extendStairToEnd = !this._data.loading;
 
     if (
       cache &&
@@ -598,6 +600,7 @@ export class HaBetterHistory extends LitElement {
       cache.hiddenKey === hiddenKey &&
       cache.startTime === startTime &&
       cache.endTime === endTime &&
+      cache.extendStairToEnd === extendStairToEnd &&
       cache.containerWidth === containerWidth
     ) {
       return cache.data;
@@ -609,7 +612,14 @@ export class HaBetterHistory extends LitElement {
     const timeBounds = { start: startTime, end: Math.max(endTime, startTime + 1) };
     const debugPerformance = this._data.debugPerformance;
     const chartBuildStart = debugPerformance ? performanceNow() : 0;
-    const data = buildChartData(all, visible, timeBounds, this._resolved?.disableClimateOverlay ?? false, maxXTicks);
+    const data = buildChartData(
+      all,
+      visible,
+      timeBounds,
+      this._resolved?.disableClimateOverlay ?? false,
+      maxXTicks,
+      extendStairToEnd
+    );
     const chartBuildDurationMs = debugPerformance ? performanceNow() - chartBuildStart : 0;
 
     if (debugPerformance) {
@@ -624,7 +634,7 @@ export class HaBetterHistory extends LitElement {
       });
     }
 
-    this._chartRenderCache = { seriesRef: this._data.series, sourceKey, hiddenKey, startTime, endTime, containerWidth, data };
+    this._chartRenderCache = { seriesRef: this._data.series, sourceKey, hiddenKey, startTime, endTime, extendStairToEnd, containerWidth, data };
 
     return data;
   }
