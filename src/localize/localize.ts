@@ -23,6 +23,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_column: "Columns",
     export_data: "Export"
   },
+
   fr: {
     no_series: "Aucune série configurée",
     no_entity_selected: "Aucune entité sélectionnée",
@@ -35,6 +36,104 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Ligne",
     mode_column: "Colonnes",
     export_data: "Exporter"
+  },
+
+  cs: {
+    no_series: "Není nakonfigurována žádná série",
+    no_entity_selected: "Nebyla vybrána žádná entita",
+    error_timeout: "Požadavek vypršel. Zkuste to prosím znovu.",
+    tools: "Nástroje",
+    view_range: "Rozsah zobrazení",
+    reset_zoom: "Obnovit přiblížení",
+    line_mode: "Režim zobrazení",
+    mode_stair: "Schody",
+    mode_line: "Čára",
+    mode_column: "Sloupce",
+    export_data: "Exportovat"
+  },
+
+  de: {
+    no_series: "Keine Serie konfiguriert",
+    no_entity_selected: "Keine Entität ausgewählt",
+    error_timeout: "Die Anfrage ist abgelaufen. Bitte erneut versuchen.",
+    tools: "Werkzeuge",
+    view_range: "Anzeigebereich",
+    reset_zoom: "Zoom zurücksetzen",
+    line_mode: "Anzeigemodus",
+    mode_stair: "Stufen",
+    mode_line: "Linie",
+    mode_column: "Spalten",
+    export_data: "Exportieren"
+  },
+
+  el: {
+    no_series: "Δεν έχει ρυθμιστεί σειρά",
+    no_entity_selected: "Δεν έχει επιλεγεί οντότητα",
+    error_timeout: "Το αίτημα έληξε χρονικά. Παρακαλώ δοκιμάστε ξανά.",
+    tools: "Εργαλεία",
+    view_range: "Εύρος προβολής",
+    reset_zoom: "Επαναφορά ζουμ",
+    line_mode: "Λειτουργία εμφάνισης",
+    mode_stair: "Σκάλα",
+    mode_line: "Γραμμή",
+    mode_column: "Στήλες",
+    export_data: "Εξαγωγή"
+  },
+
+  it: {
+    no_series: "Nessuna serie configurata",
+    no_entity_selected: "Nessuna entità selezionata",
+    error_timeout: "La richiesta è scaduta. Riprova.",
+    tools: "Strumenti",
+    view_range: "Intervallo visualizzato",
+    reset_zoom: "Reimposta zoom",
+    line_mode: "Modalità di visualizzazione",
+    mode_stair: "Gradini",
+    mode_line: "Linea",
+    mode_column: "Colonne",
+    export_data: "Esporta"
+  },
+
+  pl: {
+    no_series: "Nie skonfigurowano serii",
+    no_entity_selected: "Nie wybrano encji",
+    error_timeout: "Upłynął limit czasu żądania. Spróbuj ponownie.",
+    tools: "Narzędzia",
+    view_range: "Zakres widoku",
+    reset_zoom: "Resetuj powiększenie",
+    line_mode: "Tryb wyświetlania",
+    mode_stair: "Schodkowy",
+    mode_line: "Linia",
+    mode_column: "Kolumny",
+    export_data: "Eksportuj"
+  },
+
+  ru: {
+    no_series: "Серии не настроены",
+    no_entity_selected: "Сущность не выбрана",
+    error_timeout: "Время ожидания запроса истекло. Повторите попытку.",
+    tools: "Инструменты",
+    view_range: "Диапазон просмотра",
+    reset_zoom: "Сбросить масштаб",
+    line_mode: "Режим отображения",
+    mode_stair: "Ступени",
+    mode_line: "Линия",
+    mode_column: "Столбцы",
+    export_data: "Экспорт"
+  },
+
+  sk: {
+    no_series: "Nie je nakonfigurovaná žiadna séria",
+    no_entity_selected: "Nie je vybraná žiadna entita",
+    error_timeout: "Časový limit požiadavky vypršal. Skúste to znova.",
+    tools: "Nástroje",
+    view_range: "Rozsah zobrazenia",
+    reset_zoom: "Obnoviť priblíženie",
+    line_mode: "Režim zobrazenia",
+    mode_stair: "Schody",
+    mode_line: "Čiara",
+    mode_column: "Stĺpce",
+    export_data: "Exportovať"
   }
 };
 
@@ -44,6 +143,10 @@ export function localize(hass: HomeAssistant | undefined, key: string): string {
     return hass.localize(haKey);
   }
 
-  const lang = hass?.locale?.language?.split("-")[0] ?? hass?.language?.split("-")[0] ?? "en";
+  const lang =
+    hass?.locale?.language?.split("-")[0] ??
+    hass?.language?.split("-")[0] ??
+    "en";
+
   return CUSTOM_STRINGS[lang]?.[key] ?? CUSTOM_STRINGS["en"]?.[key] ?? key;
 }
