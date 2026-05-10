@@ -162,10 +162,11 @@ export const chartStyles = css`
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 6px;
+    margin: 6px calc(40 / 720 * 100%) 0;
     padding: 0 6px 8px 6px;
     font-size: 12px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    box-sizing: border-box;
   }
 
   .legend-item {
@@ -269,8 +270,8 @@ export const chartStyles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
-    width: 100%;
+    margin: 0 calc(40 / 720 * 100%) 8px;
+    box-sizing: border-box;
   }
 
   .tool-icon-button,
