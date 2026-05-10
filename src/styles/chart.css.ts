@@ -518,6 +518,7 @@ export const chartStyles = css`
     height: 30px;
     border: 0;
     border-right: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    transition: background-color 120ms ease;
   }
 
   .mode-button:last-child {
@@ -531,6 +532,12 @@ export const chartStyles = css`
     border-radius: var(--better-history-radius, 8px);
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
     font-size: 12px;
+    transition: background-color 120ms ease;
+  }
+
+  .mode-button:hover,
+  .tool-action-button:not(:disabled):hover {
+    background: color-mix(in srgb, var(--primary-color, #03a9f4) 12%, transparent);
   }
 
   .tool-reset-button {
