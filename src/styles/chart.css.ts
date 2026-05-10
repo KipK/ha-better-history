@@ -301,11 +301,12 @@ export const chartStyles = css`
 
   .tools-panel {
     display: block;
-    margin-bottom: 8px;
+    margin: 0 calc(40 / 720 * 100%) 8px;
     padding: 7px 8px;
     border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
     border-radius: var(--better-history-radius, 8px);
     background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 96%, var(--primary-text-color, #fff) 4%);
+    box-sizing: border-box;
   }
 
   .tool-range {
