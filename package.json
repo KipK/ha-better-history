@@ -5,6 +5,10 @@
   "type": "module",
   "author": "@KipK",
   "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://buymeacoffee.com/kipk"
+  },
   "keywords": [
     "home-assistant",
     "lovelace",

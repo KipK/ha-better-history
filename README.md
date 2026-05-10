@@ -6,6 +6,9 @@ Standalone web component for Home Assistant history charts. Built with **Lit 3**
 
 **Status: WIP** — API not yet stable.
 
+If this component helps you, you can support development on
+[Buy Me a Coffee](https://buymeacoffee.com/kipk).
+
 ## Why ha-better-history?
 
 `ha-better-history` keeps the familiar Home Assistant history-chart experience, but exposes it as a reusable web component with extra controls for dashboards, dialogs, and custom cards.
