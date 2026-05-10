@@ -175,10 +175,12 @@ export class HaBetterHistory extends LitElement {
           const height = Math.round(entry.contentRect.height);
           if (height !== this._chartSurfaceHeight) {
             const surface = this._observedChartSurface as Element;
-            // Only update when the container has external slack (content < container)
-            // or when the container shrank. In auto-height mode scrollHeight == clientHeight
+            const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
+            const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+            // Update when the graph content is smaller than the surface (external slack)
+            // or when the surface shrank. In auto-height mode contentHeight == height,
             // so we never update, preventing the ResizeObserver feedback loop.
-            if (surface.scrollHeight < height || height < this._chartSurfaceHeight) {
+            if (contentHeight < height - 2 || height < this._chartSurfaceHeight) {
               this._chartSurfaceHeight = height;
             }
           }
@@ -221,7 +223,9 @@ export class HaBetterHistory extends LitElement {
       this._resizeObserver?.observe(surface);
       const height = Math.round(surface.getBoundingClientRect().height);
       if (height !== this._chartSurfaceHeight) {
-        if (surface.scrollHeight < height || height < this._chartSurfaceHeight) {
+        const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
+        const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+        if (contentHeight < height - 2 || height < this._chartSurfaceHeight) {
           this._chartSurfaceHeight = height;
         }
       }
