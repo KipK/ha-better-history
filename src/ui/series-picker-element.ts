@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, css, html, type PropertyValues, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import { chartStyles } from "../styles/chart.css.js";
 import {
@@ -15,11 +15,6 @@ export class SeriesPickerElement extends LitElement {
     css`
       :host {
         display: block;
-      }
-      .picker-done {
-        display: flex;
-        justify-content: flex-end;
-        padding-top: 8px;
       }
     `,
   ];
@@ -190,6 +185,11 @@ export class SeriesPickerElement extends LitElement {
     this._attributeMenuOpen = false;
     this._entityPickerOpen = false;
     this._attributeSearch = "";
+    // Auto-confirm and reset when the attribute browser closes with pending sources.
+    if (this._selectedSources.length > 0) {
+      this._confirm();
+      this._selectedSources = [];
+    }
   }
 
   private _addSource(source: HistorySource): void {
@@ -250,15 +250,6 @@ export class SeriesPickerElement extends LitElement {
         },
         onCloseMenu: () => this._closeAttributeMenu(),
       })}
-      ${this._selectedSources.length > 0
-        ? html`
-            <div class="picker-done">
-              <ha-button appearance="filled" @click=${() => this._confirm()}>
-                Done
-              </ha-button>
-            </div>
-          `
-        : nothing}
     `;
   }
 }
