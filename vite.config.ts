@@ -6,6 +6,7 @@ export default defineConfig({
       entry: {
         index: "src/index.ts",
         define: "src/define.ts",
+        picker: "src/picker.ts",
       },
       formats: ["es"],
     },

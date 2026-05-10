@@ -35,6 +35,9 @@
     },
     "./define": {
       "import": "./dist/define.js"
+    },
+    "./picker": {
+      "import": "./dist/picker.js"
     }
   },
   "files": [
