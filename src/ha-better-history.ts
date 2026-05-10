@@ -37,6 +37,7 @@ import { logPerformance, performanceNow } from "./utils/performance.js";
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
+const MIN_VIEW_RANGE_RATIO = 0.08;
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -258,9 +259,20 @@ export class HaBetterHistory extends LitElement {
       ? this._viewEnd
       : loadedEnd;
 
-    return end.getTime() > start.getTime()
-      ? { start, end }
-      : { start: loadedStart, end: loadedEnd };
+    if (end.getTime() <= start.getTime()) {
+      return { start: loadedStart, end: loadedEnd };
+    }
+
+    const minSpan = this._minViewSpanMs();
+    if (end.getTime() - start.getTime() >= minSpan) {
+      return { start, end };
+    }
+
+    const loadedStartMs = loadedStart.getTime();
+    const loadedEndMs = loadedEnd.getTime();
+    const normalizedStart = Math.min(Math.max(start.getTime(), loadedStartMs), loadedEndMs - minSpan);
+
+    return { start: new Date(normalizedStart), end: new Date(normalizedStart + minSpan) };
   }
 
   private _pickerEntities(): HassEntity[] {
@@ -1053,8 +1065,16 @@ export class HaBetterHistory extends LitElement {
 
   private _minViewSpanMs(): number {
     const { span } = this._loadedRangeMs();
+    const sliderReadableSpan = Math.floor(span * MIN_VIEW_RANGE_RATIO);
+    const timeReadableSpan = Math.min(60_000, Math.max(1, Math.floor(span / 1000)));
 
-    return Math.min(60_000, Math.max(1, Math.floor(span / 1000)));
+    return Math.min(span, Math.max(1, sliderReadableSpan, timeReadableSpan));
+  }
+
+  private _minViewRangeStep(): number {
+    const loaded = this._loadedRangeMs();
+
+    return Math.max(1, Math.ceil((this._minViewSpanMs() / loaded.span) * 1000));
   }
 
   private _setViewRangeMs(startMs: number, endMs: number): void {
@@ -1097,17 +1117,21 @@ export class HaBetterHistory extends LitElement {
 
   private _setViewRangePart(part: "start" | "end", event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
-    const next = this._dateFromRangePercent(Number(input.value));
+    const nextPercent = Number(input.value);
     const current = this._effectiveViewRange();
-    const loaded = this._loadedRangeMs();
-    const minSpan = this._minViewSpanMs();
+    const currentStartPercent = this._rangePercent(current.start, current.start);
+    const currentEndPercent = this._rangePercent(current.end, current.end);
+    const minStep = this._minViewRangeStep();
+    let clampedPercent: number;
 
     if (part === "start") {
-      const end = current.end.getTime();
-      this._setViewRangeMs(Math.min(Math.max(next.getTime(), loaded.start), end - minSpan), end);
+      clampedPercent = Math.min(Math.max(nextPercent, 0), currentEndPercent - minStep);
+      input.value = String(clampedPercent);
+      this._setViewRangeMs(this._dateFromRangePercent(clampedPercent).getTime(), current.end.getTime());
     } else {
-      const start = current.start.getTime();
-      this._setViewRangeMs(start, Math.max(Math.min(next.getTime(), loaded.end), start + minSpan));
+      clampedPercent = Math.max(Math.min(nextPercent, 1000), currentStartPercent + minStep);
+      input.value = String(clampedPercent);
+      this._setViewRangeMs(current.start.getTime(), this._dateFromRangePercent(clampedPercent).getTime());
     }
   }
 
@@ -1352,8 +1376,8 @@ export class HaBetterHistory extends LitElement {
     if (!this.toolsOpen || !this._resolved) return nothing;
 
     const viewRange = this._effectiveViewRange();
-    const startPercent = this._rangePercent(this._viewStart, this._resolved.startDate);
-    const endPercent = this._rangePercent(this._viewEnd, this._resolved.endDate);
+    const startPercent = this._rangePercent(viewRange.start, this._resolved.startDate);
+    const endPercent = this._rangePercent(viewRange.end, this._resolved.endDate);
     const currentMode = this._defaultLineMode();
     const showRangeSelector = this._showTimeRangeSelector();
     const showLineModeButtons = this._showLineModeButtons();
