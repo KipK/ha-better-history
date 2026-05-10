@@ -50,6 +50,7 @@ interface EntityPickerRenderOpts {
   onSourceDrop(sourceId: string | undefined, event: DragEvent): void;
   onBreadcrumbClick(path: string[]): void;
   onCloseMenu(): void;
+  hideEmptyPickerState?: boolean;
 }
 
 interface AttributeSearchResult {
@@ -85,6 +86,9 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         .value=${""}
         .getItems=${opts.getItems}
         .getAdditionalItems=${opts.getAdditionalItems}
+        .noItemsLabel=${opts.hideEmptyPickerState ? " " : undefined}
+        .searchLabel=${localize(opts.hass, "search_entity")}
+        .placeholder=${localize(opts.hass, "search_entity")}
         @value-changed=${(e: CustomEvent) => {
           const entityId = (e.detail as { value: string }).value;
           if (entityId) opts.onEntitySelected(entityId);

@@ -6,7 +6,8 @@ const HA_KEYS: Record<string, string> = {
   error: "ui.components.history_charts.error",
   add_target: "ui.components.target-picker.add_target",
   attributes: "ui.dialogs.more_info_control.attributes",
-  back: "ui.common.back"
+  back: "ui.common.back",
+  search_entity: "ui.components.entity.entity-picker.search"
 };
 
 const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
@@ -23,6 +24,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_column: "Columns",
     export_data: "Export",
     import_data: "Import",
+    search_entity: "Search entity",
     search_attributes: "Search attributes",
     no_matching_attributes: "No matching attributes",
     attribute_results_limited: "Showing first 50 matches"
@@ -41,6 +43,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_column: "Colonnes",
     export_data: "Exporter",
     import_data: "Importer",
+    search_entity: "Rechercher une entité",
     search_attributes: "Rechercher des attributs",
     no_matching_attributes: "Aucun attribut correspondant",
     attribute_results_limited: "50 premiers résultats affichés"
@@ -176,7 +179,8 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
 export function localize(hass: HomeAssistant | undefined, key: string): string {
   const haKey = HA_KEYS[key];
   if (haKey && hass?.localize) {
-    return hass.localize(haKey);
+    const localized = hass.localize(haKey);
+    if (localized) return localized;
   }
 
   const lang =

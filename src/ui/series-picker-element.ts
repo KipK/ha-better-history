@@ -249,6 +249,7 @@ export class SeriesPickerElement extends LitElement {
           this._path = path;
         },
         onCloseMenu: () => this._closeAttributeMenu(),
+        hideEmptyPickerState: this._pickerEntities().length === 0,
       })}
     `;
   }
