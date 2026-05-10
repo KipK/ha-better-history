@@ -4,6 +4,7 @@
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
   "author": "@KipK",
+  "license": "MIT",
   "keywords": [
     "home-assistant",
     "lovelace",
