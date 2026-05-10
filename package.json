@@ -1,5 +1,5 @@
 {
-  "name": "ha-better-history",
+  "name": "@kipk/ha-better-history",
   "version": "0.1.0",
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
@@ -32,11 +32,15 @@
       "import": "./dist/define.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
-  "sideEffects": ["dist/define.js"],
+  "sideEffects": [
+    "dist/define.js"
+  ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "prepare": "npm run build",
