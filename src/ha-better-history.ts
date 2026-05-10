@@ -810,7 +810,7 @@ export class HaBetterHistory extends LitElement {
                 const prevX = this._prevClipX.get(line.id) ?? 0;
                 const needAnim = !this._suppressLineAnimation && targetX > prevX;
 
-                return svg`<polyline class="line" clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color} stroke-width=${line.lineWidth}></polyline>`;
+                return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
               }
             )}
             ${group.segments.map(

@@ -91,7 +91,7 @@ export const chartStyles = css`
 
   .line {
     fill: none;
-    stroke-width: 2.5;
+    stroke-width: var(--better-history-line-width, 2.5);
     stroke-linecap: round;
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
