@@ -1153,6 +1153,21 @@ export class HaBetterHistory extends LitElement {
     selection.addEventListener("pointercancel", cleanup);
   }
 
+  private _resetViewRange(): void {
+    if (!this._resolved) return;
+
+    this._viewStart = this._resolved.startDate;
+    this._viewEnd = this._rangeExtendsFuture() ? this._effectiveEndDate() : this._resolved.endDate;
+
+    this.dispatchEvent(
+      new CustomEvent("view-range-changed", {
+        detail: { start: this._viewStart, end: this._viewEnd },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   private _setRuntimeLineMode(mode: BetterHistoryLineMode): void {
     this._runtimeLineMode = mode;
   }
@@ -1371,6 +1386,14 @@ export class HaBetterHistory extends LitElement {
                     <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
                   </div>
                 </div>
+                <button
+                  class="tool-action-button tool-reset-button"
+                  title=${localize(this.hass, "reset_zoom")}
+                  aria-label=${localize(this.hass, "reset_zoom")}
+                  @click=${() => this._resetViewRange()}
+                >
+                  <ha-icon .icon=${"mdi:restore"}></ha-icon>
+                </button>
               `
               : nothing}
             <div class="tool-actions">

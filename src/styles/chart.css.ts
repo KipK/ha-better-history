@@ -533,6 +533,10 @@ export const chartStyles = css`
     font-size: 12px;
   }
 
+  .tool-reset-button {
+    flex: 0 0 auto;
+  }
+
   .tool-action-button:disabled {
     cursor: not-allowed;
     opacity: 0.42;
