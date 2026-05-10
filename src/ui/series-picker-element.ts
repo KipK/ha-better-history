@@ -26,6 +26,7 @@ export class SeriesPickerElement extends LitElement {
   @state() private _attributeMenuOpen = false;
   @state() private _entityPickerOpen = false;
   @state() private _selectedEntityId?: string;
+  @state() private _entitySearch = "";
   @state() private _path: string[] = [];
   @state() private _attributeSearch = "";
   @state() private _componentsReady = false;
@@ -40,8 +41,13 @@ export class SeriesPickerElement extends LitElement {
   };
 
   private readonly _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen) return;
+    if (!this._attributeMenuOpen && !this._entityPickerOpen) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
+    if (this._entityPickerOpen && !this._attributeMenuOpen) {
+      this._entityPickerOpen = false;
+      this._entitySearch = "";
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -67,15 +73,20 @@ export class SeriesPickerElement extends LitElement {
     if (changed.has("initialSources") && this.initialSources) {
       this._selectedSources = [...this.initialSources];
     }
-    if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
+    if (
+      (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) ||
+      (changed.has("_entityPickerOpen") && this._entityPickerOpen)
+    ) {
       void this.updateComplete.then(() => this._positionEntityMenu());
     }
   }
 
   private _isEventInsideAttributeOverlay(event: Event): boolean {
     const path = event.composedPath();
-    const menu = this.renderRoot?.querySelector(".entity-menu");
+    const menu = this.renderRoot?.querySelector(".entity-menu[open], .entity-select-menu[open]");
     if (menu && path.includes(menu as EventTarget)) return true;
+    const trigger = this.renderRoot?.querySelector(".entity-trigger");
+    if (trigger && path.includes(trigger as EventTarget)) return true;
     for (const target of path) {
       if (!(target instanceof HTMLElement)) continue;
       const tag = target.localName;
@@ -95,7 +106,7 @@ export class SeriesPickerElement extends LitElement {
 
   private _positionEntityMenu(): void {
     const trigger = this.renderRoot?.querySelector(".entity-trigger") as HTMLElement | null;
-    const menu = this.renderRoot?.querySelector(".entity-menu") as HTMLElement | null;
+    const menu = this.renderRoot?.querySelector(".entity-menu[open], .entity-select-menu[open]") as HTMLElement | null;
     if (!trigger || !menu) return;
 
     menu.style.top = "0";
@@ -175,6 +186,7 @@ export class SeriesPickerElement extends LitElement {
       this._customEntityIds = [...this._customEntityIds, entityId];
     }
     this._selectedEntityId = entityId;
+    this._entitySearch = "";
     this._path = [];
     this._attributeSearch = "";
     this._entityPickerOpen = false;
@@ -184,6 +196,7 @@ export class SeriesPickerElement extends LitElement {
   private _closeAttributeMenu(): void {
     this._attributeMenuOpen = false;
     this._entityPickerOpen = false;
+    this._entitySearch = "";
     this._attributeSearch = "";
     // Auto-confirm and reset when the attribute browser closes with pending sources.
     if (this._selectedSources.length > 0) {
@@ -220,6 +233,7 @@ export class SeriesPickerElement extends LitElement {
         menuOpen: this._attributeMenuOpen,
         entityPickerOpen: this._entityPickerOpen,
         selectedEntityId: this._selectedEntityId,
+        entitySearch: this._entitySearch,
         path: this._path,
         selectedSources: this._selectedSources,
         draggingSourceId: undefined,
@@ -236,6 +250,9 @@ export class SeriesPickerElement extends LitElement {
           this._entityPickerOpen = false;
         },
         onEntitySelected: (entityId) => this._onEntitySelected(entityId),
+        onEntitySearchChanged: (value) => {
+          this._entitySearch = value;
+        },
         onAttributeSearchChanged: (value) => {
           this._attributeSearch = value;
         },

@@ -30,6 +30,7 @@ interface EntityPickerRenderOpts {
   menuOpen: boolean;
   entityPickerOpen: boolean;
   selectedEntityId?: string;
+  entitySearch?: string;
   path: string[];
   selectedSources: HistorySource[];
   draggingSourceId?: string;
@@ -41,6 +42,7 @@ interface EntityPickerRenderOpts {
   onEntityPickerOpened(): void;
   onEntityPickerClosed(): void;
   onEntitySelected(entityId: string): void;
+  onEntitySearchChanged?(value: string): void;
   onAttributeSearchChanged(value: string): void;
   onSourceAdded(source: HistorySource): void;
   onSourceRemoved(sourceId: string): void;
@@ -79,21 +81,22 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         </div>
         ${renderBrowser(opts)}
       </div>
-      <ha-generic-picker
-        class="entity-trigger"
-        .hass=${opts.hass}
-        .addButtonLabel=${localize(opts.hass, "add_target")}
-        .value=${""}
-        .getItems=${opts.getItems}
-        .getAdditionalItems=${opts.getAdditionalItems}
-        .noItemsLabel=${opts.hideEmptyPickerState ? " " : undefined}
-        .searchLabel=${localize(opts.hass, "search_entity")}
-        .placeholder=${localize(opts.hass, "search_entity")}
-        @value-changed=${(e: CustomEvent) => {
-          const entityId = (e.detail as { value: string }).value;
-          if (entityId) opts.onEntitySelected(entityId);
-        }}
-      ></ha-generic-picker>
+      ${opts.hideEmptyPickerState ? renderEmptyStateEntityPicker(opts) : html`
+        <ha-generic-picker
+          class="entity-trigger"
+          .hass=${opts.hass}
+          .addButtonLabel=${localize(opts.hass, "add_target")}
+          .value=${""}
+          .getItems=${opts.getItems}
+          .getAdditionalItems=${opts.getAdditionalItems}
+          .emptyLabel=${""}
+          .searchLabel=${localize(opts.hass, "search_entity")}
+          @value-changed=${(e: CustomEvent) => {
+            const entityId = (e.detail as { value: string }).value;
+            if (entityId) opts.onEntitySelected(entityId);
+          }}
+        ></ha-generic-picker>
+      `}
       ${opts.loading
         ? html`
             <div class="history-loading-indicator" role="status" aria-label=${localize(opts.hass, "loading")}>
@@ -113,6 +116,54 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
       ` : nothing}
     </div>
   `;
+}
+
+function renderEmptyStateEntityPicker(opts: EntityPickerRenderOpts): TemplateResult {
+  const label = localize(opts.hass, "add_target");
+  const searchLabel = localize(opts.hass, "search_entity");
+  const search = opts.entitySearch ?? "";
+  const items = search.trim()
+    ? opts.getAdditionalItems(search).filter(isPickerItem)
+    : [];
+
+  return html`
+    <button class="entity-trigger entity-add-trigger" @click=${opts.onEntityPickerOpened}>
+      <ha-icon icon="mdi:plus"></ha-icon>
+      <span>${label}</span>
+    </button>
+    <div class="entity-select-menu" ?open=${opts.entityPickerOpen} @click=${(event: Event) => event.stopPropagation()}>
+      <input
+        class="entity-browser-search-input"
+        type="search"
+        .value=${search}
+        placeholder=${searchLabel}
+        aria-label=${searchLabel}
+        @input=${(event: InputEvent) => opts.onEntitySearchChanged?.((event.target as HTMLInputElement).value)}
+        @click=${(event: Event) => event.stopPropagation()}
+        @keydown=${(event: Event) => event.stopPropagation()}
+      />
+      ${items.length > 0 ? html`
+        <div class="entity-select-results">
+          ${items.map((item) => html`
+            <button
+              class="entity-select-result"
+              @click=${() => {
+                opts.onEntitySearchChanged?.("");
+                opts.onEntitySelected(item.id);
+              }}
+            >
+              <span class="entity-browser-entry-label">${item.primary}</span>
+              ${item.secondary ? html`<span class="entity-browser-entry-secondary">${item.secondary}</span>` : nothing}
+            </button>
+          `)}
+        </div>
+      ` : nothing}
+    </div>
+  `;
+}
+
+function isPickerItem(item: unknown): item is { id: string; primary: string; secondary?: string } {
+  return isRecord(item) && typeof item.id === "string" && typeof item.primary === "string";
 }
 
 function entityDomainIcon(entity: HassEntity): string {

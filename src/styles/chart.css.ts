@@ -604,6 +604,27 @@ export const chartStyles = css`
     width: 100%;
   }
 
+  .entity-add-trigger {
+    align-items: center;
+    background: var(--primary-color, #03a9f4);
+    border: 0;
+    border-radius: var(--ha-card-border-radius, 12px);
+    color: var(--text-primary-color, #fff);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    gap: 8px;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 16px;
+  }
+
+  .entity-add-trigger ha-icon {
+    --mdc-icon-size: 18px;
+  }
+
   .history-loading-indicator {
     position: absolute;
     top: 16px;
@@ -649,7 +670,8 @@ export const chartStyles = css`
     width: 100%;
   }
 
-  .entity-menu {
+  .entity-menu,
+  .entity-select-menu {
     position: fixed;
     top: -9999px;
     left: -9999px;
@@ -666,10 +688,43 @@ export const chartStyles = css`
     z-index: 100;
   }
 
-  .entity-menu[open] {
+  .entity-menu[open],
+  .entity-select-menu[open] {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .entity-select-menu[open] {
+    grid-template-rows: auto minmax(0, auto);
+    max-height: 360px;
+  }
+
+  .entity-select-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .entity-select-result {
+    background: transparent;
+    border: 0;
+    border-radius: var(--better-history-radius, 8px);
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    font: inherit;
+    gap: 1px;
+    min-width: 0;
+    padding: 8px;
+    text-align: left;
+  }
+
+  .entity-select-result:hover {
+    background: rgba(var(--rgb-primary-text-color, 255, 255, 255), 0.08);
   }
 
   .entity-menu-top {
