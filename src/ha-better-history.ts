@@ -568,11 +568,13 @@ export class HaBetterHistory extends LitElement {
     if (this._selectedSources.length > 0) return false;
     // A global lineMode covers every series that has no per-series override.
     if (this.config?.lineMode != null) return true;
-    // No global — every config series must carry its own lineMode.
-    if (this.config?.defaultEntities?.length) return false;
+    // Mirror resolveConfig: config.series takes precedence over defaultEntities when non-empty.
     const series = this.config?.series;
-    if (!series || series.length === 0) return false;
-    return series.every((s) => s.lineMode != null);
+    if (series && series.length > 0) {
+      return series.every((s) => s.lineMode != null);
+    }
+    // No config series — defaultEntities or prop entities are used, no per-series lineMode possible.
+    return false;
   }
 
   private _showLineModeButtons(): boolean {
