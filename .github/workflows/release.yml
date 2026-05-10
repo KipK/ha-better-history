@@ -66,13 +66,32 @@ jobs:
         run: npm run build
 
       - name: Pack npm artifact
+        id: pack
+        shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p release
           npm pack --pack-destination release
+          mapfile -t tarballs < <(find release -maxdepth 1 -type f -name "*.tgz" | sort)
+
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "Expected exactly one npm tarball in release/, found ${#tarballs[@]}." >&2
+            printf '%s\n' "${tarballs[@]}" >&2
+            exit 1
+          fi
+
+          echo "tarball=${tarballs[0]}" >> "${GITHUB_OUTPUT}"
 
       - name: Pack browser dist artifact
         run: |
           zip -r "release/ha-better-history-${GITHUB_REF_NAME}-dist.zip" dist README.md package.json
+
+      - name: Publish to npm
+        env:
+          NPM_TAG: ${{ steps.version.outputs.npm_tag }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "${TARBALL}" --access public --tag "${NPM_TAG}"
 
       - name: Create GitHub release
         env:
@@ -91,8 +110,3 @@ jobs:
             --title "ha-better-history ${GITHUB_REF_NAME}" \
             --notes "Release ${GITHUB_REF_NAME}" \
             "${prerelease_flag[@]}"
-
-      - name: Publish to npm
-        env:
-          NPM_TAG: ${{ steps.version.outputs.npm_tag }}
-        run: npm publish release/*.tgz --access public --tag "${NPM_TAG}"
