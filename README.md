@@ -46,36 +46,36 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 
 ### Top-level attributes (HTML)
 
-| Attribute            | Type      | Default   | Description                                       |
-| -------------------- | --------- | --------- | ------------------------------------------------- |
-| `hours`              | `number`  | `24`      | Time range in hours before `endDate`              |
-| `show-date-picker`   | `boolean` | `false`   | Show `ha-date-range-picker` above the chart       |
-| `show-entity-picker` | `boolean` | `false`   | Show entity picker + attribute browser            |
-| `show-import-button` | `boolean` | `false`   | Show a JSON import button in the tools panel      |
-| `show-legend`        | `boolean` | `true`    | Legend below the chart                            |
-| `show-tooltip`       | `boolean` | `true`    | Multi-series tooltip on hover                     |
-| `width`              | `string`  | `"100%"`  | CSS width of the component wrapper                |
-| `height`             | `string`  | —         | CSS height; if omitted, computed from graph count |
-| `line-mode`          | `string`  | `"stair"` | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
-| `line-width`         | `string`  | `"2.5"`   | Global SVG stroke width for numeric lines         |
-| `background-color`   | `string`  | transparent | CSS background color for the component wrapper |
-| `graph-title`        | `string`  | —         | Optional title above the chart                    |
-| `title-font-family`  | `string`  | HA theme  | Optional title font-family override               |
-| `title-font-size`    | `string`  | HA theme  | Optional title font-size override                 |
-| `title-color`        | `string`  | HA theme  | Optional title color override                     |
-| `language`           | `string`  | HA locale | Language code for labels (`"en"`, `"fr"`, …)      |
-| `tools-open`         | `boolean` | `false`   | Open/close the viewer tools panel from outside    |
+| Attribute            | Type      | Default     | Description                                                     |
+| -------------------- | --------- | ----------- | --------------------------------------------------------------- |
+| `hours`              | `number`  | `24`        | Time range in hours before `endDate`                            |
+| `show-date-picker`   | `boolean` | `false`     | Show `ha-date-range-picker` above the chart                     |
+| `show-entity-picker` | `boolean` | `false`     | Show entity picker + attribute browser                          |
+| `show-import-button` | `boolean` | `false`     | Show a JSON import button in the tools panel                    |
+| `show-legend`        | `boolean` | `true`      | Legend below the chart                                          |
+| `show-tooltip`       | `boolean` | `true`      | Multi-series tooltip on hover                                   |
+| `width`              | `string`  | `"100%"`    | CSS width of the component wrapper                              |
+| `height`             | `string`  | —           | CSS height; if omitted, computed from graph count               |
+| `line-mode`          | `string`  | `"stair"`   | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
+| `line-width`         | `string`  | `"2.5"`     | Global SVG stroke width for numeric lines                       |
+| `background-color`   | `string`  | transparent | CSS background color for the component wrapper                  |
+| `graph-title`        | `string`  | —           | Optional title above the chart                                  |
+| `title-font-family`  | `string`  | HA theme    | Optional title font-family override                             |
+| `title-font-size`    | `string`  | HA theme    | Optional title font-size override                               |
+| `title-color`        | `string`  | HA theme    | Optional title color override                                   |
+| `language`           | `string`  | HA locale   | Language code for labels (`"en"`, `"fr"`, …)                    |
+| `tools-open`         | `boolean` | `false`     | Open/close the viewer tools panel from outside                  |
 
 ### JS-only properties
 
-| Property         | Type                  | Default     | Description                                        |
-| ---------------- | --------------------- | ----------- | -------------------------------------------------- |
-| `hass`           | `HomeAssistant`       | —           | **Required.** The Home Assistant object            |
-| `config`         | `BetterHistoryConfig` | `undefined` | Full declarative configuration                     |
-| `entities`       | `string[]`            | `undefined` | Shortcut: entity IDs to plot their `state`         |
-| `startDate`      | `Date`                | `undefined` | Lower bound (overrides `hours`)                    |
-| `endDate`        | `Date`                | `undefined` | Upper bound (default: now)                         |
-| `attributeUnits` | `AttributeUnitMap`    | `undefined` | Map from attribute dot-paths to display units      |
+| Property         | Type                  | Default     | Description                                   |
+| ---------------- | --------------------- | ----------- | --------------------------------------------- |
+| `hass`           | `HomeAssistant`       | —           | **Required.** The Home Assistant object       |
+| `config`         | `BetterHistoryConfig` | `undefined` | Full declarative configuration                |
+| `entities`       | `string[]`            | `undefined` | Shortcut: entity IDs to plot their `state`    |
+| `startDate`      | `Date`                | `undefined` | Lower bound (overrides `hours`)               |
+| `endDate`        | `Date`                | `undefined` | Upper bound (default: now)                    |
+| `attributeUnits` | `AttributeUnitMap`    | `undefined` | Map from attribute dot-paths to display units |
 
 If `endDate` is in the future, the component fetches and renders only up to the current time. The visible time axis then advances live until the requested end is reached, using current `hass.states` updates for entity and attribute points instead of refetching Home Assistant history for every update.
 
@@ -208,17 +208,17 @@ chart.config = {
 
 All events bubble and are composed.
 
-| Event             | Detail                                             | When                                                        |
-| ----------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| `range-changed`   | `{ startDate: Date, endDate: Date }`               | Date picker changes                                         |
-| `view-range-changed` | `{ start: Date, end: Date }`                    | Tools range zoom changes without refetching history         |
-| `series-toggled`  | `{ id: string, hidden: boolean }`                  | Legend item clicked                                         |
-| `series-added`    | `{ source: HistorySource }`                        | User adds a series via entity picker                        |
-| `series-removed`  | `{ sourceId: string }`                             | User removes a non-default series                           |
-| `series-reordered` | `{ sourceIds: string[] }`                         | User drags selected source chips into a new order            |
-| `data-imported`   | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported       |
-| `tooltip-changed` | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
-| `picker-overlay-changed` | `{ open: boolean }`                         | Entity picker or attribute browser overlay opens/closes      |
+| Event                    | Detail                                             | When                                                          |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------------------- |
+| `range-changed`          | `{ startDate: Date, endDate: Date }`               | Date picker changes                                           |
+| `view-range-changed`     | `{ start: Date, end: Date }`                       | Tools range zoom changes without refetching history           |
+| `series-toggled`         | `{ id: string, hidden: boolean }`                  | Legend item clicked                                           |
+| `series-added`           | `{ source: HistorySource }`                        | User adds a series via entity picker                          |
+| `series-removed`         | `{ sourceId: string }`                             | User removes a non-default series                             |
+| `series-reordered`       | `{ sourceIds: string[] }`                          | User drags selected source chips into a new order             |
+| `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported         |
+| `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
+| `picker-overlay-changed` | `{ open: boolean }`                                | Entity picker or attribute browser overlay opens/closes       |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
 
@@ -350,18 +350,18 @@ The optional import button accepts the same `ha-better-history-series-v1` JSON. 
 
 Override these on the host element to customize appearance.
 
-| Property                        | Fallback                  |
-| ------------------------------- | ------------------------- |
-| `--better-history-bg`           | `--card-background-color` |
-| `--better-history-text-color`   | `--primary-text-color`    |
-| `--better-history-muted-color`  | `--secondary-text-color`  |
-| `--better-history-border-color` | `--divider-color`         |
-| `--better-history-accent-color` | `--accent-color`          |
-| `--better-history-radius`       | `8px`                     |
-| `--better-history-font-family`  | `inherit`                 |
-| `--better-history-title-color`  | `--primary-text-color`    |
-| `--better-history-title-font-family` | `inherit`            |
-| `--better-history-title-font-size` | `--ha-font-size-xl, 20px` |
+| Property                             | Fallback                  |
+| ------------------------------------ | ------------------------- |
+| `--better-history-bg`                | `--card-background-color` |
+| `--better-history-text-color`        | `--primary-text-color`    |
+| `--better-history-muted-color`       | `--secondary-text-color`  |
+| `--better-history-border-color`      | `--divider-color`         |
+| `--better-history-accent-color`      | `--accent-color`          |
+| `--better-history-radius`            | `8px`                     |
+| `--better-history-font-family`       | `inherit`                 |
+| `--better-history-title-color`       | `--primary-text-color`    |
+| `--better-history-title-font-family` | `inherit`                 |
+| `--better-history-title-font-size`   | `--ha-font-size-xl, 20px` |
 
 ## Loading / setup
 
@@ -397,7 +397,7 @@ Releases are created by pushing a version tag that matches `package.json` exactl
 ```bash
 npm version 1.0.0 --no-git-tag-version
 git tag 1.0.0
-git push origin main --tags
+git push origin maater --tags
 ```
 
 Accepted tag formats are `1.0.0`, `1.0.0-rc1`, and `1.0.0-beta1`. Stable tags publish to the npm `latest` dist-tag; release candidates publish to `rc`; beta releases publish to `beta`.
