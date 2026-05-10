@@ -266,6 +266,7 @@ export const chartStyles = css`
   .controls-bar {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
@@ -549,6 +550,19 @@ export const chartStyles = css`
     }
   }
 
+  @container (max-width: 560px) {
+    .date-picker-wrapper,
+    .entity-picker {
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    .entity-add-trigger {
+      width: fit-content;
+      max-width: 100%;
+    }
+  }
+
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
@@ -601,7 +615,7 @@ export const chartStyles = css`
   }
 
   .date-picker-wrapper {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
     width: fit-content;
     max-width: 100%;
     min-width: 0;
@@ -614,9 +628,9 @@ export const chartStyles = css`
 
   .entity-picker {
     position: relative;
-    flex: 1 1 0;
+    flex: 1 1 220px;
     min-width: 0;
-    width: 100%;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -624,6 +638,7 @@ export const chartStyles = css`
   }
 
   .entity-trigger {
+    max-width: 100%;
     width: 100%;
   }
 
