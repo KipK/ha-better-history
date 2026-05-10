@@ -25,6 +25,7 @@ export interface BetterHistoryConfig {
   showDatePicker?: boolean;
   showEntityPicker?: boolean;
   showImportButton?: boolean;
+  showLineModeButtons?: boolean;
   showLegend?: boolean;
   showTooltip?: boolean;
   width?: string;

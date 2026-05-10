@@ -90,6 +90,7 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-date-picker" }) showDatePicker = false;
   @property({ type: Boolean, attribute: "show-entity-picker" }) showEntityPicker = false;
   @property({ type: Boolean, attribute: "show-import-button" }) showImportButton = false;
+  @property({ type: Boolean, attribute: "show-line-mode-buttons" }) showLineModeButtons = true;
   @property({ type: Boolean, attribute: "show-legend" }) showLegend = true;
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
   @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
@@ -560,6 +561,10 @@ export class HaBetterHistory extends LitElement {
 
   private _showImportButton(): boolean {
     return this.showImportButton || this.config?.showImportButton === true;
+  }
+
+  private _showLineModeButtons(): boolean {
+    return this.config?.showLineModeButtons !== false && this.showLineModeButtons;
   }
 
   private _hasForcedConfigSeries(): boolean {
@@ -1336,22 +1341,24 @@ export class HaBetterHistory extends LitElement {
               <ha-icon .icon=${"mdi:restore"}></ha-icon>
             </button>
             <div class="tool-actions">
-              <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
-                ${[
-                  ["stair", "mdi:stairs", "mode_stair"],
-                  ["line", "mdi:chart-line", "mode_line"],
-                  ["column", "mdi:chart-bar", "mode_column"]
-                ].map(([mode, icon, label]) => html`
-                  <button
-                    class="mode-button"
-                    ?active=${currentMode === mode}
-                    title=${localize(this.hass, label)}
-                    @click=${() => this._setRuntimeLineMode(mode as BetterHistoryLineMode)}
-                  >
-                    <ha-icon .icon=${icon}></ha-icon>
-                  </button>
-                `)}
-              </div>
+              ${this._showLineModeButtons() ? html`
+                <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
+                  ${[
+                    ["stair", "mdi:stairs", "mode_stair"],
+                    ["line", "mdi:chart-line", "mode_line"],
+                    ["column", "mdi:chart-bar", "mode_column"]
+                  ].map(([mode, icon, label]) => html`
+                    <button
+                      class="mode-button"
+                      ?active=${currentMode === mode}
+                      title=${localize(this.hass, label)}
+                      @click=${() => this._setRuntimeLineMode(mode as BetterHistoryLineMode)}
+                    >
+                      <ha-icon .icon=${icon}></ha-icon>
+                    </button>
+                  `)}
+                </div>
+              ` : nothing}
               <button
                 class="tool-action-button"
                 title=${localize(this.hass, "export_data")}
