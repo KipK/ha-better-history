@@ -550,7 +550,11 @@ export const chartStyles = css`
       flex-wrap: wrap;
     }
 
-    .tool-range-control,
+    .tool-range-control {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
     .tool-actions {
       flex: 1 1 100%;
     }
