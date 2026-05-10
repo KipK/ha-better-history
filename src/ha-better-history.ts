@@ -20,7 +20,7 @@ import {
 import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
 import { paletteColor } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
-import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig } from "./types/config.js";
+import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig, ResolvedSeries } from "./types/config.js";
 import type { HistorySeries, HistorySource } from "./data/history.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
@@ -122,6 +122,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _selectedEntityId?: string;
   @state() private _path: string[] = [];
   @state() private _selectedSources: HistorySource[] = [];
+  @state() private _removedConfigSourceIds: string[] = [];
   @state() private _customEntityIds: string[] = [];
   @state() private _entityPickerOpen = false;
   @state() private _draggingSourceId?: string;
@@ -276,7 +277,7 @@ export class HaBetterHistory extends LitElement {
     const seen = new Set<string>();
 
     if (this._resolved && !this._importedDataActive) {
-      for (const s of this._resolved.series) {
+      for (const s of this._activeResolvedSeries()) {
         if (!seen.has(s.id)) {
           seen.add(s.id);
           sources.push(resolvedSeriesToSource(s));
@@ -296,7 +297,30 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _isDefaultSource(source: HistorySource): boolean {
-    return (this._resolved?.series ?? []).some((s) => s.id === source.id);
+    return this._activeResolvedSeries().some((s) => s.id === source.id && s.forced !== false);
+  }
+
+  private _activeResolvedSeries(): ResolvedSeries[] {
+    if (!this._resolved) return [];
+    return this._resolved.series.filter((s) => !this._removedConfigSourceIds.includes(s.id));
+  }
+
+  private _activeResolvedConfig(): ResolvedConfig | undefined {
+    if (!this._resolved) return undefined;
+    return { ...this._resolved, series: this._activeResolvedSeries() };
+  }
+
+  private _reconcileRemovedConfigSourceIds(resolved: ResolvedConfig): void {
+    if (this._removedConfigSourceIds.length === 0) return;
+
+    const removableIds = new Set(
+      resolved.series.filter((series) => series.forced === false).map((series) => series.id)
+    );
+    const next = this._removedConfigSourceIds.filter((id) => removableIds.has(id));
+
+    if (next.length !== this._removedConfigSourceIds.length) {
+      this._removedConfigSourceIds = next;
+    }
   }
 
   private _resolvedTemperatureUnit(): string | undefined {
@@ -345,7 +369,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -391,6 +415,7 @@ export class HaBetterHistory extends LitElement {
         attributeUnits: this.attributeUnits
       });
 
+      this._reconcileRemovedConfigSourceIds(resolved);
       this._resolved = resolved;
 
       if (!this._rangeStart && !this._rangeEnd) {
@@ -540,7 +565,7 @@ export class HaBetterHistory extends LitElement {
   private _buildRenderSeries(): RenderableSeries[] {
     if (!this._resolved) return [];
 
-    const result: RenderableSeries[] = this._importedDataActive ? [] : this._resolved.series.flatMap((resolved) => {
+    const result: RenderableSeries[] = this._importedDataActive ? [] : this._activeResolvedSeries().flatMap((resolved) => {
       const fetched = this._data.series.find((s) => s.source.id === resolved.id);
 
       return [
@@ -591,7 +616,7 @@ export class HaBetterHistory extends LitElement {
 
   private _chartSourceKey(): string {
     return [
-      ...(this._resolved?.series.map((source) => [
+      ...(this._activeResolvedSeries().map((source) => [
         source.id,
         source.label,
         source.color,
@@ -951,7 +976,7 @@ export class HaBetterHistory extends LitElement {
       path: this._path,
       selectedSources: this._selectedSources,
       draggingSourceId: this._draggingSourceId,
-      resolved: this._resolved,
+      resolved: this._activeResolvedConfig(),
       loading: this._data.loading,
       attributeSearch: this._attributeSearch,
       getItems: this._getEntityPickerItems,
@@ -1541,6 +1566,15 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _addSource(source: HistorySource): void {
+    const removedConfigSource = this._resolved?.series.find(
+      (series) => series.id === source.id && series.forced === false && this._removedConfigSourceIds.includes(series.id)
+    );
+    if (removedConfigSource) {
+      this._removedConfigSourceIds = this._removedConfigSourceIds.filter((id) => id !== source.id);
+      this._hiddenSeriesIds = this._hiddenSeriesIds.filter((id) => id !== source.id);
+      return;
+    }
+
     if (this._selectedSources.some((selected) => selected.id === source.id)) {
       return;
     }
@@ -1588,6 +1622,21 @@ export class HaBetterHistory extends LitElement {
   private _removeSource(sourceId: string): void {
     const source = this._selectedSources.find((s) => s.id === sourceId);
     this._pendingAddedSources = this._pendingAddedSources.filter((s) => s.id !== sourceId);
+
+    const removableConfigSource = this._activeResolvedSeries().find((s) => s.id === sourceId && s.forced === false);
+    if (removableConfigSource) {
+      this._removedConfigSourceIds = [...this._removedConfigSourceIds, sourceId];
+      this._hiddenSeriesIds = this._hiddenSeriesIds.filter((hs) => hs !== sourceId);
+      this._data.removeSources([sourceId]);
+      this.dispatchEvent(
+        new CustomEvent("series-removed", {
+          detail: { sourceId },
+          bubbles: true,
+          composed: true
+        })
+      );
+      return;
+    }
 
     if (!source || this._isDefaultSource(source)) {
       return;

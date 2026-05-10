@@ -126,6 +126,7 @@ function seriesFromConfig(
     id,
     entity: cfg.entity,
     attribute,
+    forced: cfg.forced ?? true,
     label: resolveLabel(hass, cfg.entity, attribute, cfg.label),
     color: cfg.color ?? paletteColor(index),
     unit,
@@ -154,6 +155,7 @@ function seriesFromEntityId(
     return {
       id,
       entity: entityId,
+      forced: true,
       label: entityId,
       color: paletteColor(index),
       scaleGroupKey: `series:${id}`,
@@ -171,6 +173,7 @@ function seriesFromEntityId(
   return {
     id: source.id,
     entity: entityId,
+    forced: true,
     label: source.label,
     color: paletteColor(index),
     unit: source.unit,
@@ -216,6 +219,7 @@ function expandClimateSeries(
       id,
       entity: s.entity,
       attribute,
+      forced: s.forced,
       label: attrName,
       color,
       unit: attrUnit,

@@ -605,24 +605,11 @@ export const chartStyles = css`
   }
 
   .entity-add-trigger {
-    align-items: center;
-    background: var(--primary-color, #03a9f4);
-    border: 0;
-    border-radius: var(--ha-card-border-radius, 12px);
-    color: var(--text-primary-color, #fff);
-    cursor: pointer;
-    display: inline-flex;
-    font: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    gap: 8px;
-    justify-content: center;
-    min-height: 36px;
-    padding: 0 16px;
+    width: fit-content;
   }
 
   .entity-add-trigger ha-icon {
-    --mdc-icon-size: 18px;
+    --mdc-icon-size: 20px;
   }
 
   .history-loading-indicator {

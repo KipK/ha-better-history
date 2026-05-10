@@ -6,6 +6,7 @@ export type BetterHistoryLineMode = "stair" | "line" | "column";
 export interface SeriesConfig {
   entity: string;
   attribute?: string | string[];
+  forced?: boolean;
   label?: string;
   color?: string;
   unit?: string;
@@ -46,6 +47,7 @@ export interface ResolvedSeries {
   id: string;
   entity: string;
   attribute?: string[];
+  forced: boolean;
   label: string;
   color: string;
   unit?: string;

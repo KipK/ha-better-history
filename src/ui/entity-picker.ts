@@ -2,7 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import { entityStateSource, attributeSource, valueType, type HistorySource } from "../data/history.js";
 import type { HistoryValueType } from "../data/value-type.js";
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
-import type { ResolvedConfig } from "../types/config.js";
+import type { ResolvedConfig, ResolvedSeries } from "../types/config.js";
 import { ensureHaComponents } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
 
@@ -68,6 +68,7 @@ export function entityPickerAvailable(): boolean {
 
 export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult {
   const entity = opts.selectedEntityId && opts.hass ? opts.hass.states[opts.selectedEntityId] : undefined;
+  const rowSources = pickerRowSources(opts);
 
   return html`
     <div class="entity-picker"
@@ -105,13 +106,13 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
             </div>
           `
         : nothing}
-      ${opts.selectedSources.length > 0 ? html`
+      ${rowSources.length > 0 ? html`
         <div
           class="entity-row"
           @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
           @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
         >
-          ${opts.selectedSources.map((source) => renderChip(source, opts))}
+          ${rowSources.map((source) => renderChip(source, opts))}
         </div>
       ` : nothing}
     </div>
@@ -127,10 +128,15 @@ function renderEmptyStateEntityPicker(opts: EntityPickerRenderOpts): TemplateRes
     : [];
 
   return html`
-    <button class="entity-trigger entity-add-trigger" @click=${opts.onEntityPickerOpened}>
-      <ha-icon icon="mdi:plus"></ha-icon>
-      <span>${label}</span>
-    </button>
+    <ha-button
+      class="entity-trigger entity-add-trigger"
+      size="small"
+      appearance="filled"
+      @click=${opts.onEntityPickerOpened}
+    >
+      <ha-icon icon="mdi:playlist-plus" slot="start"></ha-icon>
+      ${label}
+    </ha-button>
     <div class="entity-select-menu" ?open=${opts.entityPickerOpen} @click=${(event: Event) => event.stopPropagation()}>
       <input
         class="entity-browser-search-input"
@@ -198,7 +204,8 @@ function entityDomainIcon(entity: HassEntity): string {
 }
 
 function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): TemplateResult {
-  const isDefault = opts.resolved?.series.some((s) => s.id === source.id) ?? false;
+  const isFixed = isFixedResolvedSource(source.id, opts);
+  const isSelected = isSelectedSource(source.id, opts);
   const isEntity = source.kind === "entity_state";
   const entity = opts.hass?.states[source.entityId];
   const chipClass = isEntity ? "entity-source-chip" : "attr-source-chip";
@@ -207,11 +214,11 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
   return html`
     <div
       class="source-chip ${chipClass}"
-      draggable=${!isDefault}
+      draggable=${isSelected && !isFixed}
       ?dragging=${isDragging}
-      @dragstart=${(e: DragEvent) => opts.onSourceDragStart(source.id, e)}
+      @dragstart=${(e: DragEvent) => { if (isSelected && !isFixed) opts.onSourceDragStart(source.id, e); }}
       @dragend=${() => opts.onSourceDragEnd()}
-      @dragover=${(e: DragEvent) => { if (!isDefault) opts.onSourceDragOver(source.id, e); }}
+      @dragover=${(e: DragEvent) => { if (isSelected && !isFixed) opts.onSourceDragOver(source.id, e); }}
       @drop=${(e: DragEvent) => opts.onSourceDrop(source.id, e)}
     >
       <span class="source-chip-icon">
@@ -220,7 +227,7 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
           : html`<ha-icon .icon=${attrValueTypeIcon(source.valueType)}></ha-icon>`}
       </span>
       <span class="source-chip-label">${source.label}</span>
-      ${!isDefault
+      ${!isFixed
         ? html`<button
             class="source-chip-remove"
             @click=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
@@ -344,6 +351,37 @@ function isResolvedSource(id: string, opts: EntityPickerRenderOpts): boolean {
   return (opts.resolved?.series ?? []).some((s) => s.id === id);
 }
 
+function isFixedResolvedSource(id: string, opts: EntityPickerRenderOpts): boolean {
+  return (opts.resolved?.series ?? []).some((s) => s.id === id && s.forced !== false);
+}
+
+function resolvedSeriesToPickerSource(series: ResolvedSeries): HistorySource {
+  return {
+    id: series.id,
+    kind: series.attribute ? "entity_attribute" : "entity_state",
+    entityId: series.entity,
+    label: series.label,
+    path: series.attribute,
+    valueType: series.valueType,
+    unit: series.unit
+  };
+}
+
+function pickerRowSources(opts: EntityPickerRenderOpts): HistorySource[] {
+  const sources = [
+    ...(opts.resolved?.series ?? [])
+      .filter((series) => series.forced === false)
+      .map(resolvedSeriesToPickerSource),
+    ...opts.selectedSources
+  ];
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (seen.has(source.id)) return false;
+    seen.add(source.id);
+    return true;
+  });
+}
+
 function isEntityAlreadyPresent(entityId: string, opts: EntityPickerRenderOpts): boolean {
   const inSelected = opts.selectedSources.some((s) => s.entityId === entityId);
   const inResolved = (opts.resolved?.series ?? []).some((s) => s.entity === entityId);
@@ -382,6 +420,14 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   }
 
   if (isResolvedSource(source.id, opts)) {
+    if (!isFixedResolvedSource(source.id, opts)) {
+      return html`
+        <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--removable" @click=${() => opts.onSourceRemoved(source.id)}>
+          <span class="entity-browser-entry-label">${entity.entity_id}</span>
+        </div>
+      `;
+    }
+
     return html`
       <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--forced">
         <span class="entity-browser-entry-label">${entity.entity_id}</span>
@@ -454,6 +500,14 @@ function renderAttributeEntry(params: {
   }
 
   if (isResolvedSource(source.id, opts)) {
+    if (!isFixedResolvedSource(source.id, opts)) {
+      return html`
+        <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--removable" @click=${() => opts.onSourceRemoved(source.id)}>
+          ${content}
+        </div>
+      `;
+    }
+
     return html`
       <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--forced">
         ${content}

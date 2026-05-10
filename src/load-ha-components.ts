@@ -2,6 +2,7 @@ import { loadHaComponents } from "@kipk/load-ha-components";
 
 const HA_COMPONENTS = [
   "ha-icon",
+  "ha-button",
   "ha-icon-button",
   "ha-svg-icon",
   "ha-entity-picker",

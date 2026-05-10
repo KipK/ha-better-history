@@ -127,6 +127,7 @@ Each series describes what to plot and how it should be displayed.
 interface SeriesConfig {
   entity: string;                    // Required: entity_id (e.g. "climate.living")
   attribute?: string | string[];     // Dotted path or array; omit = entity.state
+  forced?: boolean;                  // default: true; false = removable from picker chips
   label?: string;                    // Legend label; default = friendly_name or attribute path
   color?: string;                    // CSS color; default = automatic palette
   unit?: string;                     // Override unit (for axis grouping and label)
@@ -297,13 +298,14 @@ chart.config = {
   chart.config = {
     defaultEntities: ["climate.living", "sensor.outdoor_temp"],
     series: [
-      { entity: "climate.living", attribute: "current_temperature", label: "Indoor" }
+      { entity: "climate.living", attribute: "current_temperature", label: "Indoor" },
+      { entity: "sensor.grid_power", label: "Grid power", forced: false }
     ]
   };
 </script>
 ```
 
-The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
+The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 
 ### Viewer tools
 
