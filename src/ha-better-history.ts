@@ -564,7 +564,11 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _allSeriesHaveExplicitLineMode(): boolean {
+    // Picker-added sources always follow the global/runtime mode — buttons are always relevant.
     if (this._selectedSources.length > 0) return false;
+    // A global lineMode covers every series that has no per-series override.
+    if (this.config?.lineMode != null) return true;
+    // No global — every config series must carry its own lineMode.
     if (this.config?.defaultEntities?.length) return false;
     const series = this.config?.series;
     if (!series || series.length === 0) return false;
