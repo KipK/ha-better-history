@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "24"
+          registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
       - name: Validate release tag
@@ -90,17 +91,10 @@ jobs:
         shell: bash
         env:
           NPM_TAG: ${{ steps.version.outputs.npm_tag }}
-          TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |
           set -euo pipefail
 
-          unset NODE_AUTH_TOKEN
-          unset NPM_CONFIG_USERCONFIG
-
-          npm publish "${TARBALL}" \
-            --registry "https://registry.npmjs.org/" \
-            --access public \
-            --tag "${NPM_TAG}"
+          npm publish --access public --tag "${NPM_TAG}"
 
       - name: Create GitHub release
         env:
