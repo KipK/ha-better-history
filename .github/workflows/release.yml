@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -81,7 +81,7 @@ jobs:
             exit 1
           fi
 
-          echo "tarball=${tarballs[0]}" >> "${GITHUB_OUTPUT}"
+          echo "tarball=$(realpath "${tarballs[0]}")" >> "${GITHUB_OUTPUT}"
 
       - name: Pack browser dist artifact
         run: |
