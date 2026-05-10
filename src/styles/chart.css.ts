@@ -4,6 +4,7 @@ export const chartStyles = css`
   :host {
     display: flex;
     flex-direction: column;
+    container-type: inline-size;
     min-height: 360px;
     font-family: var(--better-history-font-family, inherit);
     user-select: none;
@@ -298,10 +299,7 @@ export const chartStyles = css`
   }
 
   .tools-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
-    align-items: end;
+    display: block;
     margin-bottom: 8px;
     padding: 7px 8px;
     border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
@@ -321,9 +319,11 @@ export const chartStyles = css`
   }
 
   .tool-range-head {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
     gap: 8px;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
 
   .tool-label {
@@ -333,6 +333,9 @@ export const chartStyles = css`
     min-width: 0;
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
     font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tool-label ha-icon {
@@ -497,6 +500,7 @@ export const chartStyles = css`
   .tool-actions {
     justify-content: flex-end;
     gap: 6px;
+    min-width: 0;
   }
 
   .mode-switch {
@@ -534,6 +538,17 @@ export const chartStyles = css`
     border-color: color-mix(in srgb, var(--better-history-muted-color, var(--divider-color, #444)) 55%, transparent);
   }
 
+  @container (max-width: 360px) {
+    .tool-range-head {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .tool-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+    }
+  }
+
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
@@ -546,7 +561,7 @@ export const chartStyles = css`
     }
 
     .tool-actions {
-      justify-content: space-between;
+      justify-content: flex-end;
     }
 
     .range-slider-stack,

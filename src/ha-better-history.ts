@@ -1335,6 +1335,45 @@ export class HaBetterHistory extends LitElement {
             <button class="tool-icon-button" title=${localize(this.hass, "reset_zoom")} @click=${() => this._resetViewRange()}>
               <ha-icon .icon=${"mdi:restore"}></ha-icon>
             </button>
+            <div class="tool-actions">
+              <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
+                ${[
+                  ["stair", "mdi:stairs", "mode_stair"],
+                  ["line", "mdi:chart-line", "mode_line"],
+                  ["column", "mdi:chart-bar", "mode_column"]
+                ].map(([mode, icon, label]) => html`
+                  <button
+                    class="mode-button"
+                    ?active=${currentMode === mode}
+                    title=${localize(this.hass, label)}
+                    @click=${() => this._setRuntimeLineMode(mode as BetterHistoryLineMode)}
+                  >
+                    <ha-icon .icon=${icon}></ha-icon>
+                  </button>
+                `)}
+              </div>
+              <button
+                class="tool-action-button"
+                title=${localize(this.hass, "export_data")}
+                aria-label=${localize(this.hass, "export_data")}
+                @click=${() => this._exportData()}
+              >
+                <ha-icon .icon=${"mdi:download"}></ha-icon>
+              </button>
+              ${this._showImportButton()
+                ? html`
+                  <button
+                    class="tool-action-button"
+                    title=${localize(this.hass, "import_data")}
+                    aria-label=${localize(this.hass, "import_data")}
+                    ?disabled=${this._hasForcedConfigSeries()}
+                    @click=${() => this._importData()}
+                  >
+                    <ha-icon .icon=${"mdi:upload"}></ha-icon>
+                  </button>
+                `
+                : nothing}
+            </div>
           </div>
           <div class="range-values">
             <span>${this._formatRangeDate(viewRange.start)}</span>
@@ -1353,45 +1392,6 @@ export class HaBetterHistory extends LitElement {
             <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
             <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
           </div>
-        </div>
-        <div class="tool-actions">
-          <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
-            ${[
-              ["stair", "mdi:stairs", "mode_stair"],
-              ["line", "mdi:chart-line", "mode_line"],
-              ["column", "mdi:chart-bar", "mode_column"]
-            ].map(([mode, icon, label]) => html`
-              <button
-                class="mode-button"
-                ?active=${currentMode === mode}
-                title=${localize(this.hass, label)}
-                @click=${() => this._setRuntimeLineMode(mode as BetterHistoryLineMode)}
-              >
-                <ha-icon .icon=${icon}></ha-icon>
-              </button>
-            `)}
-          </div>
-          <button
-            class="tool-action-button"
-            title=${localize(this.hass, "export_data")}
-            aria-label=${localize(this.hass, "export_data")}
-            @click=${() => this._exportData()}
-          >
-            <ha-icon .icon=${"mdi:download"}></ha-icon>
-          </button>
-          ${this._showImportButton()
-            ? html`
-              <button
-                class="tool-action-button"
-                title=${localize(this.hass, "import_data")}
-                aria-label=${localize(this.hass, "import_data")}
-                ?disabled=${this._hasForcedConfigSeries()}
-                @click=${() => this._importData()}
-              >
-                <ha-icon .icon=${"mdi:upload"}></ha-icon>
-              </button>
-            `
-            : nothing}
         </div>
       </div>
     `;
