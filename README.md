@@ -6,6 +6,21 @@ Standalone web component for Home Assistant history charts. Built with **Lit 3**
 
 **Status: WIP** — API not yet stable.
 
+## Why ha-better-history?
+
+`ha-better-history` keeps the familiar Home Assistant history-chart experience, but exposes it as a reusable web component with extra controls for dashboards, dialogs, and custom cards.
+
+- **Familiar HA-style history UX, with more control** — time-series charts, legend toggles, tooltips, date ranges, and Home Assistant theming are kept close to the native experience while adding configuration and runtime tools.
+- **Entity attributes as first-class series** — chart `entity.state` or any supported attribute path, including nested attributes. The picker can browse and search attributes, then add them directly to the chart.
+- **Use only the chart or the full explorer** — render a minimal graph, enable just the date picker, or expose the complete viewer with tools, zoom, export, entity picker, and attribute picker.
+- **No-refetch view tools** — zoom and pan inside the already loaded range without asking Home Assistant for the same history again.
+- **Flexible rendering modes** — numeric series can be displayed as stair steps, straight lines, or columns, globally or per series.
+- **Smarter multi-series layout** — automatic graph grouping by unit or explicit `scaleGroup`, optional manual Y ranges, dual-axis handling, and stable colors for readable comparison.
+- **Climate-aware overlays** — when climate temperature and `hvac_action` are present, heating periods can be rendered as a contextual area overlay.
+- **Runtime series editing** — users can add, remove, reorder, and hide non-default series from the UI without rebuilding the host card.
+- **Portable export format** — visible data can be exported as compact `ha-better-history-series-v1` JSON for debugging, sharing, or future analysis tools.
+- **Standalone integration surface** — the component can be embedded in Lovelace cards, dialogs, more-info style views, or any Home Assistant frontend context that can provide `hass`.
+
 ## Quick start
 
 ```html
