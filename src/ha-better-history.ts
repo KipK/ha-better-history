@@ -90,6 +90,8 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-date-picker" }) showDatePicker = false;
   @property({ type: Boolean, attribute: "show-entity-picker" }) showEntityPicker = false;
   @property({ type: Boolean, attribute: "show-import-button" }) showImportButton = false;
+  @property({ type: Boolean, attribute: "show-export-button" }) showExportButton = true;
+  @property({ type: Boolean, attribute: "show-time-range-selector" }) showTimeRangeSelector = true;
   @property({ type: Boolean, attribute: "show-line-mode-buttons" }) showLineModeButtons = true;
   @property({ type: Boolean, attribute: "show-legend" }) showLegend = true;
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
@@ -561,6 +563,14 @@ export class HaBetterHistory extends LitElement {
 
   private _showImportButton(): boolean {
     return this.showImportButton || this.config?.showImportButton === true;
+  }
+
+  private _showExportButton(): boolean {
+    return this.config?.showExportButton !== false && this.showExportButton;
+  }
+
+  private _showTimeRangeSelector(): boolean {
+    return this.config?.showTimeRangeSelector !== false && this.showTimeRangeSelector;
   }
 
   private _allSeriesHaveExplicitLineMode(): boolean {
@@ -1143,21 +1153,6 @@ export class HaBetterHistory extends LitElement {
     selection.addEventListener("pointercancel", cleanup);
   }
 
-  private _resetViewRange(): void {
-    if (!this._resolved) return;
-
-    this._viewStart = this._resolved.startDate;
-    this._viewEnd = this._rangeExtendsFuture() ? this._effectiveEndDate() : this._resolved.endDate;
-
-    this.dispatchEvent(
-      new CustomEvent("view-range-changed", {
-        detail: { start: this._viewStart, end: this._viewEnd },
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
-
   private _setRuntimeLineMode(mode: BetterHistoryLineMode): void {
     this._runtimeLineMode = mode;
   }
@@ -1344,19 +1339,42 @@ export class HaBetterHistory extends LitElement {
     const viewRange = this._effectiveViewRange();
     const startPercent = this._rangePercent(this._viewStart, this._resolved.startDate);
     const endPercent = this._rangePercent(this._viewEnd, this._resolved.endDate);
-    const selectionCenterPercent = (startPercent + endPercent) / 20;
     const currentMode = this._defaultLineMode();
+    const showRangeSelector = this._showTimeRangeSelector();
+    const showLineModeButtons = this._showLineModeButtons();
+    const showExportButton = this._showExportButton();
+    const showImportButton = this._showImportButton();
+
+    if (!showRangeSelector && !showLineModeButtons && !showExportButton && !showImportButton) return nothing;
 
     return html`
       <div class="tools-panel">
         <div class="tool-range">
-          <div class="tool-range-head">
-            <span class="tool-label"><ha-icon .icon=${"mdi:timeline-clock-outline"}></ha-icon>${localize(this.hass, "view_range")}</span>
-            <button class="tool-icon-button" title=${localize(this.hass, "reset_zoom")} @click=${() => this._resetViewRange()}>
-              <ha-icon .icon=${"mdi:restore"}></ha-icon>
-            </button>
+          <div class="tool-range-row">
+            ${showRangeSelector
+              ? html`
+                <div class="tool-range-control">
+                  <div class="range-values">
+                    <span>${this._formatRangeDate(viewRange.start)}</span>
+                    <span>${this._formatRangeDate(viewRange.end)}</span>
+                  </div>
+                  <div class="range-slider-stack">
+                    <div
+                      class="range-selection"
+                      style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
+                    ></div>
+                    <div
+                      class="range-selection-hit"
+                      @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
+                    ></div>
+                    <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
+                    <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
+                  </div>
+                </div>
+              `
+              : nothing}
             <div class="tool-actions">
-              ${this._showLineModeButtons() ? html`
+              ${showLineModeButtons ? html`
                 <div class="mode-switch" role="group" aria-label=${localize(this.hass, "line_mode")}>
                   ${[
                     ["stair", "mdi:stairs", "mode_stair"],
@@ -1374,15 +1392,19 @@ export class HaBetterHistory extends LitElement {
                   `)}
                 </div>
               ` : nothing}
-              <button
-                class="tool-action-button"
-                title=${localize(this.hass, "export_data")}
-                aria-label=${localize(this.hass, "export_data")}
-                @click=${() => this._exportData()}
-              >
-                <ha-icon .icon=${"mdi:download"}></ha-icon>
-              </button>
-              ${this._showImportButton()
+              ${showExportButton
+                ? html`
+                  <button
+                    class="tool-action-button"
+                    title=${localize(this.hass, "export_data")}
+                    aria-label=${localize(this.hass, "export_data")}
+                    @click=${() => this._exportData()}
+                  >
+                    <ha-icon .icon=${"mdi:download"}></ha-icon>
+                  </button>
+                `
+                : nothing}
+              ${showImportButton
                 ? html`
                   <button
                     class="tool-action-button"
@@ -1396,23 +1418,6 @@ export class HaBetterHistory extends LitElement {
                 `
                 : nothing}
             </div>
-          </div>
-          <div class="range-values">
-            <span>${this._formatRangeDate(viewRange.start)}</span>
-            <span>${this._formatRangeDate(viewRange.end)}</span>
-          </div>
-          <div class="range-slider-stack">
-            <div
-              class="range-selection"
-              style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
-            ></div>
-            <div
-              class="range-selection-hit"
-              style="left:clamp(18px, ${selectionCenterPercent}%, calc(100% - 18px));"
-              @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
-            ></div>
-            <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
-            <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
           </div>
         </div>
       </div>

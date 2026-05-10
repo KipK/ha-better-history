@@ -314,19 +314,20 @@ export const chartStyles = css`
     min-width: 0;
   }
 
-  .tool-range-head,
+  .tool-range-row,
   .tool-actions,
   .range-values {
     display: flex;
     align-items: center;
   }
 
-  .tool-range-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
+  .tool-range-row {
     gap: 8px;
-    margin-bottom: 4px;
+  }
+
+  .tool-range-control {
+    flex: 1 1 auto;
+    min-width: 120px;
   }
 
   .tool-label {
@@ -420,22 +421,21 @@ export const chartStyles = css`
 
   .range-selection-hit {
     position: absolute;
-    top: 50%;
-    width: max(36px, 8%);
-    height: 22px;
+    left: 2px;
+    right: 2px;
+    top: 0;
+    bottom: 0;
+    min-width: 18px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4))) 8%, transparent);
+    background: transparent;
     cursor: grab;
     pointer-events: auto;
     touch-action: none;
-    transform: translate(-50%, -50%);
     z-index: 1;
   }
 
   .range-selection-hit::before {
-    left: 12px;
-    right: 12px;
-    opacity: 0.42;
+    display: none;
   }
 
   .range-selection-hit[dragging] {
@@ -542,12 +542,16 @@ export const chartStyles = css`
   }
 
   @container (max-width: 360px) {
-    .tool-range-head {
-      grid-template-columns: minmax(0, 1fr) auto;
+    .tool-range-row {
+      flex-wrap: wrap;
+    }
+
+    .tool-range-control,
+    .tool-actions {
+      flex: 1 1 100%;
     }
 
     .tool-actions {
-      grid-column: 1 / -1;
       justify-content: flex-end;
     }
   }
@@ -591,8 +595,7 @@ export const chartStyles = css`
     }
 
     .range-selection-hit {
-      width: max(44px, 12%);
-      height: 30px;
+      min-width: 24px;
     }
 
     .range-slider::-webkit-slider-thumb {
