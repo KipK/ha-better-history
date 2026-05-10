@@ -99,6 +99,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _runtimeLineMode?: BetterHistoryLineMode;
 
   @state() private _attributeMenuOpen = false;
+  @state() private _attributeSearch = "";
   @state() private _selectedEntityId?: string;
   @state() private _path: string[] = [];
   @state() private _selectedSources: HistorySource[] = [];
@@ -921,11 +922,13 @@ export class HaBetterHistory extends LitElement {
       draggingSourceId: this._draggingSourceId,
       resolved: this._resolved,
       loading: this._data.loading,
+      attributeSearch: this._attributeSearch,
       getItems: this._getEntityPickerItems,
       getAdditionalItems: this._getAdditionalEntityPickerItems,
       onEntityPickerOpened: () => this._onEntityPickerOpened(),
       onEntityPickerClosed: () => this._onEntityPickerClosed(),
       onEntitySelected: (entityId) => this._onEntitySelected(entityId),
+      onAttributeSearchChanged: (value) => { this._attributeSearch = value; },
       onSourceAdded: (source) => this._addSource(source),
       onSourceRemoved: (sourceId) => this._removeSource(sourceId),
       onSourceDragStart: (sourceId, event) => this._onSourceDragStart(sourceId, event),
@@ -1286,6 +1289,7 @@ export class HaBetterHistory extends LitElement {
   private _closeAttributeMenu(): void {
     this._attributeMenuOpen = false;
     this._entityPickerOpen = false;
+    this._attributeSearch = "";
   }
 
   private _onEntitySelected(entityId: string): void {
@@ -1295,6 +1299,7 @@ export class HaBetterHistory extends LitElement {
     }
     this._selectedEntityId = entityId;
     this._path = [];
+    this._attributeSearch = "";
     // Selecting an entity closes the HA picker overlay; ensure state stays in sync
     // even if `picker-closed` is not delivered.
     this._entityPickerOpen = false;

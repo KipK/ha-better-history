@@ -21,7 +21,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Stair",
     mode_line: "Line",
     mode_column: "Columns",
-    export_data: "Export"
+    export_data: "Export",
+    search_attributes: "Search attributes",
+    no_matching_attributes: "No matching attributes",
+    attribute_results_limited: "Showing first 50 matches"
   },
 
   fr: {
@@ -35,7 +38,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Escalier",
     mode_line: "Ligne",
     mode_column: "Colonnes",
-    export_data: "Exporter"
+    export_data: "Exporter",
+    search_attributes: "Rechercher des attributs",
+    no_matching_attributes: "Aucun attribut correspondant",
+    attribute_results_limited: "50 premiers résultats affichés"
   },
 
   cs: {
@@ -49,7 +55,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Schody",
     mode_line: "Čára",
     mode_column: "Sloupce",
-    export_data: "Exportovat"
+    export_data: "Exportovat",
+    search_attributes: "Hledat atributy",
+    no_matching_attributes: "Žádné odpovídající atributy",
+    attribute_results_limited: "Zobrazuje se prvních 50 shod"
   },
 
   de: {
@@ -63,7 +72,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Stufen",
     mode_line: "Linie",
     mode_column: "Spalten",
-    export_data: "Exportieren"
+    export_data: "Exportieren",
+    search_attributes: "Attribute suchen",
+    no_matching_attributes: "Keine passenden Attribute",
+    attribute_results_limited: "Die ersten 50 Treffer werden angezeigt"
   },
 
   el: {
@@ -77,7 +89,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Σκάλα",
     mode_line: "Γραμμή",
     mode_column: "Στήλες",
-    export_data: "Εξαγωγή"
+    export_data: "Εξαγωγή",
+    search_attributes: "Αναζήτηση χαρακτηριστικών",
+    no_matching_attributes: "Δεν βρέθηκαν χαρακτηριστικά",
+    attribute_results_limited: "Εμφανίζονται οι πρώτες 50 αντιστοιχίες"
   },
 
   it: {
@@ -91,7 +106,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Gradini",
     mode_line: "Linea",
     mode_column: "Colonne",
-    export_data: "Esporta"
+    export_data: "Esporta",
+    search_attributes: "Cerca attributi",
+    no_matching_attributes: "Nessun attributo corrispondente",
+    attribute_results_limited: "Mostrate le prime 50 corrispondenze"
   },
 
   pl: {
@@ -105,7 +123,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Schodkowy",
     mode_line: "Linia",
     mode_column: "Kolumny",
-    export_data: "Eksportuj"
+    export_data: "Eksportuj",
+    search_attributes: "Szukaj atrybutów",
+    no_matching_attributes: "Brak pasujących atrybutów",
+    attribute_results_limited: "Pokazano pierwsze 50 wyników"
   },
 
   ru: {
@@ -119,7 +140,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Ступени",
     mode_line: "Линия",
     mode_column: "Столбцы",
-    export_data: "Экспорт"
+    export_data: "Экспорт",
+    search_attributes: "Поиск атрибутов",
+    no_matching_attributes: "Подходящие атрибуты не найдены",
+    attribute_results_limited: "Показаны первые 50 совпадений"
   },
 
   sk: {
@@ -133,7 +157,10 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_stair: "Schody",
     mode_line: "Čiara",
     mode_column: "Stĺpce",
-    export_data: "Exportovať"
+    export_data: "Exportovať",
+    search_attributes: "Hľadať atribúty",
+    no_matching_attributes: "Žiadne zodpovedajúce atribúty",
+    attribute_results_limited: "Zobrazuje sa prvých 50 zhôd"
   }
 };
 

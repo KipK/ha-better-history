@@ -1,9 +1,13 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { entityStateSource, attributeSource, valueType, type HistorySource } from "../data/history.js";
+import type { HistoryValueType } from "../data/value-type.js";
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { ResolvedConfig } from "../types/config.js";
 import { ensureHaComponents } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
+
+const ATTRIBUTE_SEARCH_DEPTH_LIMIT = 8;
+const ATTRIBUTE_SEARCH_RESULT_LIMIT = 50;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,11 +35,13 @@ interface EntityPickerRenderOpts {
   draggingSourceId?: string;
   resolved?: ResolvedConfig;
   loading: boolean;
+  attributeSearch: string;
   getItems: () => unknown[];
   getAdditionalItems: (search?: string) => unknown[];
   onEntityPickerOpened(): void;
   onEntityPickerClosed(): void;
   onEntitySelected(entityId: string): void;
+  onAttributeSearchChanged(value: string): void;
   onSourceAdded(source: HistorySource): void;
   onSourceRemoved(sourceId: string): void;
   onSourceDragStart(sourceId: string, event: DragEvent): void;
@@ -44,6 +50,13 @@ interface EntityPickerRenderOpts {
   onSourceDrop(sourceId: string | undefined, event: DragEvent): void;
   onBreadcrumbClick(path: string[]): void;
   onCloseMenu(): void;
+}
+
+interface AttributeSearchResult {
+  key: string;
+  dottedPath: string;
+  valueType: HistoryValueType;
+  source: HistorySource;
 }
 
 export function entityPickerAvailable(): boolean {
@@ -235,9 +248,35 @@ function renderBrowserEntries(
           `
         : html`
             ${renderEntityHeader(entity, opts)}
-            ${hasVisibleAttributes ? html`<div class="entity-browser-section-title">${localize(opts.hass, "attributes")}</div>` : nothing}
+            ${hasVisibleAttributes
+              ? html`
+                  <div class="entity-browser-section-title">${localize(opts.hass, "attributes")}</div>
+                  ${renderAttributeSearchInput(opts)}
+                `
+              : nothing}
           `}
-      ${entries.map(([key, value]) => renderTreeEntry(entity, key, value, path, opts))}
+      ${path.length === 0 && opts.attributeSearch.trim()
+        ? renderAttributeSearchResults(entity, opts)
+        : entries.map(([key, value]) => renderTreeEntry(entity, key, value, path, opts))}
+    </div>
+  `;
+}
+
+function renderAttributeSearchInput(opts: EntityPickerRenderOpts): TemplateResult {
+  const label = localize(opts.hass, "search_attributes");
+
+  return html`
+    <div class="entity-browser-search">
+      <input
+        class="entity-browser-search-input"
+        type="search"
+        .value=${opts.attributeSearch}
+        placeholder=${label}
+        aria-label=${label}
+        @input=${(event: InputEvent) => opts.onAttributeSearchChanged((event.target as HTMLInputElement).value)}
+        @click=${(event: Event) => event.stopPropagation()}
+        @keydown=${(event: Event) => event.stopPropagation()}
+      />
     </div>
   `;
 }
@@ -328,15 +367,33 @@ function renderTreeEntry(
 
   const type = valueType(value);
   const fullPath = [...path, key];
-  const source = type ? attributeSource(entity, fullPath) : undefined;
+  if (!type) return nothing;
 
+  const source = attributeSource(entity, fullPath);
   if (!source) return nothing;
+  return renderAttributeEntry({ label: key, source, type, opts });
+}
+
+function renderAttributeEntry(params: {
+  label: string;
+  source: HistorySource;
+  type: HistoryValueType;
+  opts: EntityPickerRenderOpts;
+  secondary?: string;
+}): TemplateResult {
+  const { label, source, type, opts, secondary } = params;
+  const content = html`
+    <span class="entity-browser-entry-text">
+      <span class="entity-browser-entry-label">${label}</span>
+      ${secondary ? html`<span class="entity-browser-entry-secondary">${secondary}</span>` : nothing}
+    </span>
+    <span class="entity-browser-entry-type">${type}</span>
+  `;
 
   if (isSelectedSource(source.id, opts)) {
     return html`
       <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--removable" @click=${() => opts.onSourceRemoved(source.id)}>
-        <span class="entity-browser-entry-label">${key}</span>
-        <span class="entity-browser-entry-type">${type}</span>
+        ${content}
       </div>
     `;
   }
@@ -344,16 +401,105 @@ function renderTreeEntry(
   if (isResolvedSource(source.id, opts)) {
     return html`
       <div class="entity-browser-entry entity-browser-entry--present entity-browser-entry--forced">
-        <span class="entity-browser-entry-label">${key}</span>
-        <span class="entity-browser-entry-type">${type}</span>
+        ${content}
       </div>
     `;
   }
 
   return html`
     <div class="entity-browser-entry" @click=${() => opts.onSourceAdded(source)}>
-      <span class="entity-browser-entry-label">${key}</span>
-      <span class="entity-browser-entry-type">${type}</span>
+      ${content}
     </div>
   `;
+}
+
+function renderAttributeSearchResults(entity: HassEntity, opts: EntityPickerRenderOpts): TemplateResult {
+  const matches = flattenAttributeMatches(entity, entity.attributes, opts.attributeSearch);
+  const visibleMatches = matches.slice(0, ATTRIBUTE_SEARCH_RESULT_LIMIT);
+
+  if (visibleMatches.length === 0) {
+    return html`<div class="entity-browser-search-empty">${localize(opts.hass, "no_matching_attributes")}</div>`;
+  }
+
+  return html`
+    <div class="entity-browser-search-results">
+      ${visibleMatches.map((result) =>
+        renderAttributeEntry({
+          label: result.key,
+          source: result.source,
+          type: result.valueType,
+          opts,
+          secondary: result.dottedPath
+        })
+      )}
+      ${matches.length > visibleMatches.length
+        ? html`<div class="entity-browser-search-count">${localize(opts.hass, "attribute_results_limited")}</div>`
+        : nothing}
+    </div>
+  `;
+}
+
+function flattenAttributeMatches(
+  entity: HassEntity,
+  root: Record<string, unknown>,
+  query: string
+): AttributeSearchResult[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [];
+
+  const results: AttributeSearchResult[] = [];
+
+  const visit = (current: Record<string, unknown>, path: string[], depth: number): void => {
+    if (depth > ATTRIBUTE_SEARCH_DEPTH_LIMIT) return;
+
+    for (const [key, value] of Object.entries(current)) {
+      const fullPath = [...path, key];
+
+      if (isRecord(value)) {
+        visit(value, fullPath, depth + 1);
+        continue;
+      }
+
+      const type = valueType(value);
+      const source = type ? attributeSource(entity, fullPath) : undefined;
+      if (!type || !source) continue;
+
+      const searchable = attributeSearchText(fullPath, value);
+      if (!searchable.includes(normalizedQuery)) continue;
+
+      results.push({
+        key,
+        dottedPath: fullPath.join("."),
+        valueType: type,
+        source
+      });
+    }
+  };
+
+  visit(root, [], 0);
+
+  return results.sort((left, right) => {
+    const leftRank = attributeSearchRank(left, normalizedQuery);
+    const rightRank = attributeSearchRank(right, normalizedQuery);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    if (left.dottedPath.length !== right.dottedPath.length) return left.dottedPath.length - right.dottedPath.length;
+    return left.dottedPath.localeCompare(right.dottedPath);
+  });
+}
+
+function attributeSearchText(path: string[], value: unknown): string {
+  const valueText = typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+  return [...path, path.join("."), valueText].join(" ").toLocaleLowerCase();
+}
+
+function attributeSearchRank(result: AttributeSearchResult, query: string): number {
+  const key = result.key.toLocaleLowerCase();
+  const dottedPath = result.dottedPath.toLocaleLowerCase();
+  if (key.startsWith(query)) return 0;
+  if (dottedPath.startsWith(query)) return 1;
+  if (key.includes(query)) return 2;
+  if (dottedPath.includes(query)) return 3;
+  return 4;
 }

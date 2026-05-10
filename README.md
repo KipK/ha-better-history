@@ -276,7 +276,7 @@ chart.config = {
 </script>
 ```
 
-The entity picker lets users browse entity attributes and add/remove series at runtime. Non-default series are removable via chip buttons. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
+The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 
 ### Viewer tools
 

@@ -853,6 +853,7 @@ export const chartStyles = css`
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
     padding: 6px 8px;
     border-radius: var(--better-history-radius, 8px);
     cursor: pointer;
@@ -898,10 +899,26 @@ export const chartStyles = css`
     opacity: 0.78;
   }
 
+  .entity-browser-entry-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+  }
+
   .entity-browser-entry-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .entity-browser-entry-secondary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-size: 11px;
+    line-height: 1.25;
   }
 
   .entity-browser-entry-type,
@@ -909,6 +926,47 @@ export const chartStyles = css`
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
     font-size: 11px;
     flex-shrink: 0;
+  }
+
+  .entity-browser-search {
+    width: 100%;
+    margin: 4px 0 6px;
+  }
+
+  .entity-browser-search-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    border-radius: var(--better-history-radius, 8px);
+    background: color-mix(in srgb, var(--wa-color-surface-raised, var(--card-background-color, #fff)) 92%, var(--primary-text-color, #000) 8%);
+    box-sizing: border-box;
+    color: var(--better-history-text-color, var(--primary-text-color, #fff));
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .entity-browser-search-input::placeholder {
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+  }
+
+  .entity-browser-search-input:focus {
+    border-color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    box-shadow: 0 0 0 1px var(--better-history-accent-color, var(--primary-color, #03a9f4));
+  }
+
+  .entity-browser-search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .entity-browser-search-empty,
+  .entity-browser-search-count {
+    padding: 8px;
+    color: var(--better-history-muted-color, var(--secondary-text-color, #888));
+    font-size: 12px;
   }
 
   .entity-browser-back {
