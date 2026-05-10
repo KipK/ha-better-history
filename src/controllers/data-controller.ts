@@ -123,6 +123,14 @@ export class DataController implements ReactiveController {
     return session;
   }
 
+  private _cancelSession(): void {
+    if (this._session) {
+      this._session.cancelled = true;
+    }
+    this._session = undefined;
+    this._progressUpdateScheduled = false;
+  }
+
   private _activeSession(start: Date, end: Date): HistoryLoadSession | undefined {
     const session = this._session;
 
@@ -330,6 +338,22 @@ export class DataController implements ReactiveController {
           });
         }
       });
+  }
+
+  setImportedSeries(series: HistorySeries[], start: Date, end: Date): void {
+    this._cancelSession();
+    this.series = series;
+    this.loading = false;
+    this.error = "";
+    this._prevKey = `${series.map((item) => item.source.id).join("|")}|${start.getTime()}|${end.getTime()}`;
+    this.host.requestUpdate();
+  }
+
+  setError(error: string): void {
+    this._cancelSession();
+    this.loading = false;
+    this.error = error;
+    this.host.requestUpdate();
   }
 
   addSources(

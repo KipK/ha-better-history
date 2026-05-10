@@ -18,7 +18,7 @@ Standalone web component for Home Assistant history charts. Built with **Lit 3**
 - **Smarter multi-series layout** — automatic graph grouping by unit or explicit `scaleGroup`, optional manual Y ranges, dual-axis handling, and stable colors for readable comparison.
 - **Climate-aware overlays** — when climate temperature and `hvac_action` are present, heating periods can be rendered as a contextual area overlay.
 - **Runtime series editing** — users can add, remove, reorder, and hide non-default series from the UI without rebuilding the host card.
-- **Portable export format** — visible data can be exported as compact `ha-better-history-series-v1` JSON for debugging, sharing, or future analysis tools.
+- **Portable export format** — visible data can be exported as compact `ha-better-history-series-v1` JSON for debugging, sharing, future analysis tools, or re-importing into the component.
 - **Standalone integration surface** — the component can be embedded in Lovelace cards, dialogs, more-info style views, or any Home Assistant frontend context that can provide `hass`.
 
 ### Screenshots
@@ -51,6 +51,7 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `hours`              | `number`  | `24`      | Time range in hours before `endDate`              |
 | `show-date-picker`   | `boolean` | `false`   | Show `ha-date-range-picker` above the chart       |
 | `show-entity-picker` | `boolean` | `false`   | Show entity picker + attribute browser            |
+| `show-import-button` | `boolean` | `false`   | Show a JSON import button in the tools panel      |
 | `show-legend`        | `boolean` | `true`    | Legend below the chart                            |
 | `show-tooltip`       | `boolean` | `true`    | Multi-series tooltip on hover                     |
 | `width`              | `string`  | `"100%"`  | CSS width of the component wrapper                |
@@ -92,6 +93,7 @@ interface BetterHistoryConfig {
   // UI chrome
   showDatePicker?: boolean;          // default: false
   showEntityPicker?: boolean;        // default: false
+  showImportButton?: boolean;        // default: false
   showLegend?: boolean;              // default: true
   showTooltip?: boolean;             // default: true
   width?: string;                    // default: "100%"
@@ -214,6 +216,7 @@ All events bubble and are composed.
 | `series-added`    | `{ source: HistorySource }`                        | User adds a series via entity picker                        |
 | `series-removed`  | `{ sourceId: string }`                             | User removes a non-default series                           |
 | `series-reordered` | `{ sourceIds: string[] }`                         | User drags selected source chips into a new order            |
+| `data-imported`   | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported       |
 | `tooltip-changed` | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
 | `picker-overlay-changed` | `{ open: boolean }`                         | Entity picker or attribute browser overlay opens/closes      |
 
@@ -305,7 +308,8 @@ The viewer toolbar appears above the graph when `tools-open` is `true`. It inclu
 
 - a time range selector that zooms inside the already loaded history range without refetching data;
 - a display mode switch for stair, line, and column rendering;
-- a JSON export button.
+- a JSON export button;
+- an optional JSON import button when `show-import-button` or `config.showImportButton` is `true`.
 
 Drag the highlighted range selection to pan the zoomed graph through the loaded period while keeping the same visible duration. A minimum drag target stays available even when the visible range is tiny, and the minimum zoom span adapts to the loaded range.
 
@@ -339,6 +343,8 @@ Exports use the compact `ha-better-history-series-v1` format:
   ]
 }
 ```
+
+The optional import button accepts the same `ha-better-history-series-v1` JSON. Imported files replace the current displayed series, apply the exported loaded range and view range, and render locally without querying Home Assistant history.
 
 ## CSS custom properties
 

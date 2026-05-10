@@ -59,6 +59,24 @@ interface GraphGroupRenderCache {
   groups: GraphGroup[];
 }
 
+interface ImportedSeriesMeta {
+  color?: string;
+  lineMode?: BetterHistoryLineMode;
+}
+
+interface BetterHistorySeriesExportV1 {
+  format: "ha-better-history-series-v1";
+  loadedRange?: {
+    start?: string;
+    end?: string;
+  };
+  viewRange?: {
+    start?: string;
+    end?: string;
+  };
+  series?: unknown[];
+}
+
 export class HaBetterHistory extends LitElement {
   static styles = chartStyles;
 
@@ -71,6 +89,7 @@ export class HaBetterHistory extends LitElement {
   @property({ attribute: false }) endDate?: Date;
   @property({ type: Boolean, attribute: "show-date-picker" }) showDatePicker = false;
   @property({ type: Boolean, attribute: "show-entity-picker" }) showEntityPicker = false;
+  @property({ type: Boolean, attribute: "show-import-button" }) showImportButton = false;
   @property({ type: Boolean, attribute: "show-legend" }) showLegend = true;
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
   @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
@@ -123,6 +142,8 @@ export class HaBetterHistory extends LitElement {
   private _dragStartSourceIds?: string[];
   private _dragDropCommitted = false;
   private _lastPickerOverlayOpen = false;
+  private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
+  private _importedDataActive = false;
 
   @state() private _containerWidth = 0;
   private _resizeObserver?: ResizeObserver;
@@ -254,7 +275,7 @@ export class HaBetterHistory extends LitElement {
     const sources: HistorySource[] = [];
     const seen = new Set<string>();
 
-    if (this._resolved) {
+    if (this._resolved && !this._importedDataActive) {
       for (const s of this._resolved.series) {
         if (!seen.has(s.id)) {
           seen.add(s.id);
@@ -328,6 +349,12 @@ export class HaBetterHistory extends LitElement {
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
+      const externalDataChanged = changed.has("config") || changed.has("entities");
+
+      if (externalDataChanged) {
+        this._importedDataActive = false;
+        this._importedSeriesMeta.clear();
+      }
 
       if (hassOnly) {
         const now = Date.now();
@@ -506,10 +533,14 @@ export class HaBetterHistory extends LitElement {
     return "2.5";
   }
 
+  private _showImportButton(): boolean {
+    return this.showImportButton || this.config?.showImportButton === true;
+  }
+
   private _buildRenderSeries(): RenderableSeries[] {
     if (!this._resolved) return [];
 
-    const result: RenderableSeries[] = this._resolved.series.flatMap((resolved) => {
+    const result: RenderableSeries[] = this._importedDataActive ? [] : this._resolved.series.flatMap((resolved) => {
       const fetched = this._data.series.find((s) => s.source.id === resolved.id);
 
       return [
@@ -544,11 +575,11 @@ export class HaBetterHistory extends LitElement {
       result.push({
         id: source.id,
         label: source.label,
-        color: paletteColor(colorIndex),
+        color: this._importedSeriesMeta.get(source.id)?.color ?? paletteColor(colorIndex),
         unit: source.unit,
         scaleGroupKey,
         scaleMode: "auto",
-        lineMode: this._defaultLineMode(),
+        lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
         lineWidth: this._defaultLineWidth(),
         valueType: source.valueType,
         points: fetched?.points ?? []
@@ -1126,6 +1157,136 @@ export class HaBetterHistory extends LitElement {
     URL.revokeObjectURL(url);
   }
 
+  private _importData(): void {
+    const input = document.createElement("input");
+
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      file.text()
+        .then((content) => this._applyImportedData(JSON.parse(content) as unknown))
+        .catch(() => this._data.setError("Invalid import file"));
+    }, { once: true });
+    input.click();
+  }
+
+  private _applyImportedData(payload: unknown): void {
+    if (!this._isExportPayload(payload)) {
+      this._data.setError("Unsupported import format");
+      return;
+    }
+
+    const imported = this._parseImportedSeries(payload.series ?? []);
+    if (!imported) {
+      this._data.setError("Invalid import data");
+      return;
+    }
+
+    const viewStart = this._parseDate(payload.viewRange?.start);
+    const viewEnd = this._parseDate(payload.viewRange?.end);
+    const loadedStart = this._parseDate(payload.loadedRange?.start) ?? viewStart;
+    const loadedEnd = this._parseDate(payload.loadedRange?.end) ?? viewEnd;
+
+    if (!viewStart || !viewEnd || !loadedStart || !loadedEnd || loadedStart.getTime() >= loadedEnd.getTime()) {
+      this._data.setError("Invalid import range");
+      return;
+    }
+
+    this._importedSeriesMeta = imported.meta;
+    this._importedDataActive = true;
+    this._selectedSources = imported.series.map((item) => item.source);
+    this._rangeStart = loadedStart;
+    this._rangeEnd = loadedEnd;
+    this._viewStart = viewStart;
+    this._viewEnd = viewEnd;
+    this._hiddenSeriesIds = [];
+    this._chartRenderCache = undefined;
+    this._graphGroupRenderCache = undefined;
+
+    const sourceIds = this._selectedSources.map((source) => source.id).sort().join("|");
+    this._lastFetchKey = `${sourceIds}|${loadedStart.getTime()}|${loadedEnd.getTime()}`;
+    this._lastFetchSources = [...this._selectedSources];
+    this._data.setImportedSeries(imported.series, loadedStart, loadedEnd);
+
+    this.dispatchEvent(
+      new CustomEvent("data-imported", {
+        detail: { start: loadedStart, end: loadedEnd, seriesCount: imported.series.length },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private _isExportPayload(payload: unknown): payload is BetterHistorySeriesExportV1 {
+    return typeof payload === "object"
+      && payload !== null
+      && (payload as BetterHistorySeriesExportV1).format === "ha-better-history-series-v1";
+  }
+
+  private _parseImportedSeries(items: unknown[]): { series: HistorySeries[]; meta: Map<string, ImportedSeriesMeta> } | undefined {
+    const series: HistorySeries[] = [];
+    const meta = new Map<string, ImportedSeriesMeta>();
+
+    for (const item of items) {
+      if (typeof item !== "object" || item === null) return undefined;
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === "string" && record.id.trim() !== "" ? record.id : undefined;
+      const entityId = typeof record.entityId === "string" && record.entityId.trim() !== "" ? record.entityId : undefined;
+      const label = typeof record.label === "string" && record.label.trim() !== "" ? record.label : id;
+      const valueType = record.valueType === "number" || record.valueType === "boolean" || record.valueType === "string" ? record.valueType : undefined;
+      const points = Array.isArray(record.points) ? record.points : undefined;
+
+      if (!id || !entityId || !label || !valueType || !points) return undefined;
+
+      const attribute = typeof record.attribute === "string" && record.attribute.trim() !== "" ? record.attribute : undefined;
+      const source: HistorySource = {
+        id,
+        kind: attribute ? "entity_attribute" : "entity_state",
+        entityId,
+        label,
+        path: attribute?.split("."),
+        valueType,
+        unit: typeof record.unit === "string" ? record.unit : undefined
+      };
+      const parsedPoints = points
+        .map((point) => this._parseImportedPoint(point, valueType))
+        .filter((point): point is NonNullable<ReturnType<typeof this._parseImportedPoint>> => point !== undefined)
+        .sort((left, right) => left.time - right.time);
+
+      series.push({ source, points: parsedPoints });
+      meta.set(id, {
+        color: typeof record.color === "string" && record.color.trim() !== "" ? record.color : undefined,
+        lineMode: record.lineMode === "line" || record.lineMode === "column" || record.lineMode === "stair" ? record.lineMode : undefined
+      });
+    }
+
+    return { series, meta };
+  }
+
+  private _parseImportedPoint(point: unknown, valueType: HistorySource["valueType"]): HistorySeries["points"][number] | undefined {
+    if (typeof point !== "object" || point === null) return undefined;
+    const record = point as Record<string, unknown>;
+    const time = Date.parse(String(record.timestamp ?? ""));
+    const value = record.value;
+
+    if (!Number.isFinite(time)) return undefined;
+    if (valueType === "number" && typeof value === "number" && Number.isFinite(value)) return { time, value };
+    if (valueType === "boolean" && typeof value === "boolean") return { time, value };
+    if (valueType === "string" && typeof value === "string") return { time, value };
+
+    return undefined;
+  }
+
+  private _parseDate(value: unknown): Date | undefined {
+    if (typeof value !== "string") return undefined;
+    const time = Date.parse(value);
+
+    return Number.isFinite(time) ? new Date(time) : undefined;
+  }
+
   private _renderToolsPanel(): TemplateResult | typeof nothing {
     if (!this.toolsOpen || !this._resolved) return nothing;
 
@@ -1183,6 +1344,14 @@ export class HaBetterHistory extends LitElement {
             <ha-icon .icon=${"mdi:download"}></ha-icon>
             <span>${localize(this.hass, "export_data")}</span>
           </button>
+          ${this._showImportButton()
+            ? html`
+              <button class="tool-action-button" @click=${() => this._importData()}>
+                <ha-icon .icon=${"mdi:upload"}></ha-icon>
+                <span>${localize(this.hass, "import_data")}</span>
+              </button>
+            `
+            : nothing}
         </div>
       </div>
     `;

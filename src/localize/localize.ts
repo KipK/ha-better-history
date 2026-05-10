@@ -22,6 +22,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Line",
     mode_column: "Columns",
     export_data: "Export",
+    import_data: "Import",
     search_attributes: "Search attributes",
     no_matching_attributes: "No matching attributes",
     attribute_results_limited: "Showing first 50 matches"
@@ -39,6 +40,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Ligne",
     mode_column: "Colonnes",
     export_data: "Exporter",
+    import_data: "Importer",
     search_attributes: "Rechercher des attributs",
     no_matching_attributes: "Aucun attribut correspondant",
     attribute_results_limited: "50 premiers résultats affichés"
@@ -56,6 +58,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Čára",
     mode_column: "Sloupce",
     export_data: "Exportovat",
+    import_data: "Importovat",
     search_attributes: "Hledat atributy",
     no_matching_attributes: "Žádné odpovídající atributy",
     attribute_results_limited: "Zobrazuje se prvních 50 shod"
@@ -73,6 +76,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Linie",
     mode_column: "Spalten",
     export_data: "Exportieren",
+    import_data: "Importieren",
     search_attributes: "Attribute suchen",
     no_matching_attributes: "Keine passenden Attribute",
     attribute_results_limited: "Die ersten 50 Treffer werden angezeigt"
@@ -90,6 +94,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Γραμμή",
     mode_column: "Στήλες",
     export_data: "Εξαγωγή",
+    import_data: "Εισαγωγή",
     search_attributes: "Αναζήτηση χαρακτηριστικών",
     no_matching_attributes: "Δεν βρέθηκαν χαρακτηριστικά",
     attribute_results_limited: "Εμφανίζονται οι πρώτες 50 αντιστοιχίες"
@@ -107,6 +112,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Linea",
     mode_column: "Colonne",
     export_data: "Esporta",
+    import_data: "Importa",
     search_attributes: "Cerca attributi",
     no_matching_attributes: "Nessun attributo corrispondente",
     attribute_results_limited: "Mostrate le prime 50 corrispondenze"
@@ -124,6 +130,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Linia",
     mode_column: "Kolumny",
     export_data: "Eksportuj",
+    import_data: "Importuj",
     search_attributes: "Szukaj atrybutów",
     no_matching_attributes: "Brak pasujących atrybutów",
     attribute_results_limited: "Pokazano pierwsze 50 wyników"
@@ -141,6 +148,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Линия",
     mode_column: "Столбцы",
     export_data: "Экспорт",
+    import_data: "Импорт",
     search_attributes: "Поиск атрибутов",
     no_matching_attributes: "Подходящие атрибуты не найдены",
     attribute_results_limited: "Показаны первые 50 совпадений"
@@ -158,6 +166,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_line: "Čiara",
     mode_column: "Stĺpce",
     export_data: "Exportovať",
+    import_data: "Importovať",
     search_attributes: "Hľadať atribúty",
     no_matching_attributes: "Žiadne zodpovedajúce atribúty",
     attribute_results_limited: "Zobrazuje sa prvých 50 zhôd"
