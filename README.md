@@ -21,6 +21,12 @@ Standalone web component for Home Assistant history charts. Built with **Lit 3**
 - **Portable export format** — visible data can be exported as compact `ha-better-history-series-v1` JSON for debugging, sharing, or future analysis tools.
 - **Standalone integration surface** — the component can be embedded in Lovelace cards, dialogs, more-info style views, or any Home Assistant frontend context that can provide `hass`.
 
+### Screenshots
+
+![ha-better-history viewer tools with chart zoom and display controls](assets/screens/tools.png)
+
+![ha-better-history entity and attribute picker with searchable nested attributes](assets/screens/picker.png)
+
 ## Quick start
 
 ```html
