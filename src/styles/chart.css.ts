@@ -144,6 +144,8 @@ export const chartStyles = css`
     display: flex;
     flex-direction: column;
     gap: 0;
+    justify-content: center;
+    min-height: 100%;
     position: relative;
     contain: layout;
   }

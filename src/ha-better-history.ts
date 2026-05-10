@@ -57,6 +57,7 @@ interface ChartRenderCache {
 interface GraphGroupRenderCache {
   dataRef: ChartRenderData;
   maxXTicks: number;
+  graphHeight: number;
   groups: GraphGroup[];
 }
 
@@ -153,7 +154,9 @@ export class HaBetterHistory extends LitElement {
   @state() private _importedDataActive = false;
 
   @state() private _containerWidth = 0;
+  @state() private _chartSurfaceHeight = 0;
   private _resizeObserver?: ResizeObserver;
+  private _observedChartSurface?: Element;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -162,9 +165,18 @@ export class HaBetterHistory extends LitElement {
     document.addEventListener("mousedown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (width !== this._containerWidth) {
-        this._containerWidth = width;
+      for (const entry of entries) {
+        if (entry.target === this) {
+          const width = Math.round(entry.contentRect.width);
+          if (width !== this._containerWidth) {
+            this._containerWidth = width;
+          }
+        } else if (entry.target === this._observedChartSurface) {
+          const height = Math.round(entry.contentRect.height);
+          if (height !== this._chartSurfaceHeight) {
+            this._chartSurfaceHeight = height;
+          }
+        }
       }
     });
     this._resizeObserver.observe(this);
@@ -187,6 +199,27 @@ export class HaBetterHistory extends LitElement {
   private _maxXTicks(): number {
     if (this._containerWidth <= 0) return 12;
     return Math.max(3, Math.floor(this._containerWidth * PLOT_WIDTH / (CHART_WIDTH * 50)));
+  }
+
+  private _observeChartSurface(): void {
+    const surface = this.renderRoot.querySelector(".chart-surface");
+    if (surface === this._observedChartSurface) return;
+
+    if (this._observedChartSurface) {
+      this._resizeObserver?.unobserve(this._observedChartSurface);
+    }
+
+    this._observedChartSurface = surface ?? undefined;
+
+    if (surface) {
+      this._resizeObserver?.observe(surface);
+      const height = Math.round(surface.getBoundingClientRect().height);
+      if (height !== this._chartSurfaceHeight) {
+        this._chartSurfaceHeight = height;
+      }
+    } else if (this._chartSurfaceHeight !== 0) {
+      this._chartSurfaceHeight = 0;
+    }
   }
 
   private _effectiveStartDate(): Date {
@@ -498,6 +531,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    this._observeChartSurface();
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
@@ -752,16 +786,39 @@ export class HaBetterHistory extends LitElement {
 
   private _graphGroups(data: ChartRenderData): GraphGroup[] {
     const maxXTicks = this._maxXTicks();
+    const graphHeight = this._graphHeightFor(data);
     const cache = this._graphGroupRenderCache;
 
-    if (cache && cache.dataRef === data && cache.maxXTicks === maxXTicks) {
+    if (
+      cache &&
+      cache.dataRef === data &&
+      cache.maxXTicks === maxXTicks &&
+      cache.graphHeight === graphHeight
+    ) {
       return cache.groups;
     }
 
-    const groups = buildGraphGroups(data, maxXTicks);
-    this._graphGroupRenderCache = { dataRef: data, maxXTicks, groups };
+    const groups = buildGraphGroups(data, maxXTicks, graphHeight);
+    this._graphGroupRenderCache = { dataRef: data, maxXTicks, graphHeight, groups };
 
     return groups;
+  }
+
+  private _graphHeightFor(data: ChartRenderData): number {
+    if (this._chartSurfaceHeight <= 0) return GRAPH_HEIGHT;
+
+    const graphCount = Math.max(
+      new Set(data.numericScales.map((scale) => scale.graphKey)).size,
+      data.allSeries.some((s) => s.valueType !== "number" && s.valueType !== "boolean") ? 1 : 0,
+      1
+    );
+    const segmentCount = data.allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
+    const staticCanvasHeight = graphCount * (GRAPH_TOP + 18 + 16) + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
+    const legendReserve = (this._resolved?.showLegend ?? true) ? graphCount * 34 : 0;
+    const availableForGraphs = this._chartSurfaceHeight - staticCanvasHeight - legendReserve;
+    const height = Math.floor(availableForGraphs / graphCount);
+
+    return Math.max(GRAPH_HEIGHT, height);
   }
 
   private _renderGraphGroup(group: GraphGroup): TemplateResult {
@@ -829,7 +886,7 @@ export class HaBetterHistory extends LitElement {
             ${group.series
               .filter((s) => s.valueType !== "number" && s.valueType !== "boolean")
               .map((s, ni) => {
-                const y = GRAPH_TOP + GRAPH_HEIGHT + 10 + ni * SEGMENT_ROW_HEIGHT;
+                const y = GRAPH_TOP + group.graphHeight + 10 + ni * SEGMENT_ROW_HEIGHT;
                 return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
               })}
             ${showScale
