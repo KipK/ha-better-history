@@ -96,6 +96,8 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-line-mode-buttons" }) showLineModeButtons = true;
   @property({ type: Boolean, attribute: "show-legend" }) showLegend = true;
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
+  @property({ type: Boolean, attribute: "show-grid" }) showGrid = true;
+  @property({ type: Boolean, attribute: "show-scale" }) showScale = true;
   @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
   @property() width?: string;
   @property() height?: string;
@@ -384,7 +386,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -416,6 +418,8 @@ export class HaBetterHistory extends LitElement {
         showEntityPicker: this.showEntityPicker,
         showLegend: this.showLegend,
         showTooltip: this.showTooltip,
+        showGrid: this.showGrid,
+        showScale: this.showScale,
         width: this.width,
         height: this.height,
         lineMode: this._effectiveLineMode(),
@@ -762,6 +766,8 @@ export class HaBetterHistory extends LitElement {
 
   private _renderGraphGroup(group: GraphGroup): TemplateResult {
     const showLegend = this._resolved?.showLegend ?? true;
+    const showGrid = this._resolved?.showGrid ?? true;
+    const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
 
     return html`
@@ -772,16 +778,20 @@ export class HaBetterHistory extends LitElement {
             height="${group.svgHeight}"
             preserveAspectRatio="none"
           >
-            ${group.xLabels.map(
-              (label) => svg`
-                <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
-              `
-            )}
-            ${group.yLabels.map(
-              (label) => svg`
-                <line class="grid-line grid-line--horizontal" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
-              `
-            )}
+            ${showGrid
+              ? group.xLabels.map(
+                  (label) => svg`
+                    <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
+                  `
+                )
+              : nothing}
+            ${showGrid
+              ? group.yLabels.map(
+                  (label) => svg`
+                    <line class="grid-line grid-line--horizontal" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
+                  `
+                )
+              : nothing}
             <defs>
               ${group.lines.map((line) => {
                 const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
@@ -822,43 +832,55 @@ export class HaBetterHistory extends LitElement {
                 const y = GRAPH_TOP + GRAPH_HEIGHT + 10 + ni * SEGMENT_ROW_HEIGHT;
                 return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
               })}
-            <line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>
-            ${group.rightYLabels.length > 0
+            ${showScale
+              ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>`
+              : nothing}
+            ${showScale && group.rightYLabels.length > 0
               ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
               : nothing}
-            <line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>
-            ${group.scale
+            ${showScale
+              ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+              : nothing}
+            ${showScale && group.scale
               ? group.yLabels.map(
                   (label) => svg`
                     <line class="axis tick" x1=${PLOT_LEFT - 4} y1=${label.y.toFixed(1)} x2=${PLOT_LEFT} y2=${label.y.toFixed(1)}></line>
                   `
                 )
               : nothing}
-            ${group.rightYLabels.map(
-              (label) => svg`
-                <line class="axis tick" x1=${PLOT_RIGHT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT + 4} y2=${label.y.toFixed(1)}></line>
-              `
-            )}
+            ${showScale
+              ? group.rightYLabels.map(
+                  (label) => svg`
+                    <line class="axis tick" x1=${PLOT_RIGHT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT + 4} y2=${label.y.toFixed(1)}></line>
+                  `
+                )
+              : nothing}
           </svg>
-          ${group.yLabels.map(
-            (label) => {
-              const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
-              return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
-            }
-          )}
-          ${group.rightYLabels.map(
-            (label) => {
-              const pct = ((PLOT_RIGHT / CHART_WIDTH) * 100).toFixed(2);
-              const width = (100 - Number(pct)).toFixed(2);
-              return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:${pct}%;width:${width}%;text-align:left;padding-left:6px;">${label.value}</span>`;
-            }
-          )}
-          ${group.xLabels.map(
-            (label) => {
-              const pct = ((label.x / CHART_WIDTH) * 100).toFixed(2);
-              return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
-            }
-          )}
+          ${showScale
+            ? group.yLabels.map(
+                (label) => {
+                  const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
+                  return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
+                }
+              )
+            : nothing}
+          ${showScale
+            ? group.rightYLabels.map(
+                (label) => {
+                  const pct = ((PLOT_RIGHT / CHART_WIDTH) * 100).toFixed(2);
+                  const width = (100 - Number(pct)).toFixed(2);
+                  return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:${pct}%;width:${width}%;text-align:left;padding-left:6px;">${label.value}</span>`;
+                }
+              )
+            : nothing}
+          ${showScale
+            ? group.xLabels.map(
+                (label) => {
+                  const pct = ((label.x / CHART_WIDTH) * 100).toFixed(2);
+                  return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
+                }
+              )
+            : nothing}
         </div>
         ${showLegend && group.allSeries.length > 0
           ? html`

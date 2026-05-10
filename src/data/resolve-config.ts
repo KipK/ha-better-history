@@ -277,6 +277,8 @@ export interface ResolveConfigOpts {
   showEntityPicker?: boolean;
   showLegend?: boolean;
   showTooltip?: boolean;
+  showGrid?: boolean;
+  showScale?: boolean;
   width?: string;
   height?: string;
   lineMode?: BetterHistoryLineMode;
@@ -327,6 +329,8 @@ export function resolveConfig(opts: ResolveConfigOpts): ResolvedConfig {
     showEntityPicker: config?.showEntityPicker ?? opts.showEntityPicker ?? false,
     showLegend: config?.showLegend ?? opts.showLegend ?? true,
     showTooltip: config?.showTooltip ?? opts.showTooltip ?? true,
+    showGrid: config?.showGrid ?? opts.showGrid ?? true,
+    showScale: config?.showScale ?? opts.showScale ?? true,
     width: config?.width ?? opts.width ?? "100%",
     height: config?.height ?? opts.height,
     backgroundColor: config?.backgroundColor ?? opts.backgroundColor,

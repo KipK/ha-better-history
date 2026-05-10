@@ -49,25 +49,32 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 
 ### Top-level attributes (HTML)
 
-| Attribute            | Type      | Default     | Description                                                     |
-| -------------------- | --------- | ----------- | --------------------------------------------------------------- |
-| `hours`              | `number`  | `24`        | Time range in hours before `endDate`                            |
-| `show-date-picker`   | `boolean` | `false`     | Show `ha-date-range-picker` above the chart                     |
-| `show-entity-picker` | `boolean` | `false`     | Show entity picker + attribute browser                          |
-| `show-import-button` | `boolean` | `false`     | Show a JSON import button in the tools panel                    |
-| `show-legend`        | `boolean` | `true`      | Legend below the chart                                          |
-| `show-tooltip`       | `boolean` | `true`      | Multi-series tooltip on hover                                   |
-| `width`              | `string`  | `"100%"`    | CSS width of the component wrapper                              |
-| `height`             | `string`  | —           | CSS height; if omitted, computed from graph count               |
-| `line-mode`          | `string`  | `"stair"`   | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
-| `line-width`         | `string`  | `"2.5"`     | Global SVG stroke width for numeric lines                       |
-| `background-color`   | `string`  | transparent | CSS background color for the component wrapper                  |
-| `graph-title`        | `string`  | —           | Optional title above the chart                                  |
-| `title-font-family`  | `string`  | HA theme    | Optional title font-family override                             |
-| `title-font-size`    | `string`  | HA theme    | Optional title font-size override                               |
-| `title-color`        | `string`  | HA theme    | Optional title color override                                   |
-| `language`           | `string`  | HA locale   | Language code for labels (`"en"`, `"fr"`, …)                    |
-| `tools-open`         | `boolean` | `false`     | Open/close the viewer tools panel from outside                  |
+| Attribute                  | Type      | Default     | Description                                                     |
+| -------------------------- | --------- | ----------- | --------------------------------------------------------------- |
+| `hours`                    | `number`  | `24`        | Time range in hours before `endDate`                            |
+| `show-date-picker`         | `boolean` | `false`     | Show `ha-date-range-picker` above the chart                     |
+| `show-entity-picker`       | `boolean` | `false`     | Show entity picker + attribute browser                          |
+| `show-import-button`       | `boolean` | `false`     | Show a JSON import button in the tools panel                    |
+| `show-export-button`       | `boolean` | `true`      | Show the JSON export button in the tools panel                  |
+| `show-time-range-selector` | `boolean` | `true`      | Show the no-refetch range zoom control in the tools panel       |
+| `show-line-mode-buttons`   | `boolean` | `true`      | Show stair/line/column mode buttons in the tools panel          |
+| `show-legend`              | `boolean` | `true`      | Legend below the chart                                          |
+| `show-tooltip`             | `boolean` | `true`      | Multi-series tooltip on hover                                   |
+| `show-grid`                | `boolean` | `true`      | Show graph grid lines                                           |
+| `show-scale`               | `boolean` | `true`      | Show axis spines, ticks, and X/Y labels                         |
+| `show-controls`            | `boolean` | `true`      | Show the date/entity picker controls bar when enabled           |
+| `width`                    | `string`  | `"100%"`    | CSS width of the component wrapper                              |
+| `height`                   | `string`  | —           | CSS height; if omitted, computed from graph count               |
+| `line-mode`                | `string`  | `"stair"`   | Global numeric display mode: `"stair"`, `"line"`, or `"column"` |
+| `line-width`               | `string`  | `"2.5"`     | Global stroke width for numeric lines                           |
+| `background-color`         | `string`  | transparent | CSS background color for the component wrapper                  |
+| `graph-title`              | `string`  | —           | Optional title above the chart                                  |
+| `title-font-family`        | `string`  | HA theme    | Optional title font-family override                             |
+| `title-font-size`          | `string`  | HA theme    | Optional title font-size override                               |
+| `title-color`              | `string`  | HA theme    | Optional title color override                                   |
+| `language`                 | `string`  | HA locale   | Language code for labels (`"en"`, `"fr"`, …)                    |
+| `debug-performance`        | `boolean` | `false`     | Enable verbose performance logs for profiling                   |
+| `tools-open`               | `boolean` | `false`     | Open/close the viewer tools panel from outside                  |
 
 ### JS-only properties
 
@@ -97,8 +104,13 @@ interface BetterHistoryConfig {
   showDatePicker?: boolean;          // default: false
   showEntityPicker?: boolean;        // default: false
   showImportButton?: boolean;        // default: false
+  showExportButton?: boolean;        // default: true
+  showTimeRangeSelector?: boolean;   // default: true
+  showLineModeButtons?: boolean;     // default: true
   showLegend?: boolean;              // default: true
   showTooltip?: boolean;             // default: true
+  showGrid?: boolean;                // default: true
+  showScale?: boolean;               // default: true
   width?: string;                    // default: "100%"
   height?: string;
   lineMode?: "stair" | "line" | "column"; // default: "stair"
@@ -113,6 +125,7 @@ interface BetterHistoryConfig {
   series?: SeriesConfig[];           // explicit series list
   defaultEntities?: string[];        // shown in entity picker when enabled
   disableClimateOverlay?: boolean;   // default: false
+  debugPerformance?: boolean;        // default: false; verbose perf logs
 
   // Attribute units
   attributeUnits?: AttributeUnitMap; // map attribute dot-paths to display units
@@ -311,9 +324,9 @@ The entity picker lets users browse entity attributes and add/remove series at r
 
 The viewer toolbar appears above the graph when `tools-open` is `true`. It includes:
 
-- a time range selector that zooms inside the already loaded history range without refetching data;
-- a display mode switch for stair, line, and column rendering;
-- a JSON export button;
+- a time range selector that zooms inside the already loaded history range without refetching data, unless `show-time-range-selector` or `config.showTimeRangeSelector` is `false`;
+- a display mode switch for stair, line, and column rendering, unless `show-line-mode-buttons` or `config.showLineModeButtons` is `false`;
+- a JSON export button, unless `show-export-button` or `config.showExportButton` is `false`;
 - an optional JSON import button when `show-import-button` or `config.showImportButton` is `true`.
 
 Drag the highlighted range selection to pan the zoomed graph through the loaded period while keeping the same visible duration. A minimum drag target stays available even when the visible range is tiny, and the minimum zoom span adapts to the loaded range.
