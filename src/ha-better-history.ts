@@ -144,7 +144,7 @@ export class HaBetterHistory extends LitElement {
   private _dragDropCommitted = false;
   private _lastPickerOverlayOpen = false;
   private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
-  private _importedDataActive = false;
+  @state() private _importedDataActive = false;
 
   @state() private _containerWidth = 0;
   private _resizeObserver?: ResizeObserver;
@@ -562,8 +562,12 @@ export class HaBetterHistory extends LitElement {
     return this.showImportButton || this.config?.showImportButton === true;
   }
 
+  private _hasForcedConfigSeries(): boolean {
+    return this._activeResolvedSeries().some((series) => series.forced !== false);
+  }
+
   private _buildRenderSeries(): RenderableSeries[] {
-    if (!this._resolved) return [];
+    if (!this._resolved && !this._importedDataActive) return [];
 
     const result: RenderableSeries[] = this._importedDataActive ? [] : this._activeResolvedSeries().flatMap((resolved) => {
       const fetched = this._data.series.find((s) => s.source.id === resolved.id);
@@ -616,7 +620,7 @@ export class HaBetterHistory extends LitElement {
 
   private _chartSourceKey(): string {
     return [
-      ...(this._activeResolvedSeries().map((source) => [
+      ...((this._importedDataActive ? [] : this._activeResolvedSeries()).map((source) => [
         source.id,
         source.label,
         source.color,
@@ -1223,11 +1227,13 @@ export class HaBetterHistory extends LitElement {
     this._importedSeriesMeta = imported.meta;
     this._importedDataActive = true;
     this._selectedSources = imported.series.map((item) => item.source);
+    this._removedConfigSourceIds = [];
     this._rangeStart = loadedStart;
     this._rangeEnd = loadedEnd;
     this._viewStart = viewStart;
     this._viewEnd = viewEnd;
     this._hiddenSeriesIds = [];
+    this._prevClipX.clear();
     this._chartRenderCache = undefined;
     this._graphGroupRenderCache = undefined;
 
@@ -1365,15 +1371,24 @@ export class HaBetterHistory extends LitElement {
               </button>
             `)}
           </div>
-          <button class="tool-action-button" @click=${() => this._exportData()}>
+          <button
+            class="tool-action-button"
+            title=${localize(this.hass, "export_data")}
+            aria-label=${localize(this.hass, "export_data")}
+            @click=${() => this._exportData()}
+          >
             <ha-icon .icon=${"mdi:download"}></ha-icon>
-            <span>${localize(this.hass, "export_data")}</span>
           </button>
           ${this._showImportButton()
             ? html`
-              <button class="tool-action-button" @click=${() => this._importData()}>
+              <button
+                class="tool-action-button"
+                title=${localize(this.hass, "import_data")}
+                aria-label=${localize(this.hass, "import_data")}
+                ?disabled=${this._hasForcedConfigSeries()}
+                @click=${() => this._importData()}
+              >
                 <ha-icon .icon=${"mdi:upload"}></ha-icon>
-                <span>${localize(this.hass, "import_data")}</span>
               </button>
             `
             : nothing}

@@ -518,12 +518,20 @@ export const chartStyles = css`
   }
 
   .tool-action-button {
-    gap: 5px;
+    width: 32px;
     height: 32px;
-    padding: 0 8px;
+    padding: 0;
     border-radius: var(--better-history-radius, 8px);
     color: var(--better-history-text-color, var(--primary-text-color, #fff));
     font-size: 12px;
+  }
+
+  .tool-action-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+    color: var(--better-history-muted-color, var(--disabled-text-color, var(--secondary-text-color, #888)));
+    background: color-mix(in srgb, var(--better-history-muted-color, var(--secondary-text-color, #888)) 12%, transparent);
+    border-color: color-mix(in srgb, var(--better-history-muted-color, var(--divider-color, #444)) 55%, transparent);
   }
 
   @media (hover: none) and (pointer: coarse) {
