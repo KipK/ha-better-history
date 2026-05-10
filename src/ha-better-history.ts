@@ -563,7 +563,16 @@ export class HaBetterHistory extends LitElement {
     return this.showImportButton || this.config?.showImportButton === true;
   }
 
+  private _allSeriesHaveExplicitLineMode(): boolean {
+    if (this._selectedSources.length > 0) return false;
+    if (this.config?.defaultEntities?.length) return false;
+    const series = this.config?.series;
+    if (!series || series.length === 0) return false;
+    return series.every((s) => s.lineMode != null);
+  }
+
   private _showLineModeButtons(): boolean {
+    if (this._allSeriesHaveExplicitLineMode()) return false;
     return this.config?.showLineModeButtons !== false && this.showLineModeButtons;
   }
 
