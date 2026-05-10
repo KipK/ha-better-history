@@ -3,7 +3,23 @@
   "version": "0.1.0",
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
-  "private": true,
+  "author": "@KipK",
+  "keywords": [
+    "home-assistant",
+    "lovelace",
+    "web-component",
+    "history",
+    "chart",
+    "lit"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KipK/ha-better-history.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KipK/ha-better-history/issues"
+  },
+  "homepage": "https://github.com/KipK/ha-better-history#readme",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,6 +33,9 @@
     }
   },
   "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": ["dist/define.js"],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",

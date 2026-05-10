@@ -389,3 +389,17 @@ npm run dev
 ```
 
 Opens a local Vite dev server with synthetic data. No HA instance needed. See `dev/index.html`.
+
+## Release
+
+Releases are created by pushing a version tag that matches `package.json` exactly:
+
+```bash
+npm version 1.0.0 --no-git-tag-version
+git tag 1.0.0
+git push origin main --tags
+```
+
+Accepted tag formats are `1.0.0`, `1.0.0-rc1`, and `1.0.0-beta1`. Stable tags publish to the npm `latest` dist-tag; release candidates publish to `rc`; beta releases publish to `beta`.
+
+The GitHub Action builds the package, uploads the npm tarball and browser `dist` archive to the GitHub Release, and publishes to npm through Trusted Publishing. Configure the package on npm with GitHub Actions as trusted publisher for `KipK/ha-better-history` and workflow filename `release.yml`; no `NPM_TOKEN` secret is required.
