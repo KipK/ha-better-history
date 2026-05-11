@@ -36,7 +36,6 @@ export class SeriesPickerElement extends LitElement {
   private readonly _handleDocumentPointerDown = (event: Event): void => {
     if (!this._attributeMenuOpen) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
-    event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
@@ -83,14 +82,19 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private _isEventInsideAttributeOverlay(event: Event): boolean {
+    const target = event.target as Node | null;
     const path = event.composedPath();
+
     const menu = this.renderRoot?.querySelector(".entity-menu[open], .entity-select-menu[open]");
-    if (menu && path.includes(menu as EventTarget)) return true;
+    if (menu && target && menu.contains(target)) return true;
+
     const trigger = this.renderRoot?.querySelector(".entity-trigger");
-    if (trigger && path.includes(trigger as EventTarget)) return true;
-    for (const target of path) {
-      if (!(target instanceof HTMLElement)) continue;
-      const tag = target.localName;
+    if (trigger && target && trigger.contains(target)) return true;
+
+    for (const el of path) {
+      if (el === this) break;
+      if (!(el instanceof HTMLElement)) continue;
+      const tag = el.localName;
       if (
         tag === "ha-generic-picker" ||
         tag === "ha-combo-box" ||

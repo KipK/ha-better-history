@@ -192,7 +192,6 @@ export class HaBetterHistory extends LitElement {
     super.connectedCallback();
     ensureHaComponents();
     document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
-    document.addEventListener("mousedown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -212,7 +211,6 @@ export class HaBetterHistory extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("pointerdown", this._handleDocumentPointerDown, true);
-    document.removeEventListener("mousedown", this._handleDocumentPointerDown, true);
     document.removeEventListener("click", this._handleDocumentClick, true);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
@@ -1758,8 +1756,6 @@ export class HaBetterHistory extends LitElement {
   private _handleDocumentPointerDown = (event: Event): void => {
     if (!this._attributeMenuOpen) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
-
-    event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
@@ -1775,16 +1771,19 @@ export class HaBetterHistory extends LitElement {
   };
 
   private _isEventInsideAttributeOverlay(event: Event): boolean {
+    const target = event.target as Node | null;
     const path = event.composedPath();
-    const menu = this.renderRoot?.querySelector(".entity-menu");
-    if (menu && path.includes(menu as EventTarget)) return true;
 
-    // ha-generic-picker renders its dropdown overlay outside the dialog DOM.
-    // Treat any click landing inside a HA picker/overlay surface as "inside",
-    // so the attribute browser stays open while the user interacts with it.
-    for (const target of path) {
-      if (!(target instanceof HTMLElement)) continue;
-      const tag = target.localName;
+    const menu = this.renderRoot?.querySelector(".entity-menu");
+    if (menu && target && menu.contains(target)) return true;
+
+    const trigger = this.renderRoot?.querySelector(".entity-trigger");
+    if (trigger && target && trigger.contains(target)) return true;
+
+    for (const el of path) {
+      if (el === this) break;
+      if (!(el instanceof HTMLElement)) continue;
+      const tag = el.localName;
       if (
         tag === "ha-generic-picker" ||
         tag === "ha-combo-box" ||
