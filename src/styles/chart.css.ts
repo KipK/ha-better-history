@@ -37,11 +37,13 @@ export const chartStyles = css`
   }
 
   .chart-surface {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: center;
     position: relative;
     overflow-y: auto;
+    padding-block: 16px;
     flex: 1;
     min-height: 0;
   }

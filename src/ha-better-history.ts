@@ -38,6 +38,9 @@ const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
 const MIN_VIEW_RANGE_RATIO = 0.08;
+const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
+const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
+const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -828,7 +831,18 @@ export class HaBetterHistory extends LitElement {
     const staticCanvasHeight = graphCount * (GRAPH_TOP + 18 + 16) + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
     const legendReserve = (this._resolved?.showLegend ?? true) ? graphCount * 34 : 0;
     const availableForGraphs = this._chartSurfaceHeight - staticCanvasHeight - legendReserve;
-    const height = Math.floor(availableForGraphs / graphCount);
+    const plotWidth = this._containerWidth > 0
+      ? this._containerWidth * PLOT_WIDTH / CHART_WIDTH
+      : PLOT_WIDTH;
+    const maxHeight = Math.max(
+      GRAPH_HEIGHT,
+      Math.min(
+        Math.floor(plotWidth * MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH),
+        Math.floor((this._chartSurfaceHeight / graphCount) * MAX_GRAPH_HEIGHT_TO_SURFACE),
+        MAX_GRAPH_HEIGHT_ABSOLUTE
+      )
+    );
+    const height = Math.min(Math.floor(availableForGraphs / graphCount), maxHeight);
 
     return Math.max(GRAPH_HEIGHT, height);
   }
