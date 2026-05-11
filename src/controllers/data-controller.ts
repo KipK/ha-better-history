@@ -241,10 +241,18 @@ export class DataController implements ReactiveController {
 
     this._prevKey = key;
 
-    if (!hass || sources.length === 0) {
+    if (sources.length === 0) {
       this.series = [];
       this.loading = false;
-      this.error = hass ? "No sources provided" : "No hass object";
+      this.error = "";
+      this.host.requestUpdate();
+      return;
+    }
+
+    if (!hass) {
+      this.series = [];
+      this.loading = false;
+      this.error = "No hass object";
       this.host.requestUpdate();
       return;
     }

@@ -43,6 +43,7 @@ const MIN_GRAPH_HEIGHT = 48;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
+const CHART_SURFACE_SIZE_TOLERANCE = 2;
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
 const AXIS_LABEL_GAP_PX = 5;
@@ -253,7 +254,13 @@ export class HaBetterHistory extends LitElement {
     const surface = this._observedChartSurface;
     const graphs = surface?.querySelector<HTMLElement>(".chart-graphs");
     const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
-    const constrained = contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight;
+    const contentDiffersFromSurface =
+      contentHeight < height - CHART_SURFACE_SIZE_TOLERANCE ||
+      height < contentHeight - CHART_SURFACE_SIZE_TOLERANCE;
+    const surfaceShrank = height < this._chartSurfaceHeight - CHART_SURFACE_SIZE_TOLERANCE;
+    const adaptiveGraphHeight = this._graphGroupRenderCache?.graphHeight ?? GRAPH_HEIGHT;
+    const keepAdaptiveConstraint = this._chartSurfaceConstrained && adaptiveGraphHeight !== GRAPH_HEIGHT;
+    const constrained = contentDiffersFromSurface || surfaceShrank || keepAdaptiveConstraint;
 
     if (constrained) {
       if (this._chartSurfaceHeight !== height) this._chartSurfaceHeight = height;
@@ -1074,14 +1081,14 @@ export class HaBetterHistory extends LitElement {
     });
   }
 
-  private _renderChartBody(): TemplateResult {
+  private _renderChartBody(): TemplateResult | typeof nothing {
     if (this._data.error) {
       const isTimeout = /timed?\s*out/i.test(this._data.error);
       return html`<div class="error">${localize(this.hass, isTimeout ? "error_timeout" : "error")}</div>`;
     }
 
     if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {
-      return html`<div class="empty">${localize(this.hass, "no_series")}</div>`;
+      return nothing;
     }
 
     const chartData = this._chartData();
