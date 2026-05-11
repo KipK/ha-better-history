@@ -37,6 +37,9 @@ export const chartStyles = css`
   }
 
   .chart-surface {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     position: relative;
     overflow-y: auto;
     flex: 1;
@@ -144,8 +147,6 @@ export const chartStyles = css`
     display: flex;
     flex-direction: column;
     gap: 0;
-    justify-content: center;
-    min-height: 100%;
     position: relative;
     contain: layout;
   }
