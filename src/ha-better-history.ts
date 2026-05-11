@@ -18,10 +18,10 @@ import {
   type RenderableSeries
 } from "./render/chart.js";
 import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
-import { paletteColor } from "./render/colors.js";
+import { paletteColor, CLIMATE_ATTR_COLORS } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig, ResolvedSeries } from "./types/config.js";
-import type { HistorySeries, HistorySource } from "./data/history.js";
+import { attributeSource, type HistorySeries, type HistorySource } from "./data/history.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
 import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
@@ -42,6 +42,8 @@ const MIN_VIEW_RANGE_FALLBACK_TRACK_PX = 720;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
+const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
+const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -352,10 +354,11 @@ export class HaBetterHistory extends LitElement {
     }
 
     for (const s of this._selectedSources) {
-      const source = this._sourceWithAttributeUnit(s);
-      if (!seen.has(source.id)) {
-        seen.add(source.id);
-        sources.push(source);
+      for (const source of this._expandedSelectedSources(s)) {
+        if (!seen.has(source.id)) {
+          seen.add(source.id);
+          sources.push(source);
+        }
       }
     }
 
@@ -589,10 +592,18 @@ export class HaBetterHistory extends LitElement {
     void this.requestUpdate();
   }
 
-  private _pickScaleGroup(source: HistorySource, _existing: RenderableSeries[]): string {
+  private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
+    const climateTemperatureAttribute = source.entityId.startsWith("climate.")
+      && source.path?.length === 1
+      && CLIMATE_TEMPERATURE_ATTRIBUTES.has(source.path[0]);
 
     if (source.unit) {
+      const existingMatch = existing.find(
+        (s) => s.unit === source.unit && s.valueType === "number"
+      );
+      if (existingMatch) return existingMatch.scaleGroupKey;
+
       const match = this._resolved?.series.find(
         (s) => s.unit === source.unit && s.valueType === "number"
       );
@@ -602,6 +613,15 @@ export class HaBetterHistory extends LitElement {
         (s) => s.scaleGroupKey === "group:temperature"
       );
       if (tempGroup && isTemperatureUnit(source.unit)) return tempGroup.scaleGroupKey;
+    }
+
+    if (climateTemperatureAttribute) {
+      const existingTemperatureGroup = existing.find(
+        (s) => s.valueType === "number" && s.unit !== undefined && isTemperatureUnit(s.unit)
+      );
+      if (existingTemperatureGroup) return existingTemperatureGroup.scaleGroupKey;
+
+      return "group:temperature";
     }
 
     return source.unit ? `unit:${source.unit}` : `series:${source.id}`;
@@ -687,28 +707,29 @@ export class HaBetterHistory extends LitElement {
     });
 
     for (const selectedSource of this._selectedSources) {
-      const source = this._sourceWithAttributeUnit(selectedSource);
+      for (const source of this._expandedSelectedSources(selectedSource)) {
+        if (result.some((s) => s.id === source.id)) continue;
 
-      if (result.some((s) => s.id === source.id)) continue;
+        const fetched = this._data.series.find((s) => s.source.id === source.id);
+        if (!fetched) continue;
 
-      const fetched = this._data.series.find((s) => s.source.id === source.id);
-      if (!fetched) continue;
+        const colorIndex = result.length;
+        const scaleGroupKey = this._pickScaleGroup(source, result);
+        const climateAttr = source.entityId.startsWith("climate.") && source.path?.length === 1 ? source.path[0] : undefined;
 
-      const colorIndex = result.length;
-      const scaleGroupKey = this._pickScaleGroup(source, result);
-
-      result.push({
-        id: source.id,
-        label: source.label,
-        color: this._importedSeriesMeta.get(source.id)?.color ?? paletteColor(colorIndex),
-        unit: source.unit,
-        scaleGroupKey,
-        scaleMode: "auto",
-        lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
-        lineWidth: this._defaultLineWidth(),
-        valueType: source.valueType,
-        points: fetched?.points ?? []
-      });
+        result.push({
+          id: source.id,
+          label: source.label,
+          color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
+          unit: source.unit,
+          scaleGroupKey,
+          scaleMode: "auto",
+          lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
+          lineWidth: this._defaultLineWidth(),
+          valueType: source.valueType,
+          points: fetched?.points ?? []
+        });
+      }
     }
 
     return result;
@@ -729,8 +750,7 @@ export class HaBetterHistory extends LitElement {
         source.lineWidth,
         source.valueType
       ].join("~")) ?? []),
-      ...this._selectedSources.map((source) => {
-        const effectiveSource = this._sourceWithAttributeUnit(source);
+      ...this._selectedSources.flatMap((source) => this._expandedSelectedSources(source)).map((effectiveSource) => {
         return [
           effectiveSource.id,
           effectiveSource.label,
@@ -1759,6 +1779,40 @@ export class HaBetterHistory extends LitElement {
     const unit = isAttributeTemperatureUnit(mappedUnit) ? this._resolvedTemperatureUnit() ?? mappedUnit : mappedUnit;
     if (!unit || source.unit === unit) return source;
     return { ...source, unit };
+  }
+
+  private _expandedSelectedSources(source: HistorySource): HistorySource[] {
+    if (source.kind !== "entity_state" || !source.entityId.startsWith("climate.")) {
+      return [this._sourceWithAttributeUnit(source)];
+    }
+
+    const entity = this.hass?.states[source.entityId];
+    if (!entity) return [this._sourceWithAttributeUnit(source)];
+
+    const tempUnit = typeof entity.attributes.temperature_unit === "string" && entity.attributes.temperature_unit !== ""
+      ? entity.attributes.temperature_unit
+      : typeof entity.attributes.unit_of_measurement === "string" && entity.attributes.unit_of_measurement !== ""
+        ? entity.attributes.unit_of_measurement
+        : undefined;
+    const attributeSources = CLIMATE_LINE_ATTRIBUTES.map((attribute) => {
+      const attrSource = attributeSource(entity, [attribute]);
+      const fallbackSource: HistorySource = {
+        id: `attr:${source.entityId}:${attribute}`,
+        kind: "entity_attribute",
+        entityId: source.entityId,
+        label: attribute,
+        path: [attribute],
+        valueType: attribute === "hvac_action" ? "string" : "number",
+        unit: CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) ? tempUnit : undefined
+      };
+      const sourceForAttribute = attrSource ?? fallbackSource;
+      if (CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) && tempUnit) {
+        return { ...sourceForAttribute, unit: tempUnit };
+      }
+      return sourceForAttribute;
+    });
+
+    return [this._sourceWithAttributeUnit(source), ...attributeSources.map((item) => this._sourceWithAttributeUnit(item))];
   }
 
   private _addSource(source: HistorySource): void {
