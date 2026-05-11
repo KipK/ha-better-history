@@ -134,6 +134,23 @@ export const chartStyles = css`
     z-index: 1;
   }
 
+  .y-axis-label--left,
+  .y-axis-label--right {
+    width: 100%;
+  }
+
+  .y-axis-label--left {
+    right: 0;
+    padding-right: var(--axis-label-gap);
+    text-align: right;
+  }
+
+  .y-axis-label--right {
+    left: 0;
+    padding-left: var(--axis-label-gap);
+    text-align: left;
+  }
+
   .tooltip-axis-pointer {
     position: absolute;
     top: 0;
@@ -158,7 +175,20 @@ export const chartStyles = css`
     flex-direction: column;
   }
 
+  .graph-row {
+    --axis-label-gap: 10px;
+    display: grid;
+    grid-template-columns: var(--axis-left-gutter, 0px) minmax(0, 1fr) var(--axis-right-gutter, 0px);
+    min-width: 0;
+  }
+
+  .axis-labels {
+    min-width: 0;
+    position: relative;
+  }
+
   .graph-canvas {
+    min-width: 0;
     position: relative;
     overflow: hidden;
   }

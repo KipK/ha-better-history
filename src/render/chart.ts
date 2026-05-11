@@ -408,7 +408,7 @@ function toLinePath(
 
 function formatTickValue(value: number, precision: number): string {
   if (precision <= 0 && Number.isInteger(value)) return String(value);
-  return value.toFixed(precision).replace(/\.?0+$/, "");
+  return value.toFixed(precision);
 }
 
 const MINUTE = 60 * 1000;

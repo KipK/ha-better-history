@@ -878,118 +878,121 @@ export class HaBetterHistory extends LitElement {
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
+    const leftLabelChars = Math.max(0, ...group.yLabels.map((label) => label.value.length));
+    const rightLabelChars = Math.max(0, ...group.rightYLabels.map((label) => label.value.length));
+    const leftGutter = showScale && leftLabelChars > 0 ? `calc(${leftLabelChars}ch + var(--axis-label-gap))` : "0px";
+    const rightGutter = showScale && rightLabelChars > 0 ? `calc(${rightLabelChars}ch + var(--axis-label-gap))` : "0px";
 
     return html`
       <div class="graph-section">
-        <div class="graph-canvas" data-series-ids=${seriesIds} style="height:${group.canvasHeight}px">
-          <svg
-            viewBox="0 0 ${CHART_WIDTH} ${group.svgHeight}"
-            height="${group.svgHeight}"
-            preserveAspectRatio="none"
-          >
-            ${showGrid
-              ? group.xLabels.map(
-                  (label) => svg`
-                    <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
-                  `
-                )
-              : nothing}
-            ${showGrid
+        <div class="graph-row" style=${`--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
+          <div class="axis-labels axis-labels--left" style="height:${group.canvasHeight}px">
+            ${showScale
               ? group.yLabels.map(
-                  (label) => svg`
-                    <line class="grid-line grid-line--horizontal" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
-                  `
+                  (label) => html`<span class="y-axis-label y-axis-label--left" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
                 )
               : nothing}
-            <defs>
-              ${group.lines.map((line) => {
-                const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
-                const clipId = `clip-${safeId}`;
-                const rectId = `rect-${safeId}`;
-                return svg`
-                  <clipPath id=${clipId}>
-                    <rect id=${rectId} x="0" y="0" width="0" height=${group.svgHeight}></rect>
-                  </clipPath>
-                `;
-              })}
-            </defs>
-            ${group.heatingAreas.map(
-              (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
-            )}
-            ${group.columns.map(
-              (col) => svg`<rect class="column" x=${col.x.toFixed(1)} y=${col.y.toFixed(1)} width=${col.width.toFixed(1)} height=${col.height.toFixed(1)} fill=${col.fill}></rect>`
-            )}
-            ${group.lines.map(
-              (line) => {
-                const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
-                const clipId = `clip-${safeId}`;
-                const pts = line.points.split(" ");
-                const lastPt = pts[pts.length - 1];
-                const targetX = lastPt ? parseFloat(lastPt.split(",")[0]) : 0;
-                const prevX = this._prevClipX.get(line.id) ?? 0;
-                const needAnim = !this._suppressLineAnimation && targetX > prevX;
+          </div>
+          <div class="graph-canvas" data-series-ids=${seriesIds} style="height:${group.canvasHeight}px">
+            <svg
+              viewBox="${PLOT_LEFT} 0 ${PLOT_WIDTH} ${group.svgHeight}"
+              height="${group.svgHeight}"
+              preserveAspectRatio="none"
+            >
+              ${showGrid
+                ? group.xLabels.map(
+                    (label) => svg`
+                      <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
+                    `
+                  )
+                : nothing}
+              ${showGrid
+                ? group.yLabels.map(
+                    (label) => svg`
+                      <line class="grid-line grid-line--horizontal" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
+                    `
+                  )
+                : nothing}
+              <defs>
+                ${group.lines.map((line) => {
+                  const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                  const clipId = `clip-${safeId}`;
+                  const rectId = `rect-${safeId}`;
+                  return svg`
+                    <clipPath id=${clipId}>
+                      <rect id=${rectId} x="0" y="0" width="0" height=${group.svgHeight}></rect>
+                    </clipPath>
+                  `;
+                })}
+              </defs>
+              ${group.heatingAreas.map(
+                (area) => svg`<polygon class="climate-heating-area" points=${area.points}></polygon>`
+              )}
+              ${group.columns.map(
+                (col) => svg`<rect class="column" x=${col.x.toFixed(1)} y=${col.y.toFixed(1)} width=${col.width.toFixed(1)} height=${col.height.toFixed(1)} fill=${col.fill}></rect>`
+              )}
+              ${group.lines.map(
+                (line) => {
+                  const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                  const clipId = `clip-${safeId}`;
+                  const pts = line.points.split(" ");
+                  const lastPt = pts[pts.length - 1];
+                  const targetX = lastPt ? parseFloat(lastPt.split(",")[0]) : 0;
+                  const prevX = this._prevClipX.get(line.id) ?? 0;
+                  const needAnim = !this._suppressLineAnimation && targetX > prevX;
 
-                return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
-              }
-            )}
-            ${group.segments.map(
-              (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
-            )}
-            ${group.series
-              .filter((s) => s.valueType !== "number" && s.valueType !== "boolean")
-              .map((s, ni) => {
-                const y = GRAPH_TOP + group.graphHeight + 10 + ni * SEGMENT_ROW_HEIGHT;
-                return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
-              })}
+                  return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
+                }
+              )}
+              ${group.segments.map(
+                (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
+              )}
+              ${group.series
+                .filter((s) => s.valueType !== "number" && s.valueType !== "boolean")
+                .map((s, ni) => {
+                  const y = GRAPH_TOP + group.graphHeight + 10 + ni * SEGMENT_ROW_HEIGHT;
+                  return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
+                })}
+              ${showScale
+                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>`
+                : nothing}
+              ${showScale && group.rightYLabels.length > 0
+                ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+                : nothing}
+              ${showScale
+                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+                : nothing}
+              ${showScale && group.scale
+                ? group.yLabels.map(
+                    (label) => svg`
+                      <line class="axis tick" x1=${PLOT_LEFT} y1=${label.y.toFixed(1)} x2=${PLOT_LEFT + 4} y2=${label.y.toFixed(1)}></line>
+                    `
+                  )
+                : nothing}
+              ${showScale
+                ? group.rightYLabels.map(
+                    (label) => svg`
+                      <line class="axis tick" x1=${PLOT_RIGHT - 4} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT} y2=${label.y.toFixed(1)}></line>
+                    `
+                  )
+                : nothing}
+            </svg>
             ${showScale
-              ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>`
-              : nothing}
-            ${showScale && group.rightYLabels.length > 0
-              ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
-              : nothing}
-            ${showScale
-              ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
-              : nothing}
-            ${showScale && group.scale
-              ? group.yLabels.map(
-                  (label) => svg`
-                    <line class="axis tick" x1=${PLOT_LEFT - 4} y1=${label.y.toFixed(1)} x2=${PLOT_LEFT} y2=${label.y.toFixed(1)}></line>
-                  `
+              ? group.xLabels.map(
+                  (label) => {
+                    const pct = (((label.x - PLOT_LEFT) / PLOT_WIDTH) * 100).toFixed(2);
+                    return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
+                  }
                 )
               : nothing}
+          </div>
+          <div class="axis-labels axis-labels--right" style="height:${group.canvasHeight}px">
             ${showScale
               ? group.rightYLabels.map(
-                  (label) => svg`
-                    <line class="axis tick" x1=${PLOT_RIGHT} y1=${label.y.toFixed(1)} x2=${PLOT_RIGHT + 4} y2=${label.y.toFixed(1)}></line>
-                  `
+                  (label) => html`<span class="y-axis-label y-axis-label--right" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
                 )
               : nothing}
-          </svg>
-          ${showScale
-            ? group.yLabels.map(
-                (label) => {
-                  const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
-                  return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
-                }
-              )
-            : nothing}
-          ${showScale
-            ? group.rightYLabels.map(
-                (label) => {
-                  const pct = ((PLOT_RIGHT / CHART_WIDTH) * 100).toFixed(2);
-                  const width = (100 - Number(pct)).toFixed(2);
-                  return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:${pct}%;width:${width}%;text-align:left;padding-left:6px;">${label.value}</span>`;
-                }
-              )
-            : nothing}
-          ${showScale
-            ? group.xLabels.map(
-                (label) => {
-                  const pct = ((label.x / CHART_WIDTH) * 100).toFixed(2);
-                  return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
-                }
-              )
-            : nothing}
+          </div>
         </div>
         ${showLegend && group.allSeries.length > 0
           ? html`

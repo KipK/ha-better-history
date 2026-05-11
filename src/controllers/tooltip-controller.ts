@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { CHART_WIDTH, PLOT_LEFT, PLOT_WIDTH, xFor } from "../render/chart.js";
+import { PLOT_LEFT, PLOT_RIGHT, PLOT_WIDTH, xFor } from "../render/chart.js";
 import type { HistorySeries } from "../data/history.js";
 
 export interface SyncedSeries {
@@ -20,7 +20,9 @@ export interface TooltipState {
   tooltipX: number;
   y: number;
   placement: "above" | "below";
+  activeLeft: number;
   activeTop: number;
+  activeWidth: number;
   activeHeight: number;
   activeKey: string;
   time: number;
@@ -42,7 +44,9 @@ interface InternalSeries {
 interface PointerChartPoint {
   x: number;
   y: number;
+  activeLeft: number;
   activeTop: number;
+  activeWidth: number;
   activeHeight: number;
   activeIds: Set<string>;
   activeKey: string;
@@ -170,17 +174,19 @@ export class TooltipController implements ReactiveController {
 
     if (
       this.tooltip?.time === selectedTime &&
+      this.tooltip.activeLeft === pt.activeLeft &&
       this.tooltip.activeTop === pt.activeTop &&
+      this.tooltip.activeWidth === pt.activeWidth &&
       this.tooltip.activeHeight === pt.activeHeight &&
       this.tooltip.activeKey === pt.activeKey &&
-      Math.abs(this.tooltip.tooltipX - Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120)) < 1 &&
+      Math.abs(this.tooltip.tooltipX - Math.min(Math.max(pt.x, PLOT_LEFT + 80), PLOT_RIGHT - 80)) < 1 &&
       Math.abs(this.tooltip.y - this._tooltipY(pt)) < 1 &&
       this.tooltip.placement === this._placement(pt)
     ) {
       return;
     }
 
-    const tooltipX = Math.min(Math.max(pt.x, 120), CHART_WIDTH - 120);
+    const tooltipX = Math.min(Math.max(pt.x, PLOT_LEFT + 80), PLOT_RIGHT - 80);
     const tooltipY = this._tooltipY(pt);
 
     this.tooltip = {
@@ -188,7 +194,9 @@ export class TooltipController implements ReactiveController {
       tooltipX,
       y: tooltipY,
       placement: this._placement(pt),
+      activeLeft: pt.activeLeft,
       activeTop: pt.activeTop,
+      activeWidth: pt.activeWidth,
       activeHeight: pt.activeHeight,
       activeKey: pt.activeKey,
       time: selectedTime,
@@ -311,11 +319,14 @@ export class TooltipController implements ReactiveController {
       return undefined;
     }
 
+    const activeLeft = canvasRect.left - containerRect.left;
     const activeTop = canvasRect.top - containerRect.top;
     return {
-      x: ((event.clientX - canvasRect.left) / canvasRect.width) * CHART_WIDTH,
+      x: PLOT_LEFT + ((event.clientX - canvasRect.left) / canvasRect.width) * PLOT_WIDTH,
       y: event.clientY - containerRect.top,
+      activeLeft,
       activeTop,
+      activeWidth: canvasRect.width,
       activeHeight: canvasRect.height,
       activeIds,
       activeKey: [...activeIds].join("|"),
@@ -326,17 +337,17 @@ export class TooltipController implements ReactiveController {
   renderTooltip(): TemplateResult | typeof nothing {
     if (!this.tooltip) return nothing;
 
-    const axisLeftPct = (this.tooltip.x / CHART_WIDTH) * 100;
-    const tooltipLeftPct = (this.tooltip.tooltipX / CHART_WIDTH) * 100;
+    const axisLeft = this.tooltip.activeLeft + ((this.tooltip.x - PLOT_LEFT) / PLOT_WIDTH) * this.tooltip.activeWidth;
+    const tooltipLeft = this.tooltip.activeLeft + ((this.tooltip.tooltipX - PLOT_LEFT) / PLOT_WIDTH) * this.tooltip.activeWidth;
     const placement = this.tooltip.placement === "above"
       ? "translate(-50%, calc(-100% - 10px))"
       : "translate(-50%, 10px)";
 
     return html`
-      <div class="tooltip-axis-pointer" style=${`left:${axisLeftPct}%;top:${this.tooltip.activeTop.toFixed(1)}px;height:${this.tooltip.activeHeight.toFixed(1)}px;`}></div>
+      <div class="tooltip-axis-pointer" style=${`left:${axisLeft.toFixed(1)}px;top:${this.tooltip.activeTop.toFixed(1)}px;height:${this.tooltip.activeHeight.toFixed(1)}px;`}></div>
       <div
         class="tooltip"
-        style=${`left:clamp(150px,${tooltipLeftPct}%,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
+        style=${`left:clamp(150px,${tooltipLeft.toFixed(1)}px,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
       >
         <div class="tooltip-time">${new Date(this.tooltip.time).toLocaleString()}</div>
         ${this.tooltip.values.map(
