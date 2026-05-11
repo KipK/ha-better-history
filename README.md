@@ -32,6 +32,14 @@ If this component helps you, you can support development on
 
 ## Quick start
 
+Install from npm:
+
+```bash
+npm install @kipk/ha-better-history
+```
+
+Package page: [@kipk/ha-better-history on npm](https://www.npmjs.com/package/@kipk/ha-better-history)
+
 ```html
 <ha-better-history></ha-better-history>
 
