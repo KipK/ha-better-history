@@ -126,9 +126,16 @@ export function stateRanges(
   bounds: { start: number; end: number }
 ): Array<{ start: number; end: number; value: number | string | boolean }> {
   const now = Date.now();
-  return series.points.flatMap((point, i) => {
+  const sorted = [...series.points].sort((left, right) => left.time - right.time);
+  const startIndex = sorted.findIndex((point) => point.time >= bounds.start);
+  const visibleStartIndex = startIndex === -1 ? sorted.length : startIndex;
+  const points = visibleStartIndex > 0
+    ? sorted.slice(visibleStartIndex - 1)
+    : sorted;
+
+  return points.flatMap((point, i) => {
     const start = Math.max(point.time, bounds.start);
-    const end = Math.min(series.points[i + 1]?.time ?? bounds.end, bounds.end, now);
+    const end = Math.min(points[i + 1]?.time ?? bounds.end, bounds.end, now);
 
     return end > start ? [{ start, end, value: point.value }] : [];
   });
@@ -200,7 +207,7 @@ function numericPointsForRender(
   const bounded = numeric.filter((point) => point.time >= bounds.start && point.time <= bounds.end);
 
   if (lineMode === "line") {
-    return bounded;
+    return linePointsForRender(numeric, bounded, bounds);
   }
 
   const previous = [...numeric].reverse().find((point) => point.time < bounds.start);
@@ -212,6 +219,39 @@ function numericPointsForRender(
   return options.extendStairToEnd && last && last.time < bounds.end
     ? [...result, { time: bounds.end, value: last.value }]
     : result;
+}
+
+function interpolatedPoint(
+  before: { time: number; value: number } | undefined,
+  after: { time: number; value: number } | undefined,
+  time: number
+): { time: number; value: number } | undefined {
+  if (!before || !after || before.time === after.time) return undefined;
+  if (before.time > time || after.time < time) return undefined;
+
+  const ratio = (time - before.time) / (after.time - before.time);
+
+  return { time, value: before.value + (after.value - before.value) * ratio };
+}
+
+function linePointsForRender(
+  numeric: Array<{ time: number; value: number }>,
+  bounded: Array<{ time: number; value: number }>,
+  bounds: { start: number; end: number }
+): Array<{ time: number; value: number }> {
+  const beforeStart = [...numeric].reverse().find((point) => point.time < bounds.start);
+  const afterStart = numeric.find((point) => point.time > bounds.start);
+  const beforeEnd = [...numeric].reverse().find((point) => point.time < bounds.end);
+  const afterEnd = numeric.find((point) => point.time > bounds.end);
+  const startPoint = bounded[0]?.time === bounds.start
+    ? undefined
+    : interpolatedPoint(beforeStart, afterStart, bounds.start);
+  const endPoint = bounded[bounded.length - 1]?.time === bounds.end
+    ? undefined
+    : interpolatedPoint(beforeEnd, afterEnd, bounds.end);
+
+  return [startPoint, ...bounded, endPoint]
+    .filter((point): point is { time: number; value: number } => point !== undefined);
 }
 
 function columnBaseline(scale: NumericScale): number {

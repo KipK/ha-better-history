@@ -37,7 +37,8 @@ import { logPerformance, performanceNow } from "./utils/performance.js";
 const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
-const MIN_VIEW_RANGE_RATIO = 0.08;
+const MIN_VIEW_RANGE_GAP_PX = 24;
+const MIN_VIEW_RANGE_FALLBACK_TRACK_PX = 720;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
@@ -992,25 +993,7 @@ export class HaBetterHistory extends LitElement {
     const root = this.renderRoot;
     if (!root) return;
 
-    const polylines = root.querySelectorAll<SVGPolylineElement>('polyline[data-animate-clip="true"]');
-    if (polylines.length === 0) {
-      // Still need to ensure all rects have their correct final width if not animating
-      const allPolylines = root.querySelectorAll<SVGPolylineElement>("polyline[data-line-id]");
-      allPolylines.forEach((poly) => {
-        const lineId = poly.getAttribute("data-line-id");
-        if (!lineId) return;
-        const targetX = Number(poly.getAttribute("data-target-x"));
-        const safeId = lineId.replace(/[^a-zA-Z0-9]/g, "_");
-        const rect = root.querySelector(`#rect-${safeId}`);
-        if (rect instanceof SVGRectElement) {
-          rect.setAttribute("width", targetX.toString());
-          this._prevClipX.set(lineId, targetX);
-        }
-      });
-      return;
-    }
-
-    polylines.forEach((poly) => {
+    root.querySelectorAll<SVGPolylineElement>("polyline[data-line-id]").forEach((poly) => {
       const lineId = poly.getAttribute("data-line-id");
       const targetX = Number(poly.getAttribute("data-target-x"));
       if (!lineId || !Number.isFinite(targetX)) return;
@@ -1020,6 +1003,13 @@ export class HaBetterHistory extends LitElement {
       const rect = root.querySelector(`#rect-${safeId}`);
 
       if (rect instanceof SVGRectElement) {
+        if (poly.getAttribute("data-animate-clip") !== "true") {
+          rect.style.removeProperty("transition");
+          rect.setAttribute("width", targetX.toString());
+          this._prevClipX.set(lineId, targetX);
+          return;
+        }
+
         // Force a stable starting state for the transition
         rect.style.setProperty("transition", "none");
         rect.setAttribute("width", prevX.toString());
@@ -1168,23 +1158,34 @@ export class HaBetterHistory extends LitElement {
     return { start, end, span: end - start };
   }
 
-  private _minViewSpanMs(): number {
+  private _rangeSliderTrackWidthPx(source?: Element | null): number | undefined {
+    const stack = (
+      source?.closest(".range-slider-stack")
+      ?? this.renderRoot.querySelector(".range-slider-stack")
+    ) as HTMLElement | null | undefined;
+    const width = stack?.getBoundingClientRect().width ?? 0;
+
+    return width > 0 ? width : undefined;
+  }
+
+  private _minViewSpanMs(trackWidthPx = this._rangeSliderTrackWidthPx()): number {
     const { span } = this._loadedRangeMs();
-    const sliderReadableSpan = Math.floor(span * MIN_VIEW_RANGE_RATIO);
+    const readableTrackWidth = Math.max(trackWidthPx ?? MIN_VIEW_RANGE_FALLBACK_TRACK_PX, MIN_VIEW_RANGE_GAP_PX);
+    const sliderReadableSpan = Math.ceil((span * MIN_VIEW_RANGE_GAP_PX) / readableTrackWidth);
     const timeReadableSpan = Math.min(60_000, Math.max(1, Math.floor(span / 1000)));
 
     return Math.min(span, Math.max(1, sliderReadableSpan, timeReadableSpan));
   }
 
-  private _minViewRangeStep(): number {
+  private _minViewRangeStep(trackWidthPx?: number): number {
     const loaded = this._loadedRangeMs();
 
-    return Math.max(1, Math.ceil((this._minViewSpanMs() / loaded.span) * 1000));
+    return Math.max(1, Math.ceil((this._minViewSpanMs(trackWidthPx) / loaded.span) * 1000));
   }
 
-  private _setViewRangeMs(startMs: number, endMs: number): void {
+  private _setViewRangeMs(startMs: number, endMs: number, trackWidthPx?: number): void {
     const loaded = this._loadedRangeMs();
-    const minSpan = this._minViewSpanMs();
+    const minSpan = this._minViewSpanMs(trackWidthPx);
     const requestedSpan = Math.max(endMs - startMs, minSpan);
     const span = Math.min(requestedSpan, loaded.span);
     const start = Math.min(Math.max(startMs, loaded.start), loaded.end - span);
@@ -1223,20 +1224,21 @@ export class HaBetterHistory extends LitElement {
   private _setViewRangePart(part: "start" | "end", event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     const nextPercent = Number(input.value);
+    const trackWidthPx = this._rangeSliderTrackWidthPx(input);
     const current = this._effectiveViewRange();
     const currentStartPercent = this._rangePercent(current.start, current.start);
     const currentEndPercent = this._rangePercent(current.end, current.end);
-    const minStep = this._minViewRangeStep();
+    const minStep = this._minViewRangeStep(trackWidthPx);
     let clampedPercent: number;
 
     if (part === "start") {
       clampedPercent = Math.min(Math.max(nextPercent, 0), currentEndPercent - minStep);
       input.value = String(clampedPercent);
-      this._setViewRangeMs(this._dateFromRangePercent(clampedPercent).getTime(), current.end.getTime());
+      this._setViewRangeMs(this._dateFromRangePercent(clampedPercent).getTime(), current.end.getTime(), trackWidthPx);
     } else {
       clampedPercent = Math.max(Math.min(nextPercent, 1000), currentStartPercent + minStep);
       input.value = String(clampedPercent);
-      this._setViewRangeMs(current.start.getTime(), this._dateFromRangePercent(clampedPercent).getTime());
+      this._setViewRangeMs(current.start.getTime(), this._dateFromRangePercent(clampedPercent).getTime(), trackWidthPx);
     }
   }
 
