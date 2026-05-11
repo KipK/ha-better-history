@@ -4,7 +4,8 @@ import { chartStyles } from "../styles/chart.css.js";
 import {
   renderEntityPicker,
   preloadEntityPickerComponents,
-  entityLabel,
+  entityPickerItems,
+  filterEntityPickerItems,
 } from "./entity-picker.js";
 import type { HistorySource } from "../data/history.js";
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
@@ -153,31 +154,18 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private readonly _getItems = (): unknown[] =>
-    this._pickerEntities().map((e) => ({
-      id: e.entity_id,
-      primary: entityLabel(e),
-      secondary: e.entity_id,
-    }));
+    entityPickerItems(this.hass);
 
   private readonly _getAdditionalItems = (search?: string): unknown[] => {
     if (!this.hass || !search?.trim()) return [];
-    const lower = search.toLowerCase();
     const pinnedIds = new Set(this._pickerEntities().map((e) => e.entity_id));
-    return Object.values(this.hass.states)
-      .filter((e): e is HassEntity => e !== undefined)
-      .filter((e) => !pinnedIds.has(e.entity_id))
-      .filter(
-        (e) =>
-          e.entity_id.toLowerCase().includes(lower) ||
-          (typeof e.attributes.friendly_name === "string" &&
-            e.attributes.friendly_name.toLowerCase().includes(lower))
-      )
-      .slice(0, 20)
-      .map((e) => ({
-        id: e.entity_id,
-        primary: entityLabel(e),
-        secondary: e.entity_id,
-      }));
+    const items = entityPickerItems(
+      this.hass,
+      Object.values(this.hass.states)
+        .filter((entity): entity is HassEntity => entity !== undefined)
+        .filter((entity) => !pinnedIds.has(entity.entity_id))
+    );
+    return filterEntityPickerItems(items, search);
   };
 
   private _onEntitySelected(entityId: string): void {

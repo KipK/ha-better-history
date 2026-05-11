@@ -6,8 +6,32 @@ export interface HassEntity {
   last_updated?: string;
 }
 
+export interface HassEntityRegistryEntry {
+  entity_id?: string;
+  device_id?: string | null;
+  area_id?: string | null;
+  name?: string | null;
+  name_by_user?: string | null;
+  original_name?: string | null;
+}
+
+export interface HassDeviceRegistryEntry {
+  id?: string;
+  area_id?: string | null;
+  name?: string | null;
+  name_by_user?: string | null;
+}
+
+export interface HassAreaRegistryEntry {
+  area_id?: string;
+  name?: string | null;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity | undefined>;
+  entities?: Record<string, HassEntityRegistryEntry | undefined>;
+  devices?: Record<string, HassDeviceRegistryEntry | undefined>;
+  areas?: Record<string, HassAreaRegistryEntry | undefined>;
   language?: string;
   locale?: {
     language?: string;

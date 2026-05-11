@@ -8,6 +8,24 @@ import { localize } from "../localize/localize.js";
 
 const ATTRIBUTE_SEARCH_DEPTH_LIMIT = 8;
 const ATTRIBUTE_SEARCH_RESULT_LIMIT = 50;
+const ENTITY_SEARCH_RESULT_LIMIT = 20;
+
+export const ENTITY_PICKER_SEARCH_KEYS = [
+  { name: "search_labels.entityName", weight: 10 },
+  { name: "search_labels.friendlyName", weight: 8 },
+  { name: "search_labels.deviceName", weight: 7 },
+  { name: "search_labels.areaName", weight: 6 },
+  { name: "search_labels.domainName", weight: 6 },
+  { name: "search_labels.entityId", weight: 3 },
+];
+
+export interface EntityPickerComboBoxItem {
+  id: string;
+  primary: string;
+  secondary?: string;
+  sorting_label: string;
+  search_labels: Record<string, string | null>;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -15,6 +33,153 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function entityLabel(entity: HassEntity): string {
   return typeof entity.attributes.friendly_name === "string" ? entity.attributes.friendly_name : entity.entity_id;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => stringValue(value) !== undefined);
+}
+
+function entityDomain(entityId: string): string {
+  return entityId.split(".")[0] ?? entityId;
+}
+
+function normalizedSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function entityPickerItem(hass: HomeAssistant, entity: HassEntity): EntityPickerComboBoxItem {
+  const friendlyName = entityLabel(entity);
+  const entityRegistry = hass.entities?.[entity.entity_id];
+  const device = entityRegistry?.device_id ? hass.devices?.[entityRegistry.device_id] : undefined;
+  const areaId = entityRegistry?.area_id ?? device?.area_id;
+  const area = areaId ? hass.areas?.[areaId] : undefined;
+  const entityName = firstString(entityRegistry?.name_by_user, entityRegistry?.name, entityRegistry?.original_name, friendlyName) ?? entity.entity_id;
+  const deviceName = firstString(device?.name_by_user, device?.name);
+  const areaName = firstString(area?.name);
+  const domainName = entityDomain(entity.entity_id);
+
+  return {
+    id: entity.entity_id,
+    primary: friendlyName,
+    secondary: entity.entity_id,
+    sorting_label: [friendlyName, entity.entity_id].join("_"),
+    search_labels: {
+      entityName,
+      friendlyName,
+      deviceName: deviceName ?? null,
+      areaName: areaName ?? null,
+      domainName,
+      entityId: entity.entity_id,
+    },
+  };
+}
+
+export function entityPickerItems(hass?: HomeAssistant, entities?: HassEntity[]): EntityPickerComboBoxItem[] {
+  if (!hass) return [];
+
+  const sourceEntities = entities ?? Object.values(hass.states).filter((entity): entity is HassEntity => entity !== undefined);
+  return sourceEntities.map((entity) => entityPickerItem(hass, entity));
+}
+
+function wordDistance(left: string, right: string): number {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > 2) return 3;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array<number>(right.length + 1);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    current[0] = leftIndex;
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + substitutionCost
+      );
+    }
+
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length] ?? 3;
+}
+
+function entitySearchTexts(item: EntityPickerComboBoxItem): string[] {
+  return [
+    item.primary,
+    item.secondary,
+    item.id,
+    ...Object.values(item.search_labels).filter((value): value is string => typeof value === "string"),
+  ].filter((value): value is string => typeof value === "string").map(normalizedSearchText);
+}
+
+function entityTermScore(term: string, texts: string[]): number | undefined {
+  let score: number | undefined;
+
+  for (const text of texts) {
+    if (text === term) {
+      score = Math.max(score ?? 0, 120);
+      continue;
+    }
+
+    const words = text.split(/[\s_.-]+/).filter(Boolean);
+    if (words.some((word) => word === term)) {
+      score = Math.max(score ?? 0, 110);
+      continue;
+    }
+
+    if (words.some((word) => word.startsWith(term))) {
+      score = Math.max(score ?? 0, 95);
+      continue;
+    }
+
+    if (text.includes(term)) {
+      score = Math.max(score ?? 0, 80);
+      continue;
+    }
+
+    if (term.length >= 4 && words.some((word) => wordDistance(term, word) <= 1)) {
+      score = Math.max(score ?? 0, 65);
+    }
+  }
+
+  return score;
+}
+
+export function filterEntityPickerItems(
+  items: EntityPickerComboBoxItem[],
+  search: string,
+  limit = ENTITY_SEARCH_RESULT_LIMIT
+): EntityPickerComboBoxItem[] {
+  const terms = normalizedSearchText(search).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return [];
+
+  return items
+    .map((item) => {
+      const texts = entitySearchTexts(item);
+      let score = 0;
+
+      for (const term of terms) {
+        const termScore = entityTermScore(term, texts);
+        if (termScore === undefined) return undefined;
+        score += termScore;
+      }
+
+      return { item, score };
+    })
+    .filter((result): result is { item: EntityPickerComboBoxItem; score: number } => result !== undefined)
+    .sort((left, right) => right.score - left.score || left.item.primary.localeCompare(right.item.primary))
+    .slice(0, limit)
+    .map((result) => result.item);
 }
 
 let componentsLoaded = false;
@@ -89,9 +254,9 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           .addButtonLabel=${localize(opts.hass, "add_target")}
           .value=${""}
           .getItems=${opts.getItems}
-          .getAdditionalItems=${opts.getAdditionalItems}
           .emptyLabel=${""}
           .searchLabel=${localize(opts.hass, "search_entity")}
+          .searchKeys=${ENTITY_PICKER_SEARCH_KEYS}
           @value-changed=${(e: CustomEvent) => {
             const entityId = (e.detail as { value: string }).value;
             if (entityId) opts.onEntitySelected(entityId);
