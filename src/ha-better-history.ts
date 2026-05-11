@@ -13,6 +13,7 @@ import {
   PLOT_TOP,
   PLOT_WIDTH,
   SEGMENT_ROW_HEIGHT,
+  X_AXIS_LABEL_SPACE,
   type ChartRenderData,
   type GraphGroup,
   type RenderableSeries
@@ -908,6 +909,9 @@ export class HaBetterHistory extends LitElement {
     const seriesIds = group.series.map((series) => series.id).join("|");
     const leftGutter = showScale ? axisGutter(group.yLabels) : "0px";
     const rightGutter = showScale ? axisGutter(group.rightYLabels) : "0px";
+    const plotBottom = GRAPH_TOP + group.graphHeight;
+    const xLabelTop = plotBottom + 3;
+    const segmentStartY = plotBottom + X_AXIS_LABEL_SPACE + 6;
 
     return html`
       <div class="graph-section">
@@ -928,7 +932,7 @@ export class HaBetterHistory extends LitElement {
               ${showGrid
                 ? group.xLabels.map(
                     (label) => svg`
-                      <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${group.svgHeight - 18}></line>
+                      <line class="grid-line grid-line--vertical" x1=${label.x.toFixed(1)} y1=${PLOT_TOP} x2=${label.x.toFixed(1)} y2=${plotBottom}></line>
                     `
                   )
                 : nothing}
@@ -976,17 +980,17 @@ export class HaBetterHistory extends LitElement {
               ${group.series
                 .filter((s) => s.valueType !== "number" && s.valueType !== "boolean")
                 .map((s, ni) => {
-                  const y = GRAPH_TOP + group.graphHeight + 10 + ni * SEGMENT_ROW_HEIGHT;
+                  const y = segmentStartY + ni * SEGMENT_ROW_HEIGHT;
                   return svg`<rect class="segment-border" x=${PLOT_LEFT} y=${y} width=${PLOT_WIDTH} height="9" fill="none" stroke=${s.color}></rect>`;
                 })}
               ${showScale
-                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${group.svgHeight - 18}></line>`
+                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${PLOT_TOP} x2=${PLOT_LEFT} y2=${plotBottom}></line>`
                 : nothing}
               ${showScale && group.rightYLabels.length > 0
-                ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+                ? svg`<line class="axis" x1=${PLOT_RIGHT} y1=${PLOT_TOP} x2=${PLOT_RIGHT} y2=${plotBottom}></line>`
                 : nothing}
               ${showScale
-                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${group.svgHeight - 18} x2=${PLOT_RIGHT} y2=${group.svgHeight - 18}></line>`
+                ? svg`<line class="axis" x1=${PLOT_LEFT} y1=${plotBottom} x2=${PLOT_RIGHT} y2=${plotBottom}></line>`
                 : nothing}
               ${showScale && group.scale
                 ? group.yLabels.map(
@@ -1007,7 +1011,7 @@ export class HaBetterHistory extends LitElement {
               ? group.xLabels.map(
                   (label) => {
                     const pct = (((label.x - PLOT_LEFT) / PLOT_WIDTH) * 100).toFixed(2);
-                    return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
+                    return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${xLabelTop}px;">${label.label}</span>`;
                   }
                 )
               : nothing}

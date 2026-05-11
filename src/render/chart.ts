@@ -13,7 +13,7 @@ export const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT;
 export const PLOT_TOP = 18;
 export const SEGMENT_ROW_HEIGHT = 14;
 export const SEGMENT_HEIGHT = 9;
-const X_AXIS_LABEL_SPACE = 16;
+export const X_AXIS_LABEL_SPACE = 16;
 
 export interface RenderableSeries {
   id: string;
@@ -695,18 +695,6 @@ function buildGroupYLabels(scale: NumericScale, graphHeight: number): YAxisLabel
   }));
 }
 
-function offsetPointsY(points: string, yOffset: number): string {
-  if (yOffset === 0) return points;
-
-  return points
-    .split(" ")
-    .map((coord) => {
-      const [x, y] = coord.split(",");
-      return `${x},${(parseFloat(y) + yOffset).toFixed(1)}`;
-    })
-    .join(" ");
-}
-
 function withGraphUniqueColors(
   allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
@@ -750,7 +738,8 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
   if (data.numericScales.length === 0 && allNonNumeric.length > 0) {
     const segSeries = visibleNonNumeric;
     const segCount = segSeries.length;
-    const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
+    const segmentStartY = GRAPH_TOP + graphHeight + X_AXIS_LABEL_SPACE + 6;
+    const segArea = segCount > 0 ? X_AXIS_LABEL_SPACE + 6 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + graphHeight + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
 
@@ -765,7 +754,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       canvasHeight,
       lines: [],
       columns: [],
-      segments: buildGroupSegments(colored.visibleSeries, GRAPH_TOP + graphHeight + 10, bounds),
+      segments: buildGroupSegments(colored.visibleSeries, segmentStartY, bounds),
       yLabels: [],
       rightYLabels: [],
       xLabels,
@@ -794,31 +783,33 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
 
     const segSeries = colored.visibleSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
     const segCount = segSeries.length;
-    const segArea = segCount > 0 ? 10 + segCount * SEGMENT_ROW_HEIGHT : 0;
+    const segmentStartY = GRAPH_TOP + graphHeight + X_AXIS_LABEL_SPACE + 6;
+    const segArea = segCount > 0 ? X_AXIS_LABEL_SPACE + 6 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + graphHeight + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
-    const yOffset = GRAPH_TOP - leftScale.top;
     const yLabels = buildGroupYLabels(leftScale, graphHeight);
     const rightYLabels = rightScale ? buildGroupYLabels(rightScale, graphHeight) : [];
+    const localScales = graphScales.map((scale) => ({ ...scale, top: GRAPH_TOP, height: graphHeight }));
+    const localLeftScale = localScales.find((scale) => scale.axis === "left") ?? localScales[0];
 
     groups.push({
       series: colored.visibleSeries,
       allSeries: colored.allSeries,
-      scale: leftScale,
-      scales: graphScales,
+      scale: localLeftScale,
+      scales: localScales,
       graphHeight,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(colored.visibleSeries, graphScales, bounds, {
+      lines: buildGroupNumericLines(colored.visibleSeries, localScales, bounds, {
         extendStairToEnd: data.extendStairToEnd
       }, graphHeight),
-      columns: buildGroupNumericColumns(colored.visibleSeries, graphScales, bounds, graphHeight),
-      segments: buildGroupSegments(segSeries, GRAPH_TOP + graphHeight + 10, bounds),
+      columns: buildGroupNumericColumns(colored.visibleSeries, localScales, bounds, graphHeight),
+      segments: buildGroupSegments(segSeries, segmentStartY, bounds),
       yLabels,
       rightYLabels,
       xLabels,
-      heatingAreas: i === 0
-        ? data.heatingAreas.map((a) => ({ id: a.id, points: offsetPointsY(a.points, yOffset) }))
+      heatingAreas: data.heatingAreas.length > 0
+        ? buildClimateHeatingAreas(data.visibleSeries, localScales, bounds)
         : []
     });
   }

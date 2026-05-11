@@ -57,7 +57,9 @@ function detectClimatePairs(
 
     const entry = pairs.get(entityId)!;
 
-    if (attrPath === "current_temperature" || attrPath === "temperature") {
+    if (attrPath === "current_temperature") {
+      entry.temp = s.id;
+    } else if (attrPath === "temperature" && !entry.temp) {
       entry.temp = s.id;
     } else if (attrPath === "hvac_action") {
       entry.hvac = s.id;
@@ -130,9 +132,17 @@ function stateRangesFromPoints(
   bounds: { start: number; end: number }
 ): Array<{ start: number; end: number; value: number | string | boolean }> {
   const now = Date.now();
-  return points.flatMap((point, i) => {
+  const sorted = [...points].sort((left, right) => left.time - right.time);
+  const startIndex = sorted.findIndex((point) => point.time >= bounds.start);
+  const visibleStartIndex = startIndex === -1 ? sorted.length : startIndex;
+  const rangePoints = visibleStartIndex > 0
+    ? sorted.slice(visibleStartIndex - 1)
+    : sorted;
+
+  return rangePoints.flatMap((point, i) => {
     const start = Math.max(point.time, bounds.start);
-    const end = Math.min(points[i + 1]?.time ?? bounds.end, bounds.end, now);
+    const end = Math.min(rangePoints[i + 1]?.time ?? bounds.end, bounds.end, now);
+
     return end > start ? [{ start, end, value: point.value }] : [];
   });
 }
