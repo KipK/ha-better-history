@@ -878,20 +878,15 @@ export class HaBetterHistory extends LitElement {
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
-    const plotLeft = group.effectivePlotLeft;
-    const chartWidth = group.effectiveChartWidth;
-    const xOffset = plotLeft - PLOT_LEFT;
-    const effectivePlotRight = PLOT_RIGHT + xOffset;
 
     return html`
       <div class="graph-section">
         <div class="graph-canvas" data-series-ids=${seriesIds} style="height:${group.canvasHeight}px">
           <svg
-            viewBox="0 0 ${chartWidth} ${group.svgHeight}"
+            viewBox="0 0 ${CHART_WIDTH} ${group.svgHeight}"
             height="${group.svgHeight}"
             preserveAspectRatio="none"
           >
-            <g transform="translate(${xOffset}, 0)">
             ${showGrid
               ? group.xLabels.map(
                   (label) => svg`
@@ -969,12 +964,11 @@ export class HaBetterHistory extends LitElement {
                   `
                 )
               : nothing}
-            </g>
           </svg>
           ${showScale
             ? group.yLabels.map(
                 (label) => {
-                  const pct = ((plotLeft / chartWidth) * 100).toFixed(2);
+                  const pct = ((PLOT_LEFT / CHART_WIDTH) * 100).toFixed(2);
                   return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:0;width:${pct}%;text-align:right;padding-right:6px;">${label.value}</span>`;
                 }
               )
@@ -982,7 +976,7 @@ export class HaBetterHistory extends LitElement {
           ${showScale
             ? group.rightYLabels.map(
                 (label) => {
-                  const pct = ((effectivePlotRight / chartWidth) * 100).toFixed(2);
+                  const pct = ((PLOT_RIGHT / CHART_WIDTH) * 100).toFixed(2);
                   const width = (100 - Number(pct)).toFixed(2);
                   return html`<span class="y-axis-label" style="top:${label.y.toFixed(1)}px;left:${pct}%;width:${width}%;text-align:left;padding-left:6px;">${label.value}</span>`;
                 }
@@ -991,7 +985,7 @@ export class HaBetterHistory extends LitElement {
           ${showScale
             ? group.xLabels.map(
                 (label) => {
-                  const pct = (((label.x + xOffset) / chartWidth) * 100).toFixed(2);
+                  const pct = ((label.x / CHART_WIDTH) * 100).toFixed(2);
                   return html`<span class="x-axis-label ${label.bold ? "x-axis-label--bold" : ""}" style="left:${pct}%;top:${(group.svgHeight + 3)}px;">${label.label}</span>`;
                 }
               )

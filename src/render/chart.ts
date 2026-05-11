@@ -7,9 +7,7 @@ import type { HistoryValueType } from "../data/value-type.js";
 import type { BetterHistoryLineMode } from "../types/config.js";
 
 export const CHART_WIDTH = 720;
-export const BASE_PLOT_LEFT = 48;
-export const BASE_CHART_WIDTH = CHART_WIDTH;
-export const PLOT_LEFT = BASE_PLOT_LEFT;
+export const PLOT_LEFT = 40;
 export const PLOT_RIGHT = 680;
 export const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT;
 export const PLOT_TOP = 18;
@@ -103,8 +101,6 @@ export interface GraphGroup {
   rightYLabels: YAxisLabelRenderData[];
   xLabels: XAxisLabelRenderData[];
   heatingAreas: HeatingAreaRenderData[];
-  effectivePlotLeft: number;
-  effectiveChartWidth: number;
 }
 
 export function xFor(time: number, bounds: { start: number; end: number }): number {
@@ -412,7 +408,7 @@ function toLinePath(
 
 function formatTickValue(value: number, precision: number): string {
   if (precision <= 0 && Number.isInteger(value)) return String(value);
-  return value.toFixed(precision);
+  return value.toFixed(precision).replace(/\.?0+$/, "");
 }
 
 const MINUTE = 60 * 1000;
@@ -738,25 +734,6 @@ function withGraphUniqueColors(
   };
 }
 
-function effectivePlotDimensions(
-  yLabels: YAxisLabelRenderData[],
-  rightYLabels: YAxisLabelRenderData[]
-): { effectivePlotLeft: number; effectiveChartWidth: number } {
-  const maxChars = Math.max(0, ...yLabels.map((l) => l.value.length));
-  const maxRightChars = Math.max(0, ...rightYLabels.map((l) => l.value.length));
-  const neededLeft = maxChars * 8 + 12;
-  const neededRight = maxRightChars * 8 + 12;
-  const effectivePlotLeft = Math.max(BASE_PLOT_LEFT, neededLeft);
-  const xOffset = effectivePlotLeft - BASE_PLOT_LEFT;
-  const rightMarginNeeded = Math.max(CHART_WIDTH - PLOT_RIGHT, neededRight);
-  const rightExtra = rightMarginNeeded - (CHART_WIDTH - PLOT_RIGHT);
-
-  return {
-    effectivePlotLeft,
-    effectiveChartWidth: CHART_WIDTH + xOffset + rightExtra
-  };
-}
-
 export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHeight = GRAPH_HEIGHT): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
@@ -792,8 +769,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       yLabels: [],
       rightYLabels: [],
       xLabels,
-      heatingAreas: [],
-      ...effectivePlotDimensions([], [])
+      heatingAreas: []
     });
   }
 
@@ -843,8 +819,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       xLabels,
       heatingAreas: i === 0
         ? data.heatingAreas.map((a) => ({ id: a.id, points: offsetPointsY(a.points, yOffset) }))
-        : [],
-      ...effectivePlotDimensions(yLabels, rightYLabels)
+        : []
     });
   }
 
