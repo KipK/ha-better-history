@@ -415,7 +415,7 @@ Releases are created by pushing a version tag that matches `package.json` exactl
 ```bash
 npm version 1.0.0 --no-git-tag-version
 git tag 1.0.0
-git push origin maater --tags
+git push origin master --tags
 ```
 
 Accepted tag formats are `1.0.0`, `1.0.0-rc1`, and `1.0.0-beta1`. Stable tags publish to the npm `latest` dist-tag; release candidates publish to `rc`; beta releases publish to `beta`.
