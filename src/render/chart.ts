@@ -1,5 +1,5 @@
 import { graphColor, graphColorKey, PALETTE } from "./colors.js";
-import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, PLOT_PADDING, type NumericScale } from "./scales.js";
+import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, PLOT_PADDING, computeNiceTicks, tickPrecision, type NumericScale } from "./scales.js";
 import { displayNumericPoints } from "./downsample.js";
 import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
 import type { HistoryPoint } from "../data/history.js";
@@ -7,7 +7,9 @@ import type { HistoryValueType } from "../data/value-type.js";
 import type { BetterHistoryLineMode } from "../types/config.js";
 
 export const CHART_WIDTH = 720;
-export const PLOT_LEFT = 40;
+export const BASE_PLOT_LEFT = 48;
+export const BASE_CHART_WIDTH = CHART_WIDTH;
+export const PLOT_LEFT = BASE_PLOT_LEFT;
 export const PLOT_RIGHT = 680;
 export const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT;
 export const PLOT_TOP = 18;
@@ -101,6 +103,8 @@ export interface GraphGroup {
   rightYLabels: YAxisLabelRenderData[];
   xLabels: XAxisLabelRenderData[];
   heatingAreas: HeatingAreaRenderData[];
+  effectivePlotLeft: number;
+  effectiveChartWidth: number;
 }
 
 export function xFor(time: number, bounds: { start: number; end: number }): number {
@@ -408,12 +412,7 @@ function toLinePath(
 
 function formatTickValue(value: number, precision: number): string {
   if (precision <= 0 && Number.isInteger(value)) return String(value);
-
-  let formatted = value.toFixed(precision);
-
-  formatted = formatted.replace(/\.?0+$/, "");
-
-  return formatted;
+  return value.toFixed(precision);
 }
 
 const MINUTE = 60 * 1000;
@@ -677,12 +676,26 @@ function buildGroupSegments(
   });
 }
 
+function yTickCount(graphHeight: number): number {
+  if (graphHeight >= 160) return 5;
+  if (graphHeight >= 100) return 4;
+  if (graphHeight >= 64) return 3;
+  return 2;
+}
+
 function buildGroupYLabels(scale: NumericScale, graphHeight: number): YAxisLabelRenderData[] {
   const drawHeight = graphHeight - 2 * PLOT_PADDING;
+  const desiredCount = yTickCount(graphHeight);
+  const ticks = scale.ticks.length <= desiredCount
+    ? scale.ticks
+    : computeNiceTicks(scale.min, scale.max, desiredCount);
+  const precision = scale.ticks === ticks
+    ? scale.precision
+    : Math.max(scale.precision, tickPrecision(ticks));
 
-  return scale.ticks.map((v) => ({
+  return ticks.map((v) => ({
     y: GRAPH_TOP + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
-    value: formatTickValue(v, scale.precision)
+    value: formatTickValue(v, precision)
   }));
 }
 
@@ -725,6 +738,25 @@ function withGraphUniqueColors(
   };
 }
 
+function effectivePlotDimensions(
+  yLabels: YAxisLabelRenderData[],
+  rightYLabels: YAxisLabelRenderData[]
+): { effectivePlotLeft: number; effectiveChartWidth: number } {
+  const maxChars = Math.max(0, ...yLabels.map((l) => l.value.length));
+  const maxRightChars = Math.max(0, ...rightYLabels.map((l) => l.value.length));
+  const neededLeft = maxChars * 8 + 12;
+  const neededRight = maxRightChars * 8 + 12;
+  const effectivePlotLeft = Math.max(BASE_PLOT_LEFT, neededLeft);
+  const xOffset = effectivePlotLeft - BASE_PLOT_LEFT;
+  const rightMarginNeeded = Math.max(CHART_WIDTH - PLOT_RIGHT, neededRight);
+  const rightExtra = rightMarginNeeded - (CHART_WIDTH - PLOT_RIGHT);
+
+  return {
+    effectivePlotLeft,
+    effectiveChartWidth: CHART_WIDTH + xOffset + rightExtra
+  };
+}
+
 export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHeight = GRAPH_HEIGHT): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
@@ -760,7 +792,8 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       yLabels: [],
       rightYLabels: [],
       xLabels,
-      heatingAreas: []
+      heatingAreas: [],
+      ...effectivePlotDimensions([], [])
     });
   }
 
@@ -789,6 +822,8 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     const svgHeight = GRAPH_TOP + graphHeight + segArea + 18;
     const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
     const yOffset = GRAPH_TOP - leftScale.top;
+    const yLabels = buildGroupYLabels(leftScale, graphHeight);
+    const rightYLabels = rightScale ? buildGroupYLabels(rightScale, graphHeight) : [];
 
     groups.push({
       series: colored.visibleSeries,
@@ -803,12 +838,13 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       }, graphHeight),
       columns: buildGroupNumericColumns(colored.visibleSeries, graphScales, bounds, graphHeight),
       segments: buildGroupSegments(segSeries, GRAPH_TOP + graphHeight + 10, bounds),
-      yLabels: buildGroupYLabels(leftScale, graphHeight),
-      rightYLabels: rightScale ? buildGroupYLabels(rightScale, graphHeight) : [],
+      yLabels,
+      rightYLabels,
       xLabels,
       heatingAreas: i === 0
         ? data.heatingAreas.map((a) => ({ id: a.id, points: offsetPointsY(a.points, yOffset) }))
-        : []
+        : [],
+      ...effectivePlotDimensions(yLabels, rightYLabels)
     });
   }
 

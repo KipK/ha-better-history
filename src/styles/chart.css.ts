@@ -167,7 +167,7 @@ export const chartStyles = css`
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin: 6px calc(40 / 720 * 100%) 0;
+    margin: 6px calc(48 / 720 * 100%) 0;
     padding: 0 6px 8px 6px;
     font-size: 12px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));
@@ -275,7 +275,7 @@ export const chartStyles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin: 0 calc(40 / 720 * 100%) 8px;
+    margin: 0 calc(48 / 720 * 100%) 8px;
     box-sizing: border-box;
   }
 
@@ -307,7 +307,7 @@ export const chartStyles = css`
 
   .tools-panel {
     display: block;
-    margin: 0 calc(40 / 720 * 100%) 8px;
+    margin: 0 calc(48 / 720 * 100%) 8px;
     padding: 7px 8px;
     border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
     border-radius: var(--better-history-radius, 8px);
