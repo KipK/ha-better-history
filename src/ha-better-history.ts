@@ -39,6 +39,7 @@ const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
 const MIN_VIEW_RANGE_GAP_PX = 24;
 const MIN_VIEW_RANGE_FALLBACK_TRACK_PX = 720;
+const MIN_GRAPH_HEIGHT = 48;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
@@ -183,10 +184,9 @@ export class HaBetterHistory extends LitElement {
             const surface = this._observedChartSurface as Element;
             const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
             const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
-            // Update when the graph content is smaller than the surface (external slack)
-            // or when the surface shrank. In auto-height mode contentHeight == height,
-            // so we never update, preventing the ResizeObserver feedback loop.
-            if (contentHeight < height - 2 || height < this._chartSurfaceHeight) {
+            // Update only when there is external slack or pressure. In auto-height mode
+            // contentHeight == height, so we avoid a ResizeObserver feedback loop.
+            if (contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight) {
               this._chartSurfaceHeight = height;
             }
           }
@@ -231,7 +231,7 @@ export class HaBetterHistory extends LitElement {
       if (height !== this._chartSurfaceHeight) {
         const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
         const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
-        if (contentHeight < height - 2 || height < this._chartSurfaceHeight) {
+        if (contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight) {
           this._chartSurfaceHeight = height;
         }
       }
@@ -863,9 +863,10 @@ export class HaBetterHistory extends LitElement {
         MAX_GRAPH_HEIGHT_ABSOLUTE
       )
     );
-    const height = Math.min(Math.floor(availableForGraphs / graphCount), maxHeight);
+    const constrainedHeight = Math.floor(Math.max(0, availableForGraphs) / graphCount);
+    const height = Math.min(constrainedHeight, maxHeight);
 
-    return Math.max(GRAPH_HEIGHT, height);
+    return Math.max(MIN_GRAPH_HEIGHT, height);
   }
 
   private _renderGraphGroup(group: GraphGroup): TemplateResult {

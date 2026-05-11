@@ -5,7 +5,7 @@ export const chartStyles = css`
     display: flex;
     flex-direction: column;
     container-type: inline-size;
-    min-height: 360px;
+    min-height: var(--better-history-min-height, 360px);
     font-family: var(--better-history-font-family, inherit);
     user-select: none;
     -webkit-user-select: none;
@@ -42,7 +42,7 @@ export const chartStyles = css`
     flex-direction: column;
     justify-content: center;
     position: relative;
-    overflow-y: auto;
+    overflow-y: var(--better-history-surface-overflow-y, auto);
     padding-block: 16px;
     flex: 1;
     min-height: 0;
