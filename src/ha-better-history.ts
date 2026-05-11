@@ -181,6 +181,7 @@ export class HaBetterHistory extends LitElement {
 
   @state() private _containerWidth = 0;
   @state() private _chartSurfaceHeight = 0;
+  @state() private _chartSurfaceConstrained = false;
   private _resizeObserver?: ResizeObserver;
   private _observedChartSurface?: Element;
 
@@ -198,17 +199,7 @@ export class HaBetterHistory extends LitElement {
             this._containerWidth = width;
           }
         } else if (entry.target === this._observedChartSurface) {
-          const height = Math.round(entry.contentRect.height);
-          if (height !== this._chartSurfaceHeight) {
-            const surface = this._observedChartSurface as Element;
-            const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
-            const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
-            // Update only when there is external slack or pressure. In auto-height mode
-            // contentHeight == height, so we avoid a ResizeObserver feedback loop.
-            if (contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight) {
-              this._chartSurfaceHeight = height;
-            }
-          }
+          this._syncChartSurfaceSize(entry.contentRect.height);
         }
       }
     });
@@ -250,17 +241,28 @@ export class HaBetterHistory extends LitElement {
 
     if (surface) {
       this._resizeObserver?.observe(surface);
-      const height = Math.round(surface.getBoundingClientRect().height);
-      if (height !== this._chartSurfaceHeight) {
-        const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
-        const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
-        if (contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight) {
-          this._chartSurfaceHeight = height;
-        }
-      }
+      this._syncChartSurfaceSize(surface.getBoundingClientRect().height);
     } else if (this._chartSurfaceHeight !== 0) {
       this._chartSurfaceHeight = 0;
+      this._chartSurfaceConstrained = false;
     }
+  }
+
+  private _syncChartSurfaceSize(rawHeight: number): void {
+    const height = Math.round(rawHeight);
+    const surface = this._observedChartSurface;
+    const graphs = surface?.querySelector<HTMLElement>(".chart-graphs");
+    const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+    const constrained = contentHeight < height - 2 || height < contentHeight - 2 || height < this._chartSurfaceHeight;
+
+    if (constrained) {
+      if (this._chartSurfaceHeight !== height) this._chartSurfaceHeight = height;
+      if (!this._chartSurfaceConstrained) this._chartSurfaceConstrained = true;
+      return;
+    }
+
+    if (this._chartSurfaceHeight !== 0) this._chartSurfaceHeight = 0;
+    if (this._chartSurfaceConstrained) this._chartSurfaceConstrained = false;
   }
 
   private _effectiveStartDate(): Date {
@@ -864,7 +866,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _graphHeightFor(data: ChartRenderData): number {
-    if (this._chartSurfaceHeight <= 0) return GRAPH_HEIGHT;
+    if (!this._chartSurfaceConstrained || this._chartSurfaceHeight <= 0) return GRAPH_HEIGHT;
 
     const graphCount = Math.max(
       new Set(data.numericScales.map((scale) => scale.graphKey)).size,
@@ -873,8 +875,7 @@ export class HaBetterHistory extends LitElement {
     );
     const segmentCount = data.allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
     const staticCanvasHeight = graphCount * (GRAPH_TOP + 18 + 16) + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
-    const legendReserve = (this._resolved?.showLegend ?? true) ? graphCount * 34 : 0;
-    const availableForGraphs = this._chartSurfaceHeight - staticCanvasHeight - legendReserve;
+    const availableForGraphs = this._chartSurfaceHeight - staticCanvasHeight;
     const plotWidth = this._containerWidth > 0
       ? this._containerWidth * PLOT_WIDTH / CHART_WIDTH
       : PLOT_WIDTH;
