@@ -176,7 +176,7 @@ export const chartStyles = css`
   }
 
   .graph-row {
-    --axis-label-gap: 10px;
+    --axis-label-gap: 5px;
     display: grid;
     grid-template-columns: var(--axis-left-gutter, 0px) minmax(0, 1fr) var(--axis-right-gutter, 0px);
     min-width: 0;

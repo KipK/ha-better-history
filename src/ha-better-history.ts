@@ -45,6 +45,25 @@ const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
+const AXIS_LABEL_GAP_PX = 5;
+
+function axisLabelWidthPx(value: string): number {
+  let width = 0;
+
+  for (const char of value) {
+    if (char >= "0" && char <= "9") width += 6.2;
+    else if (char === "." || char === ",") width += 3.2;
+    else if (char === "-") width += 4;
+    else width += 6.2;
+  }
+
+  return Math.ceil(width);
+}
+
+function axisGutter(labels: Array<{ value: string }>): string {
+  const width = Math.max(0, ...labels.map((label) => axisLabelWidthPx(label.value)));
+  return width > 0 ? `${width + AXIS_LABEL_GAP_PX}px` : "0px";
+}
 
 function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
@@ -878,14 +897,12 @@ export class HaBetterHistory extends LitElement {
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
-    const leftLabelChars = Math.max(0, ...group.yLabels.map((label) => label.value.length));
-    const rightLabelChars = Math.max(0, ...group.rightYLabels.map((label) => label.value.length));
-    const leftGutter = showScale && leftLabelChars > 0 ? `calc(${leftLabelChars}ch + var(--axis-label-gap))` : "0px";
-    const rightGutter = showScale && rightLabelChars > 0 ? `calc(${rightLabelChars}ch + var(--axis-label-gap))` : "0px";
+    const leftGutter = showScale ? axisGutter(group.yLabels) : "0px";
+    const rightGutter = showScale ? axisGutter(group.rightYLabels) : "0px";
 
     return html`
       <div class="graph-section">
-        <div class="graph-row" style=${`--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
+        <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
           <div class="axis-labels axis-labels--left" style="height:${group.canvasHeight}px">
             ${showScale
               ? group.yLabels.map(
