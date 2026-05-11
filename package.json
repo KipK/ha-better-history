@@ -1,6 +1,6 @@
 {
   "name": "@kipk/ha-better-history",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
   "author": "@KipK",
