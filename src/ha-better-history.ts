@@ -179,6 +179,7 @@ export class HaBetterHistory extends LitElement {
   private _dragStartSourceIds?: string[];
   private _dragDropCommitted = false;
   private _lastPickerOverlayOpen = false;
+  private _lastPointerDownInside = false;
   private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
   @state() private _importedDataActive = false;
 
@@ -1754,14 +1755,21 @@ export class HaBetterHistory extends LitElement {
   // (which reacts to pointerdown) would close the parent dialog when the user
   // only meant to dismiss the attribute browser.
   private _handleDocumentPointerDown = (event: Event): void => {
+    this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
     if (!this._attributeMenuOpen) return;
-    if (this._isEventInsideAttributeOverlay(event)) return;
+    if (this._lastPointerDownInside) return;
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
 
   private _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen) return;
+    if (!this._attributeMenuOpen) {
+      this._lastPointerDownInside = false;
+      return;
+    }
+    const pointerWasInside = this._lastPointerDownInside;
+    this._lastPointerDownInside = false;
+    if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
 
     event.preventDefault();

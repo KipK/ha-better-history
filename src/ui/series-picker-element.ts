@@ -33,15 +33,24 @@ export class SeriesPickerElement extends LitElement {
   @state() private _componentsReady = false;
   @state() private _customEntityIds: string[] = [];
 
+  private _lastPointerDownInside = false;
+
   private readonly _handleDocumentPointerDown = (event: Event): void => {
+    this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
     if (!this._attributeMenuOpen) return;
-    if (this._isEventInsideAttributeOverlay(event)) return;
+    if (this._lastPointerDownInside) return;
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
 
   private readonly _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen && !this._entityPickerOpen) return;
+    if (!this._attributeMenuOpen && !this._entityPickerOpen) {
+      this._lastPointerDownInside = false;
+      return;
+    }
+    const pointerWasInside = this._lastPointerDownInside;
+    this._lastPointerDownInside = false;
+    if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
     if (this._entityPickerOpen && !this._attributeMenuOpen) {
       this._entityPickerOpen = false;
