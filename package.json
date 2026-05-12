@@ -1,6 +1,6 @@
 {
   "name": "@kipk/ha-better-history",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
   "author": "@KipK",
@@ -25,19 +25,13 @@
     "url": "https://github.com/KipK/ha-better-history/issues"
   },
   "homepage": "https://github.com/KipK/ha-better-history#readme",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/all.js",
+  "module": "dist/all.js",
+  "types": "dist/all.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./define": {
-      "import": "./dist/define.js"
-    },
-    "./picker": {
-      "import": "./dist/picker.js"
+      "import": "./dist/all.js",
+      "types": "./dist/all.d.ts"
     }
   },
   "files": [
@@ -47,7 +41,7 @@
     "access": "public"
   },
   "sideEffects": [
-    "dist/define.js"
+    "dist/all.js"
   ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
