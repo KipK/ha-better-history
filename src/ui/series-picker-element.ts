@@ -91,14 +91,13 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private _isEventInsideAttributeOverlay(event: Event): boolean {
-    const target = event.target as Node | null;
     const path = event.composedPath();
 
     const menu = this.renderRoot?.querySelector(".entity-menu[open], .entity-select-menu[open]");
-    if (menu && target && menu.contains(target)) return true;
+    if (menu && this._pathContainsElement(path, menu)) return true;
 
     const trigger = this.renderRoot?.querySelector(".entity-trigger");
-    if (trigger && target && trigger.contains(target)) return true;
+    if (trigger && this._pathContainsElement(path, trigger)) return true;
 
     for (const el of path) {
       if (el === this) break;
@@ -116,6 +115,10 @@ export class SeriesPickerElement extends LitElement {
       }
     }
     return false;
+  }
+
+  private _pathContainsElement(path: EventTarget[], element: Element): boolean {
+    return path.some((target) => target instanceof Node && element.contains(target));
   }
 
   private _positionEntityMenu(): void {
