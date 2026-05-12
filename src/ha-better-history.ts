@@ -49,6 +49,14 @@ const CHART_SURFACE_SIZE_TOLERANCE = 2;
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
 const AXIS_LABEL_GAP_PX = 5;
+const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
+
+type BrowserHistoryLayer = "date-picker" | "entity-picker" | "attribute-picker";
+
+interface BrowserHistoryEntry {
+  instanceId: string;
+  layer: BrowserHistoryLayer;
+}
 
 function axisLabelWidthPx(value: string): number {
   let width = 0;
@@ -161,10 +169,12 @@ export class HaBetterHistory extends LitElement {
   @state() private _removedConfigSourceIds: string[] = [];
   @state() private _customEntityIds: string[] = [];
   @state() private _entityPickerOpen = false;
+  @state() private _datePickerOpen = false;
   @state() private _draggingSourceId?: string;
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
+  private readonly _browserHistoryInstanceId = `hbh-${Math.random().toString(36).slice(2)}`;
   private _chartRenderCache?: ChartRenderCache;
   private _graphGroupRenderCache?: GraphGroupRenderCache;
   private _prevClipX = new Map<string, number>();
@@ -180,6 +190,8 @@ export class HaBetterHistory extends LitElement {
   private _dragDropCommitted = false;
   private _lastPickerOverlayOpen = false;
   private _lastPointerDownInside = false;
+  private _syncingBrowserHistory = false;
+  private _selectingEntityForAttributeMenu = false;
   private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
   @state() private _importedDataActive = false;
 
@@ -194,6 +206,7 @@ export class HaBetterHistory extends LitElement {
     ensureHaComponents();
     document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
+    window.addEventListener("popstate", this._handleBrowserPopState);
     this._resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.target === this) {
@@ -213,6 +226,7 @@ export class HaBetterHistory extends LitElement {
     super.disconnectedCallback();
     document.removeEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.removeEventListener("click", this._handleDocumentClick, true);
+    window.removeEventListener("popstate", this._handleBrowserPopState);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     if (this._sourceAddBatchTimer !== undefined) {
@@ -327,6 +341,113 @@ export class HaBetterHistory extends LitElement {
 
     clearInterval(this._liveNowTimer);
     this._liveNowTimer = undefined;
+  }
+
+  private _browserHistoryEntry(state = window.history.state): BrowserHistoryEntry | undefined {
+    const entry = typeof state === "object" && state !== null
+      ? (state as Record<string, unknown>)[BROWSER_HISTORY_STATE_KEY]
+      : undefined;
+
+    if (typeof entry !== "object" || entry === null) return undefined;
+
+    const record = entry as Partial<BrowserHistoryEntry>;
+    if (record.instanceId !== this._browserHistoryInstanceId) return undefined;
+    if (record.layer !== "date-picker" && record.layer !== "entity-picker" && record.layer !== "attribute-picker") {
+      return undefined;
+    }
+
+    return { instanceId: record.instanceId, layer: record.layer };
+  }
+
+  private _browserHistoryState(layer: BrowserHistoryLayer): Record<string, unknown> {
+    const current = typeof window.history.state === "object" && window.history.state !== null
+      ? window.history.state as Record<string, unknown>
+      : {};
+
+    return {
+      ...current,
+      [BROWSER_HISTORY_STATE_KEY]: {
+        instanceId: this._browserHistoryInstanceId,
+        layer
+      }
+    };
+  }
+
+  private _pushBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (this._syncingBrowserHistory) return;
+    if (this._browserHistoryEntry()?.layer === layer) return;
+
+    window.history.pushState(this._browserHistoryState(layer), "", window.location.href);
+  }
+
+  private _replaceBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (this._syncingBrowserHistory) return;
+
+    window.history.replaceState(this._browserHistoryState(layer), "", window.location.href);
+  }
+
+  private _closeBrowserHistoryLayer(layer: BrowserHistoryLayer, close: () => void): void {
+    if (!this._syncingBrowserHistory && this._browserHistoryEntry()?.layer === layer) {
+      window.history.back();
+      return;
+    }
+
+    close();
+  }
+
+  private readonly _handleBrowserPopState = (event: PopStateEvent): void => {
+    const entry = this._browserHistoryEntry(event.state);
+
+    this._syncingBrowserHistory = true;
+    try {
+      if (!entry) {
+        this._closeBrowserHistoryOverlays();
+        return;
+      }
+
+      this._openBrowserHistoryLayer(entry.layer);
+    } finally {
+      this._syncingBrowserHistory = false;
+    }
+  };
+
+  private _openBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    this._datePickerOpen = layer === "date-picker";
+    this._entityPickerOpen = layer === "entity-picker";
+    this._attributeMenuOpen = layer === "attribute-picker";
+
+    if (layer !== "attribute-picker") {
+      this._attributeSearch = "";
+    }
+  }
+
+  private _closeBrowserHistoryOverlays(): void {
+    if (this._datePickerOpen) {
+      this._closeDatePickerOverlay();
+    }
+    if (this._attributeMenuOpen || this._entityPickerOpen) {
+      this._closePickerOverlay();
+    }
+  }
+
+  private _closePickerOverlay(): void {
+    this._attributeMenuOpen = false;
+    this._entityPickerOpen = false;
+    this._attributeSearch = "";
+  }
+
+  private _closeDatePickerOverlay(): void {
+    this._datePickerOpen = false;
+
+    const picker = this.renderRoot.querySelector("ha-date-range-picker") as HTMLElement | null;
+    picker?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+    picker?.blur();
+
+    const root = this.getRootNode();
+    const active = root instanceof Document || root instanceof ShadowRoot
+      ? root.activeElement
+      : undefined;
+    if (active instanceof HTMLElement) active.blur();
   }
 
   private _effectiveLineMode(): BetterHistoryLineMode | undefined {
@@ -587,7 +708,7 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
-    if (changed.has("_attributeMenuOpen") || changed.has("_entityPickerOpen")) {
+    if (changed.has("_attributeMenuOpen") || changed.has("_entityPickerOpen") || changed.has("_datePickerOpen")) {
       this._emitPickerOverlayState();
     }
     this._animateClipPaths();
@@ -595,7 +716,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _emitPickerOverlayState(): void {
-    const open = this._attributeMenuOpen || this._entityPickerOpen;
+    const open = this._datePickerOpen || this._attributeMenuOpen || this._entityPickerOpen;
     if (open === this._lastPickerOverlayOpen) return;
 
     this._lastPickerOverlayOpen = open;
@@ -623,6 +744,17 @@ export class HaBetterHistory extends LitElement {
     );
 
     void this.requestUpdate();
+  }
+
+  private _onDatePickerOpened(): void {
+    if (this._datePickerOpen) return;
+
+    this._datePickerOpen = true;
+    this._pushBrowserHistoryLayer("date-picker");
+  }
+
+  private _onDatePickerClosed(): void {
+    this._closeBrowserHistoryLayer("date-picker", () => this._closeDatePickerOverlay());
   }
 
   private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
@@ -1669,12 +1801,14 @@ export class HaBetterHistory extends LitElement {
   private _renderDatePicker(): TemplateResult | typeof nothing {
     if (!this._resolved?.showDatePicker || !this._datePickerReady) return nothing;
 
-    return renderDatePicker(
-      this.hass,
-      this._resolved.startDate,
-      this._resolved.endDate,
-      (startDate, endDate) => this._onDateRangeChanged(startDate, endDate)
-    );
+    return renderDatePicker({
+      hass: this.hass,
+      startDate: this._resolved.startDate,
+      endDate: this._resolved.endDate,
+      onChange: (startDate, endDate) => this._onDateRangeChanged(startDate, endDate),
+      onOpen: () => this._onDatePickerOpened(),
+      onClose: () => this._onDatePickerClosed()
+    });
   }
 
   private _positionEntityMenu(): void {
@@ -1722,12 +1856,11 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _closeAttributeMenu(): void {
-    this._attributeMenuOpen = false;
-    this._entityPickerOpen = false;
-    this._attributeSearch = "";
+    this._closeBrowserHistoryLayer("attribute-picker", () => this._closePickerOverlay());
   }
 
   private _onEntitySelected(entityId: string): void {
+    this._selectingEntityForAttributeMenu = true;
     const knownIds = new Set(this._pickerEntities().map((e) => e.entity_id));
     if (!knownIds.has(entityId)) {
       this._customEntityIds = [...this._customEntityIds, entityId];
@@ -1739,15 +1872,34 @@ export class HaBetterHistory extends LitElement {
     // even if `picker-closed` is not delivered.
     this._entityPickerOpen = false;
     this._attributeMenuOpen = true;
+    if (this._browserHistoryEntry()?.layer === "entity-picker") {
+      this._replaceBrowserHistoryLayer("attribute-picker");
+    } else {
+      this._pushBrowserHistoryLayer("attribute-picker");
+    }
+
+    queueMicrotask(() => {
+      this._selectingEntityForAttributeMenu = false;
+    });
   }
 
   private _onEntityPickerOpened(): void {
+    if (this._entityPickerOpen && !this._attributeMenuOpen) return;
+
     this._entityPickerOpen = true;
     this._attributeMenuOpen = false;
+    this._pushBrowserHistoryLayer("entity-picker");
   }
 
   private _onEntityPickerClosed(): void {
-    this._entityPickerOpen = false;
+    if (this._selectingEntityForAttributeMenu) {
+      this._entityPickerOpen = false;
+      return;
+    }
+
+    this._closeBrowserHistoryLayer("entity-picker", () => {
+      this._entityPickerOpen = false;
+    });
   }
 
   // When the attribute browser is open, swallow outside pointer/mouse events

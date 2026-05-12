@@ -243,7 +243,7 @@ All events bubble and are composed.
 | `series-reordered`       | `{ sourceIds: string[] }`                          | User drags selected source chips into a new order             |
 | `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported         |
 | `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
-| `picker-overlay-changed` | `{ open: boolean }`                                | Entity picker or attribute browser overlay opens/closes       |
+| `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, entity picker, or attribute browser overlay opens/closes |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
 
@@ -325,6 +325,8 @@ chart.config = {
   };
 </script>
 ```
+
+The date picker, entity picker, and attribute browser participate in browser history: Back closes the open overlay before leaving the current Home Assistant view, and Forward restores it when possible.
 
 The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 

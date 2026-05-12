@@ -10,6 +10,15 @@ import {
 import type { HistorySource } from "../data/history.js";
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
 
+const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
+
+type BrowserHistoryLayer = "entity-picker" | "attribute-picker";
+
+interface BrowserHistoryEntry {
+  instanceId: string;
+  layer: BrowserHistoryLayer;
+}
+
 export class SeriesPickerElement extends LitElement {
   static styles = [
     chartStyles,
@@ -33,7 +42,10 @@ export class SeriesPickerElement extends LitElement {
   @state() private _componentsReady = false;
   @state() private _customEntityIds: string[] = [];
 
+  private readonly _browserHistoryInstanceId = `abh-picker-${Math.random().toString(36).slice(2)}`;
   private _lastPointerDownInside = false;
+  private _syncingBrowserHistory = false;
+  private _selectingEntityForAttributeMenu = false;
 
   private readonly _handleDocumentPointerDown = (event: Event): void => {
     this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
@@ -53,8 +65,10 @@ export class SeriesPickerElement extends LitElement {
     if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
     if (this._entityPickerOpen && !this._attributeMenuOpen) {
-      this._entityPickerOpen = false;
-      this._entitySearch = "";
+      this._closeBrowserHistoryLayer("entity-picker", () => {
+        this._entityPickerOpen = false;
+        this._entitySearch = "";
+      });
       return;
     }
     event.preventDefault();
@@ -67,6 +81,7 @@ export class SeriesPickerElement extends LitElement {
     super.connectedCallback();
     document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
+    window.addEventListener("popstate", this._handleBrowserPopState);
     preloadEntityPickerComponents().then(() => {
       this._componentsReady = true;
     });
@@ -76,6 +91,7 @@ export class SeriesPickerElement extends LitElement {
     super.disconnectedCallback();
     document.removeEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.removeEventListener("click", this._handleDocumentClick, true);
+    window.removeEventListener("popstate", this._handleBrowserPopState);
   }
 
   protected override willUpdate(changed: PropertyValues): void {
@@ -160,6 +176,76 @@ export class SeriesPickerElement extends LitElement {
     menu.style.right = "";
   }
 
+  private _browserHistoryEntry(state = window.history.state): BrowserHistoryEntry | undefined {
+    const entry = typeof state === "object" && state !== null
+      ? (state as Record<string, unknown>)[BROWSER_HISTORY_STATE_KEY]
+      : undefined;
+
+    if (typeof entry !== "object" || entry === null) return undefined;
+
+    const record = entry as Partial<BrowserHistoryEntry>;
+    if (record.instanceId !== this._browserHistoryInstanceId) return undefined;
+    if (record.layer !== "entity-picker" && record.layer !== "attribute-picker") return undefined;
+
+    return { instanceId: record.instanceId, layer: record.layer };
+  }
+
+  private _browserHistoryState(layer: BrowserHistoryLayer): Record<string, unknown> {
+    const current = typeof window.history.state === "object" && window.history.state !== null
+      ? window.history.state as Record<string, unknown>
+      : {};
+
+    return {
+      ...current,
+      [BROWSER_HISTORY_STATE_KEY]: {
+        instanceId: this._browserHistoryInstanceId,
+        layer
+      }
+    };
+  }
+
+  private _pushBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (this._syncingBrowserHistory) return;
+    if (this._browserHistoryEntry()?.layer === layer) return;
+
+    window.history.pushState(this._browserHistoryState(layer), "", window.location.href);
+  }
+
+  private _replaceBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (this._syncingBrowserHistory) return;
+
+    window.history.replaceState(this._browserHistoryState(layer), "", window.location.href);
+  }
+
+  private _closeBrowserHistoryLayer(layer: BrowserHistoryLayer, close: () => void): void {
+    if (!this._syncingBrowserHistory && this._browserHistoryEntry()?.layer === layer) {
+      window.history.back();
+      return;
+    }
+
+    close();
+  }
+
+  private readonly _handleBrowserPopState = (event: PopStateEvent): void => {
+    const entry = this._browserHistoryEntry(event.state);
+
+    this._syncingBrowserHistory = true;
+    try {
+      if (!entry) {
+        this._closePickerOverlay();
+        return;
+      }
+
+      this._entityPickerOpen = entry.layer === "entity-picker";
+      this._attributeMenuOpen = entry.layer === "attribute-picker";
+      if (entry.layer !== "attribute-picker") {
+        this._attributeSearch = "";
+      }
+    } finally {
+      this._syncingBrowserHistory = false;
+    }
+  };
+
   private _pickerEntities(): HassEntity[] {
     if (!this.hass) return [];
     return this._customEntityIds
@@ -185,6 +271,7 @@ export class SeriesPickerElement extends LitElement {
   };
 
   private _onEntitySelected(entityId: string): void {
+    this._selectingEntityForAttributeMenu = true;
     const knownIds = new Set(this._pickerEntities().map((e) => e.entity_id));
     if (!knownIds.has(entityId)) {
       this._customEntityIds = [...this._customEntityIds, entityId];
@@ -195,9 +282,22 @@ export class SeriesPickerElement extends LitElement {
     this._attributeSearch = "";
     this._entityPickerOpen = false;
     this._attributeMenuOpen = true;
+    if (this._browserHistoryEntry()?.layer === "entity-picker") {
+      this._replaceBrowserHistoryLayer("attribute-picker");
+    } else {
+      this._pushBrowserHistoryLayer("attribute-picker");
+    }
+
+    queueMicrotask(() => {
+      this._selectingEntityForAttributeMenu = false;
+    });
   }
 
   private _closeAttributeMenu(): void {
+    this._closeBrowserHistoryLayer("attribute-picker", () => this._closePickerOverlay());
+  }
+
+  private _closePickerOverlay(): void {
     this._attributeMenuOpen = false;
     this._entityPickerOpen = false;
     this._entitySearch = "";
@@ -247,11 +347,21 @@ export class SeriesPickerElement extends LitElement {
         getItems: this._getItems,
         getAdditionalItems: this._getAdditionalItems,
         onEntityPickerOpened: () => {
+          if (this._entityPickerOpen && !this._attributeMenuOpen) return;
+
           this._entityPickerOpen = true;
           this._attributeMenuOpen = false;
+          this._pushBrowserHistoryLayer("entity-picker");
         },
         onEntityPickerClosed: () => {
-          this._entityPickerOpen = false;
+          if (this._selectingEntityForAttributeMenu) {
+            this._entityPickerOpen = false;
+            return;
+          }
+
+          this._closeBrowserHistoryLayer("entity-picker", () => {
+            this._entityPickerOpen = false;
+          });
         },
         onEntitySelected: (entityId) => this._onEntitySelected(entityId),
         onEntitySearchChanged: (value) => {

@@ -10,18 +10,33 @@ export async function preloadDatePicker(): Promise<void> {
   await ensureDateRangePicker();
 }
 
+interface DatePickerRenderOptions {
+  hass: HomeAssistant | undefined;
+  startDate: Date;
+  endDate: Date;
+  onChange: (startDate: Date, endDate: Date) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
+}
+
 export function renderDatePicker(
-  hass: HomeAssistant | undefined,
-  startDate: Date,
-  endDate: Date,
-  onChange: (startDate: Date, endDate: Date) => void
+  opts: DatePickerRenderOptions
 ): TemplateResult {
   return html`
-    <div class="date-picker-wrapper">
+    <div
+      class="date-picker-wrapper"
+      @focusin=${() => opts.onOpen?.()}
+      @pointerdown=${() => opts.onOpen?.()}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          opts.onClose?.();
+        }
+      }}
+    >
       <ha-date-range-picker
-        .hass=${hass}
-        .startDate=${startDate}
-        .endDate=${endDate}
+        .hass=${opts.hass}
+        .startDate=${opts.startDate}
+        .endDate=${opts.endDate}
         time-picker
         extended-presets
         @value-changed=${(event: CustomEvent) => {
@@ -33,7 +48,8 @@ export function renderDatePicker(
           const start = detail.value?.startDate ?? detail.startDate;
           const end = detail.value?.endDate ?? detail.endDate;
           if (start instanceof Date && end instanceof Date) {
-            onChange(start, end);
+            opts.onChange(start, end);
+            opts.onClose?.();
           }
         }}
       ></ha-date-range-picker>
