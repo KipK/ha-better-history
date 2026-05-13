@@ -203,6 +203,9 @@ export class HaBetterHistory extends LitElement {
   @state() private _chartSurfaceConstrained = false;
   private _resizeObserver?: ResizeObserver;
   private _observedChartSurface?: Element;
+  private _surfaceHeaderObserver?: ResizeObserver;
+  private _observedSurfaceHeader?: Element;
+  private _lastContentHeight = 0;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -232,6 +235,8 @@ export class HaBetterHistory extends LitElement {
     window.removeEventListener("popstate", this._handleBrowserPopState);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
+    this._surfaceHeaderObserver?.disconnect();
+    this._surfaceHeaderObserver = undefined;
     if (this._sourceAddBatchTimer !== undefined) {
       clearTimeout(this._sourceAddBatchTimer);
       this._sourceAddBatchTimer = undefined;
@@ -272,6 +277,13 @@ export class HaBetterHistory extends LitElement {
     const surface = this._observedChartSurface;
     const graphs = surface?.querySelector<HTMLElement>(".chart-graphs");
     const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+
+    if (this._lastContentHeight > 0 && contentHeight > 0 && contentHeight === this._lastContentHeight
+      && Math.abs(height - this._chartSurfaceHeight) > CHART_SURFACE_SIZE_TOLERANCE) {
+      return;
+    }
+    this._lastContentHeight = contentHeight;
+
     const contentDiffersFromSurface =
       contentHeight < height - CHART_SURFACE_SIZE_TOLERANCE ||
       height < contentHeight - CHART_SURFACE_SIZE_TOLERANCE;
@@ -288,6 +300,69 @@ export class HaBetterHistory extends LitElement {
 
     if (this._chartSurfaceHeight !== 0) this._chartSurfaceHeight = 0;
     if (this._chartSurfaceConstrained) this._chartSurfaceConstrained = false;
+  }
+
+  private _observeSurfaceHeader(): void {
+    const header = this.renderRoot.querySelector(".surface-header");
+
+    if (header !== this._observedSurfaceHeader) {
+      if (this._surfaceHeaderObserver && this._observedSurfaceHeader) {
+        this._surfaceHeaderObserver.unobserve(this._observedSurfaceHeader);
+      }
+
+      if (this._observedSurfaceHeader && !header) {
+        this._syncSurfaceHeaderOffset(0);
+      }
+
+      this._observedSurfaceHeader = header ?? undefined;
+
+      if (header) {
+        if (!this._surfaceHeaderObserver) {
+          this._surfaceHeaderObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              this._syncSurfaceHeaderOffset(entry.contentRect.height);
+            }
+          });
+        }
+        this._surfaceHeaderObserver.observe(header);
+      }
+    }
+  }
+
+  private _syncSurfaceHeaderOffset(headerHeight: number): void {
+    const surface = this.renderRoot.querySelector(".chart-surface") as HTMLElement | null;
+    if (!surface) return;
+
+    if (headerHeight <= 0) {
+      if (surface.style.getPropertyValue("--better-history-surface-header-offset")) {
+        surface.style.removeProperty("--better-history-surface-header-offset");
+      }
+      return;
+    }
+
+    const graphs = surface.querySelector<HTMLElement>(".chart-graphs");
+    const surfaceHeight = Math.round(surface.getBoundingClientRect().height);
+    const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+    const minGap = 10;
+
+    const emptySpaceAbove = Math.max(0, (surfaceHeight - contentHeight) / 2);
+    const overlap = headerHeight + minGap - emptySpaceAbove;
+    const currentOffset = surface.style.getPropertyValue("--better-history-surface-header-offset");
+    const hasOffset = currentOffset !== "";
+
+    if (overlap <= 0) {
+      if (!hasOffset) return;
+      if (overlap > -CHART_SURFACE_SIZE_TOLERANCE) return;
+      this._lastContentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+      surface.style.removeProperty("--better-history-surface-header-offset");
+      return;
+    }
+
+    const offsetPx = Math.ceil(2 * overlap);
+    if (currentOffset === `${offsetPx}px`) return;
+
+    this._lastContentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+    surface.style.setProperty("--better-history-surface-header-offset", `${offsetPx}px`);
   }
 
   private _effectiveStartDate(): Date {
@@ -708,6 +783,7 @@ export class HaBetterHistory extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     this._observeChartSurface();
+    this._observeSurfaceHeader();
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
@@ -1799,20 +1875,26 @@ export class HaBetterHistory extends LitElement {
       this._resolved?.titleColor ? `color:${this._resolved.titleColor};` : ""
     ].join("");
     const hasVisibleControls = this._hasVisibleControls();
-    const rootClass = hasVisibleControls || this.toolsOpen ? "root root--stacked-ui" : "root";
+    const showSurfaceHeader = hasVisibleControls || (this.toolsOpen && this._lastGraphVisible !== false);
 
     return html`
-      <div class=${rootClass} style="width:${width};background:${backgroundColor};">
+      <div class="root" style="width:${width};background:${backgroundColor};">
         ${title ? html`<div class="graph-title" style=${titleStyle}>${title}</div>` : nothing}
-        ${hasVisibleControls
-          ? html`<div class="controls-bar">
-              ${this._renderDatePicker()}
-              ${this._renderEntityPickerUI()}
-            </div>`
-          : nothing}
-        ${this._renderToolsPanel()}
-        <div class="chart-area">
-          ${this._renderChartBody()}
+        <div class="chart-layout">
+          ${showSurfaceHeader
+            ? html`<div class="surface-header">
+                ${hasVisibleControls
+                  ? html`<div class="controls-bar">
+                      ${this._renderDatePicker()}
+                      ${this._renderEntityPickerUI()}
+                    </div>`
+                  : nothing}
+                ${this._renderToolsPanel()}
+              </div>`
+            : nothing}
+          <div class="chart-area">
+            ${this._renderChartBody()}
+          </div>
         </div>
       </div>
     `;

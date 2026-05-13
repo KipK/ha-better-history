@@ -20,6 +20,63 @@ export const chartStyles = css`
     -webkit-user-select: none;
   }
 
+  .chart-layout {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .chart-layout > .chart-area {
+    grid-row: 1;
+    grid-column: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .surface-header {
+    grid-row: 1;
+    grid-column: 1;
+    z-index: 5;
+    align-self: start;
+    pointer-events: none;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 calc(40 / 720 * 100%) 0;
+    padding: 7px 8px;
+    background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 95%, var(--primary-text-color, #fff) 5%);
+    border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
+    border-radius: var(--better-history-radius, 8px);
+    box-sizing: border-box;
+  }
+
+  .surface-header > * {
+    pointer-events: auto;
+  }
+
+  .surface-header:empty {
+    display: none;
+  }
+
+  .surface-header .controls-bar,
+  .surface-header .tools-panel {
+    margin: 0;
+  }
+
+  .surface-header .tools-panel {
+    position: static;
+    top: auto;
+    z-index: auto;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+
   .graph-title {
     margin: 0 0 8px;
     color: var(--better-history-title-color, var(--primary-text-color, inherit));
@@ -43,7 +100,8 @@ export const chartStyles = css`
     justify-content: center;
     position: relative;
     overflow-y: var(--better-history-surface-overflow-y, auto);
-    padding-block: 16px;
+    padding: 16px;
+    padding-top: var(--better-history-surface-header-offset, 16px);
     flex: 1;
     min-height: 0;
   }
@@ -614,15 +672,9 @@ export const chartStyles = css`
   }
 
   @container (max-width: 560px) {
-    .root--stacked-ui .chart-surface {
-      justify-content: flex-start;
-      padding-top: 8px;
-    }
-
-    .tools-panel {
-      position: static;
-      top: auto;
-      z-index: auto;
+    .surface-header {
+      margin-left: 0;
+      margin-right: 0;
     }
 
     .date-picker-wrapper,
@@ -638,25 +690,9 @@ export const chartStyles = css`
   }
 
   @media (max-width: 700px) {
-    .root--stacked-ui .chart-surface {
-      justify-content: flex-start;
-      padding-top: 8px;
-    }
-
-    .controls-bar,
-    .tools-panel {
+    .surface-header {
       margin-left: 0;
       margin-right: 0;
-    }
-
-    .controls-bar {
-      margin-bottom: 4px;
-    }
-
-    .tools-panel {
-      position: static;
-      top: auto;
-      z-index: auto;
     }
   }
 
@@ -669,9 +705,6 @@ export const chartStyles = css`
     .tools-panel {
       grid-template-columns: 1fr;
       padding: 8px;
-      position: static;
-      top: auto;
-      z-index: auto;
     }
 
     .tool-actions {
@@ -727,7 +760,7 @@ export const chartStyles = css`
 
   .entity-picker {
     position: relative;
-    flex: 1 1 220px;
+    flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
     display: flex;
