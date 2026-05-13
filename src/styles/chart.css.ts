@@ -463,10 +463,12 @@ export const chartStyles = css`
 
   .range-slider-stack {
     position: relative;
-    height: 24px;
+    height: 34px;
     display: flex;
     align-items: center;
     padding: 0 2px;
+    cursor: ew-resize;
+    touch-action: none;
   }
 
   .range-slider-stack::before {
@@ -529,7 +531,7 @@ export const chartStyles = css`
     border-radius: 999px;
     background: transparent;
     cursor: grab;
-    pointer-events: auto;
+    pointer-events: none;
     touch-action: none;
     z-index: 1;
   }
@@ -555,12 +557,12 @@ export const chartStyles = css`
   }
 
   .range-slider::-webkit-slider-runnable-track {
-    height: 24px;
+    height: 34px;
     background: transparent;
   }
 
   .range-slider::-moz-range-track {
-    height: 24px;
+    height: 34px;
     background: transparent;
   }
 
@@ -575,7 +577,7 @@ export const chartStyles = css`
     box-shadow:
       0 0 0 2px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, transparent),
       0 1px 4px rgb(0 0 0 / 18%);
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   .range-slider::-moz-range-thumb {
@@ -587,7 +589,7 @@ export const chartStyles = css`
     box-shadow:
       0 0 0 2px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 88%, transparent),
       0 1px 4px rgb(0 0 0 / 18%);
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   .range-slider:focus-visible::-webkit-slider-thumb {
@@ -708,13 +710,23 @@ export const chartStyles = css`
     }
 
     .tool-actions {
+      flex: 1 1 100%;
       justify-content: flex-end;
+    }
+
+    .tool-range-row {
+      flex-wrap: wrap;
+    }
+
+    .tool-range-control {
+      flex: 1 1 0;
+      min-width: 0;
     }
 
     .range-slider-stack,
     .range-slider::-webkit-slider-runnable-track,
     .range-slider::-moz-range-track {
-      height: 30px;
+      height: 44px;
     }
 
     .range-selection {

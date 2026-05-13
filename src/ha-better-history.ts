@@ -40,8 +40,13 @@ const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
 const MIN_VIEW_RANGE_GAP_PX = 24;
-const MIN_TOUCH_VIEW_RANGE_GAP_PX = 44;
+const MIN_TOUCH_VIEW_RANGE_GAP_PX = 28;
 const MIN_VIEW_RANGE_FALLBACK_TRACK_PX = 720;
+const RANGE_SLIDER_STEPS = 1000;
+const RANGE_THUMB_OUTER_HIT_PX = 18;
+const RANGE_TOUCH_THUMB_HIT_PX = 44;
+const RANGE_THUMB_WIDTH_PX = 12;
+const RANGE_TOUCH_THUMB_WIDTH_PX = 14;
 const MIN_GRAPH_HEIGHT = 48;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
@@ -1434,6 +1439,18 @@ export class HaBetterHistory extends LitElement {
       : MIN_VIEW_RANGE_GAP_PX;
   }
 
+  private _rangeThumbHalfWidthPx(): number {
+    return (window.matchMedia?.("(hover: none) and (pointer: coarse)").matches
+      ? RANGE_TOUCH_THUMB_WIDTH_PX
+      : RANGE_THUMB_WIDTH_PX) / 2;
+  }
+
+  private _rangeThumbHitWidthPx(): number {
+    return window.matchMedia?.("(hover: none) and (pointer: coarse)").matches
+      ? RANGE_TOUCH_THUMB_HIT_PX
+      : RANGE_THUMB_OUTER_HIT_PX;
+  }
+
   private _minViewSpanMs(trackWidthPx = this._rangeSliderTrackWidthPx()): number {
     const { span } = this._loadedRangeMs();
     const minGapPx = this._minViewRangeGapPx();
@@ -1447,7 +1464,11 @@ export class HaBetterHistory extends LitElement {
   private _minViewRangeStep(trackWidthPx?: number): number {
     const loaded = this._loadedRangeMs();
 
-    return Math.max(1, Math.ceil((this._minViewSpanMs(trackWidthPx) / loaded.span) * 1000));
+    return Math.max(1, Math.ceil((this._minViewSpanMs(trackWidthPx) / loaded.span) * RANGE_SLIDER_STEPS));
+  }
+
+  private _percentFromRangePointer(event: PointerEvent, rect: DOMRect): number {
+    return Math.round((Math.max(0, Math.min(rect.width, event.clientX - rect.left)) / rect.width) * RANGE_SLIDER_STEPS);
   }
 
   private _setViewRangeMs(startMs: number, endMs: number, trackWidthPx?: number): void {
@@ -1476,7 +1497,7 @@ export class HaBetterHistory extends LitElement {
       ? this._effectiveEndDate().getTime()
       : this._resolved?.endDate.getTime() ?? this._effectiveEndDate().getTime();
 
-    return new Date(start + (Math.max(0, Math.min(1000, percent)) / 1000) * (end - start));
+    return new Date(start + (Math.max(0, Math.min(RANGE_SLIDER_STEPS, percent)) / RANGE_SLIDER_STEPS) * (end - start));
   }
 
   private _formatRangeDate(date: Date): string {
@@ -1488,10 +1509,7 @@ export class HaBetterHistory extends LitElement {
     });
   }
 
-  private _setViewRangePart(part: "start" | "end", event: Event): void {
-    const input = event.currentTarget as HTMLInputElement;
-    const nextPercent = Number(input.value);
-    const trackWidthPx = this._rangeSliderTrackWidthPx(input);
+  private _setViewRangePartPercent(part: "start" | "end", nextPercent: number, trackWidthPx?: number, input?: HTMLInputElement): void {
     const current = this._effectiveViewRange();
     const currentStartPercent = this._rangePercent(current.start, current.start);
     const currentEndPercent = this._rangePercent(current.end, current.end);
@@ -1500,22 +1518,22 @@ export class HaBetterHistory extends LitElement {
 
     if (part === "start") {
       clampedPercent = Math.min(Math.max(nextPercent, 0), currentEndPercent - minStep);
-      input.value = String(clampedPercent);
+      if (input) input.value = String(clampedPercent);
       this._setViewRangeMs(this._dateFromRangePercent(clampedPercent).getTime(), current.end.getTime(), trackWidthPx);
     } else {
-      clampedPercent = Math.max(Math.min(nextPercent, 1000), currentStartPercent + minStep);
-      input.value = String(clampedPercent);
+      clampedPercent = Math.max(Math.min(nextPercent, RANGE_SLIDER_STEPS), currentStartPercent + minStep);
+      if (input) input.value = String(clampedPercent);
       this._setViewRangeMs(current.start.getTime(), this._dateFromRangePercent(clampedPercent).getTime(), trackWidthPx);
     }
   }
 
-  private _onRangeSelectionPointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
+  private _setViewRangePart(part: "start" | "end", event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
 
-    const selection = event.currentTarget as HTMLElement;
-    const stack = selection.closest(".range-slider-stack");
-    if (!(stack instanceof HTMLElement)) return;
+    this._setViewRangePartPercent(part, Number(input.value), this._rangeSliderTrackWidthPx(input), input);
+  }
 
+  private _startRangeSelectionDrag(event: PointerEvent, stack: HTMLElement, selection: HTMLElement): void {
     const rect = stack.getBoundingClientRect();
     if (rect.width <= 0) return;
 
@@ -1529,7 +1547,7 @@ export class HaBetterHistory extends LitElement {
     event.stopPropagation();
 
     const startX = event.clientX;
-    selection.setPointerCapture(event.pointerId);
+    stack.setPointerCapture(event.pointerId);
     selection.toggleAttribute("dragging", true);
 
     const move = (moveEvent: PointerEvent): void => {
@@ -1541,14 +1559,87 @@ export class HaBetterHistory extends LitElement {
     };
     const cleanup = (): void => {
       selection.toggleAttribute("dragging", false);
-      selection.removeEventListener("pointermove", move);
-      selection.removeEventListener("pointerup", cleanup);
-      selection.removeEventListener("pointercancel", cleanup);
+      stack.removeEventListener("pointermove", move);
+      stack.removeEventListener("pointerup", cleanup);
+      stack.removeEventListener("pointercancel", cleanup);
     };
 
-    selection.addEventListener("pointermove", move);
-    selection.addEventListener("pointerup", cleanup);
-    selection.addEventListener("pointercancel", cleanup);
+    stack.addEventListener("pointermove", move);
+    stack.addEventListener("pointerup", cleanup);
+    stack.addEventListener("pointercancel", cleanup);
+  }
+
+  private _startRangeThumbDrag(event: PointerEvent, stack: HTMLElement, part: "start" | "end", initialPercent: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const trackWidthPx = this._rangeSliderTrackWidthPx(stack);
+    const update = (pointerEvent: PointerEvent): void => {
+      const rect = stack.getBoundingClientRect();
+
+      if (rect.width > 0) this._setViewRangePartPercent(part, this._percentFromRangePointer(pointerEvent, rect), rect.width);
+    };
+    const move = (moveEvent: PointerEvent): void => {
+      moveEvent.preventDefault();
+      update(moveEvent);
+    };
+    const cleanup = (): void => {
+      stack.removeEventListener("pointermove", move);
+      stack.removeEventListener("pointerup", cleanup);
+      stack.removeEventListener("pointercancel", cleanup);
+    };
+
+    stack.setPointerCapture(event.pointerId);
+    this._setViewRangePartPercent(part, initialPercent, trackWidthPx);
+    stack.addEventListener("pointermove", move);
+    stack.addEventListener("pointerup", cleanup);
+    stack.addEventListener("pointercancel", cleanup);
+  }
+
+  private _onRangeSliderStackPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+
+    const stack = event.currentTarget as HTMLElement;
+    const selection = stack.querySelector(".range-selection-hit");
+    if (!(selection instanceof HTMLElement)) return;
+
+    const rect = stack.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const current = this._effectiveViewRange();
+    const startPercent = this._rangePercent(current.start, current.start);
+    const endPercent = this._rangePercent(current.end, current.end);
+    const startX = (startPercent / RANGE_SLIDER_STEPS) * rect.width;
+    const endX = (endPercent / RANGE_SLIDER_STEPS) * rect.width;
+    const pointerX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const pointerPercent = this._percentFromRangePointer(event, rect);
+
+    const innerHit = this._rangeThumbHalfWidthPx();
+    const outerHit = this._rangeThumbHitWidthPx();
+    const startAtTrackEdge = startX <= outerHit;
+    const endAtTrackEdge = endX >= rect.width - outerHit;
+    const startHitStartX = Math.max(0, startX - outerHit);
+    const startHitEndX = Math.min(rect.width, startX + (startAtTrackEdge ? outerHit : innerHit));
+    const endHitStartX = Math.max(0, endX - (endAtTrackEdge ? outerHit : innerHit));
+    const endHitEndX = Math.min(rect.width, endX + outerHit);
+    const pointerInsideRange = pointerX >= startX && pointerX <= endX;
+    const pointerInsideRangeDragGap = pointerX > startHitEndX && pointerX < endHitStartX;
+    const overlappingHandlesInsideRange = startHitEndX >= endHitStartX && pointerInsideRange;
+
+    if (pointerInsideRangeDragGap || overlappingHandlesInsideRange) {
+      this._startRangeSelectionDrag(event, stack, selection);
+      return;
+    }
+
+    const part = pointerX >= startHitStartX && pointerX <= startHitEndX
+      ? "start"
+      : pointerX >= endHitStartX && pointerX <= endHitEndX
+        ? "end"
+        : Math.abs(pointerX - startX) <= Math.abs(pointerX - endX)
+          ? "start"
+          : "end";
+
+    this._startRangeThumbDrag(event, stack, part, pointerPercent);
   }
 
   private _resetViewRange(): void {
@@ -1771,7 +1862,10 @@ export class HaBetterHistory extends LitElement {
                     <span>${this._formatRangeDate(viewRange.start)}</span>
                     <span>${this._formatRangeDate(viewRange.end)}</span>
                   </div>
-                  <div class="range-slider-stack">
+                  <div
+                    class="range-slider-stack"
+                    @pointerdown=${(event: PointerEvent) => this._onRangeSliderStackPointerDown(event)}
+                  >
                     <div
                       class="range-selection"
                       style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
@@ -1779,7 +1873,6 @@ export class HaBetterHistory extends LitElement {
                     <div
                       class="range-selection-hit"
                       style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
-                      @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
                     ></div>
                     <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
                     <input class="range-slider" type="range" min="0" max="1000" .value=${String(endPercent)} @input=${(event: Event) => this._setViewRangePart("end", event)} />
