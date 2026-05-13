@@ -40,6 +40,7 @@ const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
 const MIN_VIEW_RANGE_GAP_PX = 24;
+const MIN_TOUCH_VIEW_RANGE_GAP_PX = 44;
 const MIN_VIEW_RANGE_FALLBACK_TRACK_PX = 720;
 const MIN_GRAPH_HEIGHT = 48;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
@@ -193,6 +194,8 @@ export class HaBetterHistory extends LitElement {
   private _syncingBrowserHistory = false;
   private _selectingEntityForAttributeMenu = false;
   private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
+  private _lastGraphVisible?: boolean;
+  private _pendingGraphVisible?: boolean;
   @state() private _importedDataActive = false;
 
   @state() private _containerWidth = 0;
@@ -711,6 +714,7 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_attributeMenuOpen") || changed.has("_entityPickerOpen") || changed.has("_datePickerOpen")) {
       this._emitPickerOverlayState();
     }
+    this._emitGraphVisibilityState();
     this._animateClipPaths();
     this._wasLoading = this._data.loading;
   }
@@ -1219,11 +1223,13 @@ export class HaBetterHistory extends LitElement {
 
   private _renderChartBody(): TemplateResult | typeof nothing {
     if (this._data.error) {
+      this._queueGraphVisible(false);
       const isTimeout = /timed?\s*out/i.test(this._data.error);
       return html`<div class="error">${localize(this.hass, isTimeout ? "error_timeout" : "error")}</div>`;
     }
 
     if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {
+      this._queueGraphVisible(false);
       return nothing;
     }
 
@@ -1233,6 +1239,7 @@ export class HaBetterHistory extends LitElement {
     const groups = this._graphGroups(chartData);
     const hasStructure = groups.length > 0;
     const showStructure = hasStructure && (hasData || this._data.loading);
+    this._queueGraphVisible(showStructure);
     this._suppressLineAnimation = this._wasLoading && !this._data.loading;
     const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
 
@@ -1345,10 +1352,17 @@ export class HaBetterHistory extends LitElement {
     return width > 0 ? width : undefined;
   }
 
+  private _minViewRangeGapPx(): number {
+    return window.matchMedia?.("(hover: none) and (pointer: coarse)").matches
+      ? MIN_TOUCH_VIEW_RANGE_GAP_PX
+      : MIN_VIEW_RANGE_GAP_PX;
+  }
+
   private _minViewSpanMs(trackWidthPx = this._rangeSliderTrackWidthPx()): number {
     const { span } = this._loadedRangeMs();
-    const readableTrackWidth = Math.max(trackWidthPx ?? MIN_VIEW_RANGE_FALLBACK_TRACK_PX, MIN_VIEW_RANGE_GAP_PX);
-    const sliderReadableSpan = Math.ceil((span * MIN_VIEW_RANGE_GAP_PX) / readableTrackWidth);
+    const minGapPx = this._minViewRangeGapPx();
+    const readableTrackWidth = Math.max(trackWidthPx ?? MIN_VIEW_RANGE_FALLBACK_TRACK_PX, minGapPx);
+    const sliderReadableSpan = Math.ceil((span * minGapPx) / readableTrackWidth);
     const timeReadableSpan = Math.min(60_000, Math.max(1, Math.floor(span / 1000)));
 
     return Math.min(span, Math.max(1, sliderReadableSpan, timeReadableSpan));
@@ -1657,7 +1671,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _renderToolsPanel(): TemplateResult | typeof nothing {
-    if (!this.toolsOpen || !this._resolved) return nothing;
+    if (!this.toolsOpen || !this._resolved || this._lastGraphVisible === false) return nothing;
 
     const viewRange = this._effectiveViewRange();
     const startPercent = this._rangePercent(viewRange.start, this._resolved.startDate);
@@ -1688,6 +1702,7 @@ export class HaBetterHistory extends LitElement {
                     ></div>
                     <div
                       class="range-selection-hit"
+                      style="left:${startPercent / 10}%;right:${100 - endPercent / 10}%;"
                       @pointerdown=${(event: PointerEvent) => this._onRangeSelectionPointerDown(event)}
                     ></div>
                     <input class="range-slider" type="range" min="0" max="1000" .value=${String(startPercent)} @input=${(event: Event) => this._setViewRangePart("start", event)} />
@@ -1755,6 +1770,25 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
+  private _queueGraphVisible(visible: boolean): void {
+    this._pendingGraphVisible = visible;
+  }
+
+  private _emitGraphVisibilityState(): void {
+    const visible = this._pendingGraphVisible;
+    if (visible === undefined || this._lastGraphVisible === visible) return;
+
+    this._lastGraphVisible = visible;
+    this.dispatchEvent(
+      new CustomEvent("graph-visibility-changed", {
+        detail: { visible },
+        bubbles: true,
+        composed: true
+      })
+    );
+    this.requestUpdate();
+  }
+
   render(): TemplateResult {
     const width = this._resolved?.width ?? "100%";
     const backgroundColor = this._resolved?.backgroundColor ?? "transparent";
@@ -1764,11 +1798,13 @@ export class HaBetterHistory extends LitElement {
       this._resolved?.titleFontSize ? `font-size:${this._resolved.titleFontSize};` : "",
       this._resolved?.titleColor ? `color:${this._resolved.titleColor};` : ""
     ].join("");
+    const hasVisibleControls = this._hasVisibleControls();
+    const rootClass = hasVisibleControls || this.toolsOpen ? "root root--stacked-ui" : "root";
 
     return html`
-      <div class="root" style="width:${width};background:${backgroundColor};">
+      <div class=${rootClass} style="width:${width};background:${backgroundColor};">
         ${title ? html`<div class="graph-title" style=${titleStyle}>${title}</div>` : nothing}
-        ${this.showControls
+        ${hasVisibleControls
           ? html`<div class="controls-bar">
               ${this._renderDatePicker()}
               ${this._renderEntityPickerUI()}
@@ -1796,6 +1832,14 @@ export class HaBetterHistory extends LitElement {
         composed: true
       })
     );
+  }
+
+  private _hasVisibleControls(): boolean {
+    return this.showControls
+      && (
+        (this._resolved?.showDatePicker === true && this._datePickerReady)
+        || (this._resolved?.showEntityPicker === true && this._entityComponentsReady)
+      );
   }
 
   private _renderDatePicker(): TemplateResult | typeof nothing {

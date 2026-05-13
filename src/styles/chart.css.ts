@@ -309,6 +309,10 @@ export const chartStyles = css`
     box-sizing: border-box;
   }
 
+  .controls-bar:empty {
+    display: none;
+  }
+
   .tool-icon-button,
   .mode-button,
   .tool-action-button {
@@ -339,6 +343,9 @@ export const chartStyles = css`
     display: block;
     margin: 0 calc(40 / 720 * 100%) 8px;
     padding: 7px 8px;
+    position: sticky;
+    top: 0;
+    z-index: 4;
     border: 1px solid var(--better-history-border-color, var(--divider-color, #444));
     border-radius: var(--better-history-radius, 8px);
     background: color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 96%, var(--primary-text-color, #fff) 4%);
@@ -607,6 +614,17 @@ export const chartStyles = css`
   }
 
   @container (max-width: 560px) {
+    .root--stacked-ui .chart-surface {
+      justify-content: flex-start;
+      padding-top: 8px;
+    }
+
+    .tools-panel {
+      position: static;
+      top: auto;
+      z-index: auto;
+    }
+
     .date-picker-wrapper,
     .entity-picker {
       flex-basis: 100%;
@@ -619,6 +637,29 @@ export const chartStyles = css`
     }
   }
 
+  @media (max-width: 700px) {
+    .root--stacked-ui .chart-surface {
+      justify-content: flex-start;
+      padding-top: 8px;
+    }
+
+    .controls-bar,
+    .tools-panel {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    .controls-bar {
+      margin-bottom: 4px;
+    }
+
+    .tools-panel {
+      position: static;
+      top: auto;
+      z-index: auto;
+    }
+  }
+
   @media (hover: none) and (pointer: coarse) {
     .controls-bar {
       flex-direction: column;
@@ -628,6 +669,9 @@ export const chartStyles = css`
     .tools-panel {
       grid-template-columns: 1fr;
       padding: 8px;
+      position: static;
+      top: auto;
+      z-index: auto;
     }
 
     .tool-actions {
@@ -645,7 +689,7 @@ export const chartStyles = css`
     }
 
     .range-selection-hit {
-      min-width: 24px;
+      min-width: 44px;
     }
 
     .range-slider::-webkit-slider-thumb {
@@ -690,6 +734,20 @@ export const chartStyles = css`
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  @container (max-width: 560px) {
+    .entity-picker {
+      flex: 0 1 auto;
+      width: 100%;
+    }
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .entity-picker {
+      flex: 0 1 auto;
+      width: 100%;
+    }
   }
 
   .entity-trigger {
