@@ -43,8 +43,11 @@ Package page: [@kipk/ha-better-history on npm](https://www.npmjs.com/package/@ki
 ```html
 <ha-better-history></ha-better-history>
 
-<script type="module" src="dist/define.js"></script>
-<script>
+<script type="module">
+  import { defineHaBetterHistory } from "@kipk/ha-better-history";
+
+  defineHaBetterHistory();
+
   const chart = document.querySelector("ha-better-history");
   chart.hass = hass;                         // required: HomeAssistant instance
   chart.entities = ["sensor.temperature", "sensor.humidity"];
@@ -393,19 +396,26 @@ Override these on the host element to customize appearance.
 
 ## Loading / setup
 
-**Bundled** (recommended for production):
+Register the history element explicitly before rendering it:
 
 ```js
-// Auto-registers <ha-better-history>
-import "ha-better-history/define";
+import { defineHaBetterHistory } from "@kipk/ha-better-history";
+
+defineHaBetterHistory();
 ```
 
-**Manual register** (no side-effect import):
+For bundled Lovelace cards, pass a private tag name so multiple cards can embed
+different local builds of the component without racing for the global
+`ha-better-history` tag:
 
 ```js
-import { HaBetterHistory } from "ha-better-history";
-customElements.define("ha-better-history", HaBetterHistory);
+import { defineHaBetterHistory } from "@kipk/ha-better-history";
+
+defineHaBetterHistory("my-card-better-history");
 ```
+
+`import "@kipk/ha-better-history"` no longer auto-registers
+`<ha-better-history>`. It still loads the shared `<abh-series-picker>` element.
 
 **Date picker / entity picker** load their required HA components lazily via `@kipk/load-ha-components`. If `show-date-picker` or `show-entity-picker` is set, the component calls `ensureDateRangePicker()` / `ensureHaComponents()` on `connectedCallback`. These must run inside a Home Assistant frontend context (where `partial-panel-resolver` is available). In a standalone dev page, loading will fail gracefully after a 10-second timeout.
 
