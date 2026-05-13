@@ -979,7 +979,7 @@ export const chartStyles = css`
   }
 
   .source-chip.entity-source-chip {
-    border-color: var(--ha-color-green-80, #81c784);
+    border-color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
   }
 
   .source-chip.attr-source-chip {
@@ -997,7 +997,7 @@ export const chartStyles = css`
   }
 
   .entity-source-chip .source-chip-icon {
-    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 20%, transparent);
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 20%, transparent);
   }
 
   .attr-source-chip .source-chip-icon {
@@ -1248,14 +1248,14 @@ export const chartStyles = css`
 
   .entity-browser-entity--present {
     cursor: default;
-    color: var(--ha-color-green-80, #81c784);
-    border-color: color-mix(in srgb, var(--ha-color-green-80, #81c784) 62%, var(--better-history-border-color, var(--divider-color, #444)));
-    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 14%, transparent);
-    box-shadow: inset 3px 0 0 var(--ha-color-green-80, #81c784);
+    color: var(--better-history-accent-color, var(--primary-color, #03a9f4));
+    border-color: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 62%, var(--better-history-border-color, var(--divider-color, #444)));
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 14%, transparent);
+    box-shadow: inset 3px 0 0 var(--better-history-accent-color, var(--primary-color, #03a9f4));
   }
 
   .entity-browser-entity--present:hover {
-    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 14%, transparent);
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 14%, transparent);
   }
 
   .entity-browser-entity--removable {
@@ -1263,7 +1263,7 @@ export const chartStyles = css`
   }
 
   .entity-browser-entity--removable:hover {
-    background: color-mix(in srgb, var(--ha-color-green-80, #81c784) 22%, transparent);
+    background: color-mix(in srgb, var(--better-history-accent-color, var(--primary-color, #03a9f4)) 22%, transparent);
   }
 
   .entity-browser-entity-id {
