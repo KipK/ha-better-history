@@ -5,6 +5,7 @@ export const chartStyles = css`
     display: flex;
     flex-direction: column;
     container-type: inline-size;
+    isolation: isolate;
     min-height: var(--better-history-min-height, 360px);
     font-family: var(--better-history-font-family, inherit);
     user-select: none;
@@ -39,7 +40,7 @@ export const chartStyles = css`
   .surface-header {
     grid-row: 1;
     grid-column: 1;
-    z-index: 5;
+    z-index: 3;
     align-self: start;
     pointer-events: none;
     min-width: 0;
@@ -97,7 +98,7 @@ export const chartStyles = css`
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: safe center;
     position: relative;
     overflow-y: var(--better-history-surface-overflow-y, auto);
     padding: 16px;

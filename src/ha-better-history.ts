@@ -350,6 +350,7 @@ export class HaBetterHistory extends LitElement {
     const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
     const minGap = 10;
 
+    const contentOverflows = contentHeight > surfaceHeight - CHART_SURFACE_SIZE_TOLERANCE;
     const emptySpaceAbove = Math.max(0, (surfaceHeight - contentHeight) / 2);
     const overlap = headerHeight + minGap - emptySpaceAbove;
     const currentOffset = surface.style.getPropertyValue("--better-history-surface-header-offset");
@@ -363,7 +364,7 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
-    const offsetPx = Math.ceil(2 * overlap);
+    const offsetPx = Math.ceil(contentOverflows ? headerHeight + minGap : 2 * overlap);
     if (currentOffset === `${offsetPx}px`) return;
 
     this._lastContentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
