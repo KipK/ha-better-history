@@ -521,10 +521,12 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _closeDatePickerOverlay(): void {
+    if (!this._datePickerOpen) return;
+
     this._datePickerOpen = false;
 
     const picker = this.renderRoot.querySelector("ha-date-range-picker") as HTMLElement | null;
-    picker?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+    picker?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     picker?.blur();
 
     const root = this.getRootNode();
