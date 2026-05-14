@@ -42,6 +42,10 @@ interface NumericLineRenderOptions {
   extendStairToEnd: boolean;
 }
 
+interface NumericColumnRenderOptions {
+  extendColumnToEnd: boolean;
+}
+
 export interface NumericColumnRenderData {
   id: string;
   x: number;
@@ -125,6 +129,14 @@ export function stateRanges(
   series: RenderableSeries,
   bounds: { start: number; end: number }
 ): Array<{ start: number; end: number; value: number | string | boolean }> {
+  return seriesStateRanges(series, bounds, true);
+}
+
+function seriesStateRanges(
+  series: RenderableSeries,
+  bounds: { start: number; end: number },
+  extendLastToEnd: boolean
+): Array<{ start: number; end: number; value: number | string | boolean }> {
   const now = Date.now();
   const sorted = [...series.points].sort((left, right) => left.time - right.time);
   const startIndex = sorted.findIndex((point) => point.time >= bounds.start);
@@ -135,7 +147,9 @@ export function stateRanges(
 
   return points.flatMap((point, i) => {
     const start = Math.max(point.time, bounds.start);
-    const end = Math.min(points[i + 1]?.time ?? bounds.end, bounds.end, now);
+    const nextTime = points[i + 1]?.time;
+    const fallbackEnd = extendLastToEnd ? bounds.end : point.time;
+    const end = Math.min(nextTime ?? fallbackEnd, bounds.end, now);
 
     return end > start ? [{ start, end, value: point.value }] : [];
   });
@@ -263,7 +277,8 @@ function columnBaseline(scale: NumericScale): number {
 function buildNumericColumns(
   visibleSeries: RenderableSeries[],
   scales: NumericScale[],
-  bounds: { start: number; end: number }
+  bounds: { start: number; end: number },
+  options: NumericColumnRenderOptions
 ): NumericColumnRenderData[] {
   return visibleSeries.flatMap((series) => {
     if ((series.valueType !== "number" && series.valueType !== "boolean") || series.lineMode !== "column") return [];
@@ -273,7 +288,7 @@ function buildNumericColumns(
     if (!scale) return [];
 
     const baselineY = yFor(columnBaseline(scale), scale);
-    const ranges = stateRanges(series, bounds);
+    const ranges = seriesStateRanges(series, bounds, options.extendColumnToEnd);
 
     return ranges.flatMap((range, index) => {
       const value = Number(range.value);
@@ -548,6 +563,7 @@ export function buildChartData(
   extendStairToEnd = true
 ): ChartRenderData {
   const lineRenderOptions = { extendStairToEnd };
+  const columnRenderOptions = { extendColumnToEnd: extendStairToEnd };
   const numericScales = numericScalesFor(seriesForVisibleScaleBounds(allSeries, visibleSeries, timeBounds));
   const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
   const plotBottom = plotBottomFor(numericGraphCount);
@@ -564,7 +580,7 @@ export function buildChartData(
     plotBottom,
     chartHeight: chartHeightFor(plotBottom, segmentCount),
     numericLines: buildNumericLines(visibleSeries, numericScales, timeBounds, lineRenderOptions),
-    numericColumns: buildNumericColumns(visibleSeries, numericScales, timeBounds),
+    numericColumns: buildNumericColumns(visibleSeries, numericScales, timeBounds, columnRenderOptions),
     segments: buildSegments(visibleSeries, plotBottom, timeBounds),
     heatingAreas: disableClimateOverlay ? [] : buildClimateHeatingAreas(visibleSeries, numericScales, timeBounds),
     yAxisLabels: buildYAxisLabels(numericScales),
@@ -605,7 +621,8 @@ function buildGroupNumericColumns(
   series: RenderableSeries[],
   scales: NumericScale[],
   bounds: { start: number; end: number },
-  graphHeight: number
+  graphHeight: number,
+  options: NumericColumnRenderOptions
 ): NumericColumnRenderData[] {
   return series
     .filter((s) => (s.valueType === "number" || s.valueType === "boolean") && s.lineMode === "column")
@@ -616,7 +633,7 @@ function buildGroupNumericColumns(
 
       const localScale: NumericScale = { ...scale, top: GRAPH_TOP, height: graphHeight };
       const baselineY = yFor(columnBaseline(localScale), localScale);
-      const ranges = stateRanges(s, bounds);
+      const ranges = seriesStateRanges(s, bounds, options.extendColumnToEnd);
 
       return ranges.flatMap((range, index) => {
         const value = Number(range.value);
@@ -803,7 +820,9 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       lines: buildGroupNumericLines(colored.visibleSeries, localScales, bounds, {
         extendStairToEnd: data.extendStairToEnd
       }, graphHeight),
-      columns: buildGroupNumericColumns(colored.visibleSeries, localScales, bounds, graphHeight),
+      columns: buildGroupNumericColumns(colored.visibleSeries, localScales, bounds, graphHeight, {
+        extendColumnToEnd: data.extendStairToEnd
+      }),
       segments: buildGroupSegments(segSeries, segmentStartY, bounds),
       yLabels,
       rightYLabels,
