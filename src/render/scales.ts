@@ -172,9 +172,27 @@ function logValue(value: number): number {
 function rangeDistance(a: SeriesRange, b: SeriesRange): number {
   const spanDistance = Math.abs(logValue(rangeSpan(a)) - logValue(rangeSpan(b)));
   const centerDistance = Math.abs(logValue(rangeCenter(a)) - logValue(rangeCenter(b)));
-  const unitPenalty = a.unit && b.unit && a.unit !== b.unit ? 0.4 : 0;
+  const unitPenalty = unitKey(a.unit) !== unitKey(b.unit) ? 2 : 0;
 
   return spanDistance + centerDistance * 0.6 + unitPenalty;
+}
+
+function unitKey(unit: string | undefined): string {
+  return unit && unit.trim() !== "" ? unit : "__unitless__";
+}
+
+function splitByUnit(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] | undefined {
+  if (series.length < 2) return undefined;
+
+  const firstUnit = unitKey(series[0].unit);
+  const hasUnitMismatch = series.some((item) => unitKey(item.unit) !== firstUnit);
+
+  if (!hasUnitMismatch) return undefined;
+
+  const left = series.filter((item) => unitKey(item.unit) === firstUnit);
+  const right = series.filter((item) => unitKey(item.unit) !== firstUnit);
+
+  return left.length > 0 && right.length > 0 ? [left, right] : undefined;
 }
 
 function shouldSplitGroup(series: SeriesRange[]): boolean {
@@ -215,6 +233,9 @@ function pickAxisAnchors(series: SeriesRange[]): [SeriesRange, SeriesRange] {
 }
 
 function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+  const unitSplit = splitByUnit(series);
+
+  if (unitSplit) return unitSplit;
   if (!shouldSplitGroup(series)) return [series, []];
 
   const [leftAnchor, rightAnchor] = pickAxisAnchors(series);
