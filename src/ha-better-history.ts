@@ -87,6 +87,15 @@ function isTemperatureUnit(unit: string): boolean {
   return TEMPERATURE_UNIT_RE.test(unit);
 }
 
+function scaleGroupIndex(scaleGroup: string | undefined): number | undefined {
+  const value = scaleGroup?.trim();
+  if (!value || !/^\d+$/.test(value)) return undefined;
+
+  const index = Number(value);
+
+  return Number.isSafeInteger(index) && index > 0 ? index : undefined;
+}
+
 interface ChartRenderCache {
   seriesRef: HistorySeries[];
   sourceKey: string;
@@ -919,7 +928,20 @@ export class HaBetterHistory extends LitElement {
 
   private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
-    if (source.scaleGroup) return `group:${source.scaleGroup}`;
+    if (source.scaleGroup) {
+      const graphIndex = scaleGroupIndex(source.scaleGroup);
+
+      if (graphIndex !== undefined) {
+        const graphKeys = [...new Set(existing
+          .filter((s) => s.valueType === "number" || s.valueType === "boolean")
+          .map((s) => s.valueType === "boolean" ? "group:boolean" : s.scaleGroupKey))];
+        const graphKey = graphKeys[graphIndex - 1];
+
+        if (graphKey) return graphKey;
+      }
+
+      return `group:${source.scaleGroup}`;
+    }
 
     const climateTemperatureAttribute = source.entityId.startsWith("climate.")
       && source.path?.length === 1
