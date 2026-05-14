@@ -377,7 +377,7 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private _openSourceSettings(source: HistorySource): void {
-    if (source.kind !== "entity_attribute") return;
+    if (source.kind !== "entity_attribute" && source.kind !== "entity_state") return;
     this._sourceSettingsSourceId = source.id;
   }
 

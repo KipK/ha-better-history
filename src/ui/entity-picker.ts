@@ -383,7 +383,7 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
   const entity = opts.hass?.states[source.entityId];
   const chipClass = isEntity ? "entity-source-chip" : "attr-source-chip";
   const isDragging = opts.draggingSourceId === source.id;
-  const canEditSettings = source.kind === "entity_attribute" && isSelected && !isFixed;
+  const canEditSettings = (source.kind === "entity_attribute" || source.kind === "entity_state") && isSelected && !isFixed;
   let longPressTimer: ReturnType<typeof setTimeout> | undefined;
   let longPressStart: { x: number; y: number } | undefined;
   const cancelLongPress = (): void => {
