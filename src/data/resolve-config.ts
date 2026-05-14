@@ -206,6 +206,7 @@ function expandClimateSeries(
   if (!hass?.states[s.entity]) return [s];
 
   const tempUnit = climateTemperatureUnit(s.entity, hass);
+  const inheritedScaleGroup = s.scaleGroupKey.startsWith("group:") ? s.scaleGroupKey.slice("group:".length) : undefined;
 
   const attributeSeries = CLIMATE_LINE_ATTRIBUTES.map((attrName): ResolvedSeries => {
     const attribute = [attrName];
@@ -213,7 +214,7 @@ function expandClimateSeries(
     const vt = resolveValueType(hass, s.entity, attribute);
     const color = CLIMATE_ATTR_COLORS[attrName] ?? paletteColor(nextColor());
     const attrUnit = (attrName === "current_temperature" || attrName === "temperature") ? tempUnit : undefined;
-    const scaleGroup = attrName === "hvac_action" ? undefined : "temperature";
+    const scaleGroup = attrName === "hvac_action" ? undefined : inheritedScaleGroup ?? "temperature";
 
     return {
       id,

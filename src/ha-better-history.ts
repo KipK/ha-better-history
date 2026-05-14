@@ -926,15 +926,13 @@ export class HaBetterHistory extends LitElement {
     this._closeBrowserHistoryLayer("date-picker", () => this._closeDatePickerOverlay());
   }
 
-  private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
+  private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[], aliasGraphKeys?: string[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
     if (source.scaleGroup) {
       const graphIndex = scaleGroupIndex(source.scaleGroup);
 
       if (graphIndex !== undefined) {
-        const graphKeys = [...new Set(existing
-          .filter((s) => s.valueType === "number" || s.valueType === "boolean")
-          .map((s) => s.valueType === "boolean" ? "group:boolean" : s.scaleGroupKey))];
+        const graphKeys = aliasGraphKeys ?? this._scaleGraphKeys(existing);
         const graphKey = graphKeys[graphIndex - 1];
 
         if (graphKey) return graphKey;
@@ -974,6 +972,38 @@ export class HaBetterHistory extends LitElement {
     }
 
     return source.unit ? `unit:${source.unit}` : `series:${source.id}`;
+  }
+
+  private _scaleGraphKeys(series: RenderableSeries[]): string[] {
+    return [...new Set(series
+      .filter((s) => s.valueType === "number" || s.valueType === "boolean")
+      .map((s) => s.valueType === "boolean" ? "group:boolean" : s.scaleGroupKey))];
+  }
+
+  private _usesScaleGraphAlias(source: HistorySource): boolean {
+    return source.valueType === "number" && scaleGroupIndex(source.scaleGroup) !== undefined;
+  }
+
+  private _renderSeriesFromSource(
+    source: HistorySource,
+    fetched: HistorySeries | undefined,
+    scaleGroupKey: string,
+    colorIndex: number
+  ): RenderableSeries {
+    const climateAttr = source.entityId.startsWith("climate.") && source.path?.length === 1 ? source.path[0] : undefined;
+
+    return {
+      id: source.id,
+      label: source.label,
+      color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
+      unit: source.unit,
+      scaleGroupKey,
+      scaleMode: "auto",
+      lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
+      lineWidth: this._defaultLineWidth(),
+      valueType: source.valueType,
+      points: fetched?.points ?? []
+    };
   }
 
   private _defaultLineMode(): BetterHistoryLineMode {
@@ -1055,30 +1085,40 @@ export class HaBetterHistory extends LitElement {
       ];
     });
 
+    const pendingSources: Array<{ source: HistorySource; fetched: HistorySeries }> = [];
+    const pendingIds = new Set(result.map((s) => s.id));
+
     for (const selectedSource of this._selectedSources) {
       for (const source of this._expandedSelectedSources(selectedSource)) {
-        if (result.some((s) => s.id === source.id)) continue;
+        if (pendingIds.has(source.id)) continue;
 
         const fetched = this._data.series.find((s) => s.source.id === source.id);
         if (!fetched) continue;
 
-        const colorIndex = result.length;
-        const scaleGroupKey = this._pickScaleGroup(source, result);
-        const climateAttr = source.entityId.startsWith("climate.") && source.path?.length === 1 ? source.path[0] : undefined;
-
-        result.push({
-          id: source.id,
-          label: source.label,
-          color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
-          unit: source.unit,
-          scaleGroupKey,
-          scaleMode: "auto",
-          lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
-          lineWidth: this._defaultLineWidth(),
-          valueType: source.valueType,
-          points: fetched?.points ?? []
-        });
+        pendingIds.add(source.id);
+        pendingSources.push({ source, fetched });
       }
+    }
+
+    const aliasSeed = [...result];
+
+    for (const { source, fetched } of pendingSources) {
+      if (this._usesScaleGraphAlias(source)) continue;
+
+      aliasSeed.push(this._renderSeriesFromSource(
+        source,
+        fetched,
+        this._pickScaleGroup(source, aliasSeed),
+        aliasSeed.length
+      ));
+    }
+
+    const aliasGraphKeys = this._scaleGraphKeys(aliasSeed);
+
+    for (const { source, fetched } of pendingSources) {
+      const scaleGroupKey = this._pickScaleGroup(source, result, aliasGraphKeys);
+
+      result.push(this._renderSeriesFromSource(source, fetched, scaleGroupKey, result.length));
     }
 
     return result;
@@ -2404,9 +2444,11 @@ export class HaBetterHistory extends LitElement {
       };
       const sourceForAttribute = attrSource ?? fallbackSource;
       if (CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) && tempUnit) {
-        return { ...sourceForAttribute, unit: tempUnit };
+        return { ...sourceForAttribute, unit: tempUnit, scaleGroup: source.scaleGroup };
       }
-      return sourceForAttribute;
+      return CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute)
+        ? { ...sourceForAttribute, scaleGroup: source.scaleGroup }
+        : sourceForAttribute;
     });
 
     return [this._sourceWithAttributeUnit(source), ...attributeSources.map((item) => this._sourceWithAttributeUnit(item))];

@@ -195,6 +195,10 @@ A numeric attribute with a temperature unit (`°C`, `°F`, `K`) is automatically
 
 2. **Explicit `scaleGroup`**: series sharing a `scaleGroup` value share the same graph and Y axis regardless of unit. Un-grouped series continue to use rule 1 among themselves.
 
+   - Purely numeric values (`"1"`, `"2"`, etc.) are graph-order aliases. `"1"` attaches the series to the first existing numeric graph, `"2"` to the second, and so on. This is useful from the picker when you want an added entity/attribute to join an existing graph without giving every series a shared manual name.
+   - Mixed values such as `"groupe1"` or `"temperature"` are literal group names. Series join only other series with the exact same `scaleGroup`.
+   - If the joined series has no unit or a different unit, it stays in the same graph but uses a separate Y axis when needed, so the existing unit scale is not expanded by incompatible values.
+
 3. **`scaleMode: "manual"`**: locks the Y axis to `[scaleMin, scaleMax]`. If the series is in a shared scale group, the manual range takes priority: the axis is extended (never contracted) to accommodate the manual range.
 
 ## Colors

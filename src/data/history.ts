@@ -238,7 +238,8 @@ export function entityStateSource(entity: HassEntity): HistorySource | undefined
 
 export function attributeSource(entity: HassEntity, path: string[], label?: string): HistorySource | undefined {
   const value = readPath(entity.attributes, path);
-  const type = valueType(value);
+  const numericStringValue = typeof value === "string" && Number.isFinite(Number(value)) ? Number(value) : value;
+  const type = valueType(numericStringValue);
 
   if (!type) {
     return undefined;
