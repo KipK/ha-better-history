@@ -217,11 +217,11 @@ interface EntityPickerRenderOpts {
   onSourceDrop(sourceId: string | undefined, event: DragEvent): void;
   sourceSettingsSourceId?: string;
   sourceSettingsUnit?: string;
-  sourceSettingsScaleGroup?: string;
+  sourceSettingsGroup?: string;
   onSourceSettingsOpen(source: HistorySource, event: Event): void;
   onSourceSettingsClose(): void;
   onSourceSettingsUnitChanged(value: string): void;
-  onSourceSettingsScaleGroupChanged(value: string): void;
+  onSourceSettingsGroupChanged(value: string): void;
   onBreadcrumbClick(path: string[]): void;
   onCloseMenu(): void;
   hideEmptyPickerState?: boolean;
@@ -472,12 +472,12 @@ function renderSourceSettingsPopup(opts: EntityPickerRenderOpts): TemplateResult
         />
       </label>
       <label class="source-settings-field">
-        <span>${localize(opts.hass, "scale_group")}</span>
+        <span>${localize(opts.hass, "group")}</span>
         <input
           class="source-settings-input"
-          .value=${opts.sourceSettingsScaleGroup ?? ""}
-          placeholder=${localize(opts.hass, "scale_group_placeholder")}
-          @input=${(event: InputEvent) => opts.onSourceSettingsScaleGroupChanged((event.target as HTMLInputElement).value)}
+          .value=${opts.sourceSettingsGroup ?? ""}
+          placeholder=${localize(opts.hass, "group_placeholder")}
+          @input=${(event: InputEvent) => opts.onSourceSettingsGroupChanged((event.target as HTMLInputElement).value)}
         />
       </label>
       <button class="source-settings-close" @click=${opts.onSourceSettingsClose}>

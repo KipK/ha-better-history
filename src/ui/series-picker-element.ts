@@ -14,6 +14,10 @@ const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
 
 type BrowserHistoryLayer = "entity-picker" | "attribute-picker";
 
+function sourceGroup(source: HistorySource | undefined): string | undefined {
+  return source?.group ?? source?.scaleGroup;
+}
+
 interface BrowserHistoryEntry {
   instanceId: string;
   layer: BrowserHistoryLayer;
@@ -381,7 +385,7 @@ export class SeriesPickerElement extends LitElement {
     this._sourceSettingsSourceId = source.id;
   }
 
-  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "scaleGroup">): void {
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup">): void {
     const sourceId = this._sourceSettingsSourceId;
     if (!sourceId) return;
 
@@ -450,16 +454,16 @@ export class SeriesPickerElement extends LitElement {
         onSourceDrop: () => {},
         sourceSettingsSourceId: this._sourceSettingsSourceId,
         sourceSettingsUnit: this._sourceSettingsSource()?.unit,
-        sourceSettingsScaleGroup: this._sourceSettingsSource()?.scaleGroup,
+        sourceSettingsGroup: sourceGroup(this._sourceSettingsSource()),
         onSourceSettingsOpen: (source) => this._openSourceSettings(source),
         onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
         onSourceSettingsUnitChanged: (value) => {
           const unit = value.trim();
           this._updateSourceSettings({ unit: unit || undefined });
         },
-        onSourceSettingsScaleGroupChanged: (value) => {
-          const scaleGroup = value.trim();
-          this._updateSourceSettings({ scaleGroup: scaleGroup || undefined });
+        onSourceSettingsGroupChanged: (value) => {
+          const group = value.trim();
+          this._updateSourceSettings({ group: group || undefined, scaleGroup: undefined });
         },
         onBreadcrumbClick: (path) => {
           this._path = path;

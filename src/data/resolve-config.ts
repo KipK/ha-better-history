@@ -121,6 +121,7 @@ function seriesFromConfig(
   const id = seriesId(cfg.entity, attribute);
   const vt = resolveValueType(hass, cfg.entity, attribute);
   const unit = resolveUnit(hass, cfg.entity, attribute, cfg.unit, attributeUnits);
+  const group = cfg.group ?? cfg.scaleGroup;
 
   return {
     id,
@@ -130,7 +131,7 @@ function seriesFromConfig(
     label: resolveLabel(hass, cfg.entity, attribute, cfg.label),
     color: cfg.color ?? paletteColor(index),
     unit,
-    scaleGroupKey: scaleGroupKey(id, unit, cfg.scaleGroup, vt),
+    scaleGroupKey: scaleGroupKey(id, unit, group, vt),
     scaleMode: cfg.scaleMode ?? "auto",
     scaleMin: cfg.scaleMin,
     scaleMax: cfg.scaleMax,

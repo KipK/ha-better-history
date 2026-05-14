@@ -10,6 +10,8 @@ export interface SeriesConfig {
   label?: string;
   color?: string;
   unit?: string;
+  group?: string;
+  /** @deprecated Use `group` instead. */
   scaleGroup?: string;
   scaleMode?: "auto" | "manual";
   scaleMin?: number;

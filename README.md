@@ -18,7 +18,7 @@ If this component helps you, you can support development on
 - **Use only the chart or the full explorer** — render a minimal graph, enable just the date picker, or expose the complete viewer with tools, zoom, export, entity picker, and attribute picker.
 - **No-refetch view tools** — zoom and pan inside the already loaded range without asking Home Assistant for the same history again.
 - **Flexible rendering modes** — numeric series can be displayed as stair steps, straight lines, or columns, globally or per series.
-- **Smarter multi-series layout** — automatic graph grouping by unit or explicit `scaleGroup`, optional manual Y ranges, dual-axis handling, and stable colors for readable comparison.
+- **Smarter multi-series layout** — automatic graph grouping by unit or explicit `group`, optional manual Y ranges, dual-axis handling, and stable colors for readable comparison.
 - **Climate-aware overlays** — when climate temperature and `hvac_action` are present, heating periods can be rendered as a contextual area overlay.
 - **Runtime series editing** — users can add, remove, reorder, and hide non-default series from the UI without rebuilding the host card.
 - **Portable export format** — visible data can be exported as compact `ha-better-history-series-v1` JSON for debugging, sharing, future analysis tools, or re-importing into the component.
@@ -156,7 +156,8 @@ interface SeriesConfig {
   color?: string;                    // CSS color; default = automatic palette
   unit?: string;                     // Override unit (for axis grouping and label)
 
-  scaleGroup?: string;               // Series with same scaleGroup share a Y axis
+  group?: string;                    // Series with same group share a graph
+  scaleGroup?: string;               // Deprecated alias for group
   scaleMode?: "auto" | "manual";     // default: "auto"
   scaleMin?: number;                 // only when scaleMode = "manual"
   scaleMax?: number;                 // only when scaleMode = "manual"
@@ -187,19 +188,19 @@ Unit resolution priority for a series:
 4. `unit_of_measurement` for entity-state series
 5. No unit
 
-A numeric attribute with a temperature unit (`°C`, `°F`, `K`) is automatically placed in the same graph as other temperature series when a `group:temperature` group already exists. Likewise, attributes added via the entity picker receive their unit from the map before scale grouping is applied.
+A numeric attribute with a temperature unit (`°C`, `°F`, `K`) is automatically placed in the same graph as other temperature series when a `group:temperature` group already exists. Likewise, attributes added via the entity picker receive their unit from the map before grouping is applied.
 
-## Scale grouping rules
+## Grouping rules
 
 1. **Automatic (default)**: numeric series with the **same unit** share a graph and Y axis. Series with different units (or no unit) each get their own stacked graph. Non-numeric series (string/boolean) render as **colored segment ribbons** below the numeric graphs.
 
-2. **Explicit `scaleGroup`**: series sharing a `scaleGroup` value share the same graph and Y axis regardless of unit. Un-grouped series continue to use rule 1 among themselves.
+2. **Explicit `group`**: series sharing a `group` value share the same graph regardless of unit. Un-grouped series continue to use rule 1 among themselves. `scaleGroup` is still accepted as a deprecated alias.
 
    - Purely numeric values (`"1"`, `"2"`, etc.) are graph-order aliases. `"1"` attaches the series to the first existing numeric graph, `"2"` to the second, and so on. This is useful from the picker when you want an added entity/attribute to join an existing graph without giving every series a shared manual name.
-   - Mixed values such as `"groupe1"` or `"temperature"` are literal group names. Series join only other series with the exact same `scaleGroup`.
+   - Mixed values such as `"groupe1"` or `"temperature"` are literal group names. Series join only other series with the exact same `group`.
    - If the joined series has no unit or a different unit, it stays in the same graph but uses a separate Y axis when needed, so the existing unit scale is not expanded by incompatible values.
 
-3. **`scaleMode: "manual"`**: locks the Y axis to `[scaleMin, scaleMax]`. If the series is in a shared scale group, the manual range takes priority: the axis is extended (never contracted) to accommodate the manual range.
+3. **`scaleMode: "manual"`**: locks the Y axis to `[scaleMin, scaleMax]`. If the series is in a shared group, the manual range takes priority: the axis is extended (never contracted) to accommodate the manual range.
 
 ## Colors
 
@@ -240,16 +241,16 @@ chart.config = {
 
 All events bubble and are composed.
 
-| Event                    | Detail                                             | When                                                          |
-| ------------------------ | -------------------------------------------------- | ------------------------------------------------------------- |
-| `range-changed`          | `{ startDate: Date, endDate: Date }`               | Date picker changes                                           |
-| `view-range-changed`     | `{ start: Date, end: Date }`                       | Tools range zoom changes without refetching history           |
-| `series-toggled`         | `{ id: string, hidden: boolean }`                  | Legend item clicked                                           |
-| `series-added`           | `{ source: HistorySource }`                        | User adds a series via entity picker                          |
-| `series-removed`         | `{ sourceId: string }`                             | User removes a non-default series                             |
-| `series-reordered`       | `{ sourceIds: string[] }`                          | User drags selected source chips into a new order             |
-| `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported         |
-| `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts) |
+| Event                    | Detail                                             | When                                                                  |
+| ------------------------ | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `range-changed`          | `{ startDate: Date, endDate: Date }`               | Date picker changes                                                   |
+| `view-range-changed`     | `{ start: Date, end: Date }`                       | Tools range zoom changes without refetching history                   |
+| `series-toggled`         | `{ id: string, hidden: boolean }`                  | Legend item clicked                                                   |
+| `series-added`           | `{ source: HistorySource }`                        | User adds a series via entity picker                                  |
+| `series-removed`         | `{ sourceId: string }`                             | User removes a non-default series                                     |
+| `series-reordered`       | `{ sourceIds: string[] }`                          | User drags selected source chips into a new order                     |
+| `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported                 |
+| `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts)         |
 | `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, entity picker, or attribute browser overlay opens/closes |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
@@ -276,8 +277,8 @@ When `entities` is a non-empty array:
 ```js
 chart.config = {
   series: [
-    { entity: "climate.living", attribute: "current_temperature", label: "Indoor",  scaleGroup: "temp" },
-    { entity: "sensor.outdoor_temp",                              label: "Outdoor", scaleGroup: "temp" },
+    { entity: "climate.living", attribute: "current_temperature", label: "Indoor",  group: "temp" },
+    { entity: "sensor.outdoor_temp",                              label: "Outdoor", group: "temp" },
   ]
 };
 ```

@@ -30,8 +30,8 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     search_attributes: "Search attributes",
     attribute_unit: "Unit",
     attribute_unit_placeholder: "Auto",
-    scale_group: "Scale group",
-    scale_group_placeholder: "Default",
+    group: "Group",
+    group_placeholder: "Default",
     no_matching_attributes: "No matching attributes",
     attribute_results_limited: "Showing first 50 matches"
   },
@@ -54,8 +54,8 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     search_attributes: "Rechercher des attributs",
     attribute_unit: "Unité",
     attribute_unit_placeholder: "Auto",
-    scale_group: "Groupe d'échelle",
-    scale_group_placeholder: "Défaut",
+    group: "Groupe",
+    group_placeholder: "Défaut",
     no_matching_attributes: "Aucun attribut correspondant",
     attribute_results_limited: "50 premiers résultats affichés"
   },

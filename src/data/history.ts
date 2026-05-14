@@ -14,6 +14,8 @@ export interface HistorySource {
   path?: string[];
   valueType: HistoryValueType;
   unit?: string;
+  group?: string;
+  /** @deprecated Use `group` instead. */
   scaleGroup?: string;
 }
 

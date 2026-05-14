@@ -96,6 +96,10 @@ function scaleGroupIndex(scaleGroup: string | undefined): number | undefined {
   return Number.isSafeInteger(index) && index > 0 ? index : undefined;
 }
 
+function sourceGroup(source: HistorySource): string | undefined {
+  return source.group ?? source.scaleGroup;
+}
+
 interface ChartRenderCache {
   seriesRef: HistorySeries[];
   sourceKey: string;
@@ -928,8 +932,9 @@ export class HaBetterHistory extends LitElement {
 
   private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[], aliasGraphKeys?: string[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
-    if (source.scaleGroup) {
-      const graphIndex = scaleGroupIndex(source.scaleGroup);
+    const group = sourceGroup(source);
+    if (group) {
+      const graphIndex = scaleGroupIndex(group);
 
       if (graphIndex !== undefined) {
         const graphKeys = aliasGraphKeys ?? this._scaleGraphKeys(existing);
@@ -938,7 +943,7 @@ export class HaBetterHistory extends LitElement {
         if (graphKey) return graphKey;
       }
 
-      return `group:${source.scaleGroup}`;
+      return `group:${group}`;
     }
 
     const climateTemperatureAttribute = source.entityId.startsWith("climate.")
@@ -981,7 +986,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _usesScaleGraphAlias(source: HistorySource): boolean {
-    return source.valueType === "number" && scaleGroupIndex(source.scaleGroup) !== undefined;
+    return source.valueType === "number" && scaleGroupIndex(sourceGroup(source)) !== undefined;
   }
 
   private _renderSeriesFromSource(
@@ -1145,7 +1150,7 @@ export class HaBetterHistory extends LitElement {
           effectiveSource.label,
           effectiveSource.kind,
           effectiveSource.unit ?? "",
-          effectiveSource.scaleGroup ?? "",
+          sourceGroup(effectiveSource) ?? "",
           effectiveSource.valueType,
           this._defaultLineMode(),
           this._defaultLineWidth()
@@ -1571,16 +1576,16 @@ export class HaBetterHistory extends LitElement {
       onSourceDrop: (sourceId, event) => this._onSourceDrop(sourceId, event),
       sourceSettingsSourceId: this._sourceSettingsSourceId,
       sourceSettingsUnit: this._sourceSettingsSource()?.unit,
-      sourceSettingsScaleGroup: this._sourceSettingsSource()?.scaleGroup,
+      sourceSettingsGroup: this._sourceSettingsSource() ? sourceGroup(this._sourceSettingsSource()!) : undefined,
       onSourceSettingsOpen: (source) => this._openSourceSettings(source),
       onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
       onSourceSettingsUnitChanged: (value) => {
         const unit = value.trim();
         this._updateSourceSettings({ unit: unit || undefined });
       },
-      onSourceSettingsScaleGroupChanged: (value) => {
-        const scaleGroup = value.trim();
-        this._updateSourceSettings({ scaleGroup: scaleGroup || undefined });
+      onSourceSettingsGroupChanged: (value) => {
+        const group = value.trim();
+        this._updateSourceSettings({ group: group || undefined, scaleGroup: undefined });
       },
       onBreadcrumbClick: (path) => { this._path = path; },
       onCloseMenu: () => this._closeAttributeMenu(),
@@ -2443,11 +2448,12 @@ export class HaBetterHistory extends LitElement {
         unit: CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) ? tempUnit : undefined
       };
       const sourceForAttribute = attrSource ?? fallbackSource;
+      const group = sourceGroup(source);
       if (CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) && tempUnit) {
-        return { ...sourceForAttribute, unit: tempUnit, scaleGroup: source.scaleGroup };
+        return { ...sourceForAttribute, unit: tempUnit, group };
       }
       return CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute)
-        ? { ...sourceForAttribute, scaleGroup: source.scaleGroup }
+        ? { ...sourceForAttribute, group }
         : sourceForAttribute;
     });
 
@@ -2557,7 +2563,7 @@ export class HaBetterHistory extends LitElement {
     this._sourceSettingsSourceId = source.id;
   }
 
-  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "scaleGroup">): void {
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup">): void {
     const sourceId = this._sourceSettingsSourceId;
     if (!sourceId) return;
 
