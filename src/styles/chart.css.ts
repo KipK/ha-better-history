@@ -776,10 +776,7 @@ export const chartStyles = css`
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    display: block;
   }
 
   @container (max-width: 560px) {
@@ -796,9 +793,18 @@ export const chartStyles = css`
     }
   }
 
-  .entity-trigger {
+  .entity-picker-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
     max-width: 100%;
-    width: 100%;
+  }
+
+  .entity-trigger {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: fit-content;
   }
 
   .entity-add-trigger {
@@ -844,14 +850,6 @@ export const chartStyles = css`
     to {
       transform: rotate(360deg);
     }
-  }
-
-  .entity-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    width: 100%;
   }
 
   .entity-menu,

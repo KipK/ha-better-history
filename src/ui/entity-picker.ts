@@ -254,22 +254,15 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         </div>
         ${renderBrowser(opts)}
       </div>
-      ${opts.hideEmptyPickerState ? renderEmptyStateEntityPicker(opts) : html`
-        <ha-generic-picker
-          class="entity-trigger"
-          .hass=${opts.hass}
-          .addButtonLabel=${localize(opts.hass, "add_target")}
-          .value=${""}
-          .getItems=${opts.getItems}
-          .emptyLabel=${""}
-          .searchLabel=${localize(opts.hass, "search_entity")}
-          .searchKeys=${ENTITY_PICKER_SEARCH_KEYS}
-          @value-changed=${(e: CustomEvent) => {
-            const entityId = (e.detail as { value: string }).value;
-            if (entityId) opts.onEntitySelected(entityId);
-          }}
-        ></ha-generic-picker>
-      `}
+      <div
+        class="entity-picker-row"
+        @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
+        @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
+      >
+        ${opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
+        ${rowSources.map((source) => renderChip(source, opts))}
+      </div>
+      ${opts.hideEmptyPickerState ? renderEmptyStateEntityMenu(opts) : nothing}
       ${opts.loading
         ? html`
             <div class="history-loading-indicator" role="status" aria-label=${localize(opts.hass, "loading")}>
@@ -278,27 +271,32 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
             </div>
           `
         : nothing}
-      ${rowSources.length > 0 ? html`
-        <div
-          class="entity-row"
-          @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
-          @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
-        >
-          ${rowSources.map((source) => renderChip(source, opts))}
-        </div>
-      ` : nothing}
       ${renderSourceSettingsPopup(opts)}
     </div>
   `;
 }
 
-function renderEmptyStateEntityPicker(opts: EntityPickerRenderOpts): TemplateResult {
+function renderGenericEntityTrigger(opts: EntityPickerRenderOpts): TemplateResult {
+  return html`
+    <ha-generic-picker
+      class="entity-trigger"
+      .hass=${opts.hass}
+      .addButtonLabel=${localize(opts.hass, "add_target")}
+      .value=${""}
+      .getItems=${opts.getItems}
+      .emptyLabel=${""}
+      .searchLabel=${localize(opts.hass, "search_entity")}
+      .searchKeys=${ENTITY_PICKER_SEARCH_KEYS}
+      @value-changed=${(e: CustomEvent) => {
+        const entityId = (e.detail as { value: string }).value;
+        if (entityId) opts.onEntitySelected(entityId);
+      }}
+    ></ha-generic-picker>
+  `;
+}
+
+function renderEmptyStateEntityTrigger(opts: EntityPickerRenderOpts): TemplateResult {
   const label = localize(opts.hass, "add_target");
-  const searchLabel = localize(opts.hass, "search_entity");
-  const search = opts.entitySearch ?? "";
-  const items = search.trim()
-    ? opts.getAdditionalItems(search).filter(isPickerItem)
-    : [];
 
   return html`
     <ha-button
@@ -310,6 +308,17 @@ function renderEmptyStateEntityPicker(opts: EntityPickerRenderOpts): TemplateRes
       <ha-icon icon="mdi:playlist-plus" slot="start"></ha-icon>
       ${label}
     </ha-button>
+  `;
+}
+
+function renderEmptyStateEntityMenu(opts: EntityPickerRenderOpts): TemplateResult {
+  const searchLabel = localize(opts.hass, "search_entity");
+  const search = opts.entitySearch ?? "";
+  const items = search.trim()
+    ? opts.getAdditionalItems(search).filter(isPickerItem)
+    : [];
+
+  return html`
     <div class="entity-select-menu" ?open=${opts.entityPickerOpen} @click=${(event: Event) => event.stopPropagation()}>
       <input
         class="entity-browser-search-input"
