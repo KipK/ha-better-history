@@ -42,6 +42,7 @@ export class SeriesPickerElement extends LitElement {
   @state() private _attributeSearch = "";
   @state() private _componentsReady = false;
   @state() private _customEntityIds: string[] = [];
+  @state() private _sourceSettingsSourceId?: string;
 
   private readonly _browserHistoryInstanceId = `abh-picker-${Math.random().toString(36).slice(2)}`;
   private _lastPointerDownInside = false;
@@ -50,14 +51,14 @@ export class SeriesPickerElement extends LitElement {
 
   private readonly _handleDocumentPointerDown = (event: Event): void => {
     this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
-    if (!this._attributeMenuOpen) return;
+    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId) return;
     if (this._lastPointerDownInside) return;
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
 
   private readonly _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen && !this._entityPickerOpen) {
+    if (!this._attributeMenuOpen && !this._entityPickerOpen && !this._sourceSettingsSourceId) {
       this._lastPointerDownInside = false;
       return;
     }
@@ -65,6 +66,13 @@ export class SeriesPickerElement extends LitElement {
     this._lastPointerDownInside = false;
     if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
+    if (this._sourceSettingsSourceId) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this._sourceSettingsSourceId = undefined;
+      return;
+    }
     if (this._entityPickerOpen && !this._attributeMenuOpen) {
       this._closeBrowserHistoryLayer("entity-picker", () => {
         this._entityPickerOpen = false;
@@ -105,6 +113,9 @@ export class SeriesPickerElement extends LitElement {
     ) {
       void this.updateComplete.then(() => this._positionEntityMenu());
     }
+    if (changed.has("_sourceSettingsSourceId") && this._sourceSettingsSourceId) {
+      void this.updateComplete.then(() => this._positionSourceSettingsPopover());
+    }
   }
 
   private _isEventInsideAttributeOverlay(event: Event): boolean {
@@ -115,6 +126,9 @@ export class SeriesPickerElement extends LitElement {
 
     const trigger = this.renderRoot?.querySelector(".entity-trigger");
     if (trigger && this._pathContainsElement(path, trigger)) return true;
+
+    const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
+    if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
 
     for (const el of path) {
       if (el === this) break;
@@ -175,6 +189,39 @@ export class SeriesPickerElement extends LitElement {
     }
     menu.style.left = `${leftVp - originRect.left}px`;
     menu.style.right = "";
+  }
+
+  private _positionSourceSettingsPopover(): void {
+    const sourceId = this._sourceSettingsSourceId;
+    if (!sourceId) return;
+
+    const popover = this.renderRoot?.querySelector("[data-source-settings-popover]") as HTMLElement | null;
+    const chips = Array.from(this.renderRoot?.querySelectorAll(".source-chip") ?? []) as HTMLElement[];
+    const chip = chips.find((item) => item.dataset.sourceId === sourceId);
+    if (!popover || !chip) return;
+
+    popover.style.top = "0";
+    popover.style.left = "0";
+    popover.style.right = "";
+
+    const originRect = popover.getBoundingClientRect();
+    const chipRect = chip.getBoundingClientRect();
+    const hostRect = this.getBoundingClientRect();
+    const margin = 8;
+    const popoverWidth = Math.min(280, Math.max(220, hostRect.width - margin * 2));
+    popover.style.width = `${popoverWidth}px`;
+
+    const leftBoundary = hostRect.left + margin;
+    const rightBoundary = hostRect.right - margin;
+    const leftVp = Math.max(leftBoundary, Math.min(chipRect.left, rightBoundary - popoverWidth));
+    const topBelow = chipRect.bottom + 6;
+    const topAbove = chipRect.top - popover.offsetHeight - 6;
+    const topVp = topBelow + popover.offsetHeight <= window.innerHeight - margin
+      ? topBelow
+      : Math.max(margin, topAbove);
+
+    popover.style.left = `${leftVp - originRect.left}px`;
+    popover.style.top = `${topVp - originRect.top}px`;
   }
 
   private _browserHistoryEntry(state = window.history.state): BrowserHistoryEntry | undefined {
@@ -305,6 +352,7 @@ export class SeriesPickerElement extends LitElement {
     this._entityPickerOpen = false;
     this._entitySearch = "";
     this._attributeSearch = "";
+    this._sourceSettingsSourceId = undefined;
     // Auto-confirm and reset when the attribute browser closes with pending sources.
     if (this._selectedSources.length > 0) {
       this._confirm();
@@ -319,6 +367,27 @@ export class SeriesPickerElement extends LitElement {
 
   private _removeSource(sourceId: string): void {
     this._selectedSources = this._selectedSources.filter((s) => s.id !== sourceId);
+    if (this._sourceSettingsSourceId === sourceId) {
+      this._sourceSettingsSourceId = undefined;
+    }
+  }
+
+  private _sourceSettingsSource(): HistorySource | undefined {
+    return this._selectedSources.find((source) => source.id === this._sourceSettingsSourceId);
+  }
+
+  private _openSourceSettings(source: HistorySource): void {
+    if (source.kind !== "entity_attribute") return;
+    this._sourceSettingsSourceId = source.id;
+  }
+
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "scaleGroup">): void {
+    const sourceId = this._sourceSettingsSourceId;
+    if (!sourceId) return;
+
+    this._selectedSources = this._selectedSources.map((source) => source.id === sourceId
+      ? { ...source, ...patch }
+      : source);
   }
 
   private _confirm(): void {
@@ -379,6 +448,19 @@ export class SeriesPickerElement extends LitElement {
         onSourceDragOver: () => {},
         onSourceDragEnd: () => {},
         onSourceDrop: () => {},
+        sourceSettingsSourceId: this._sourceSettingsSourceId,
+        sourceSettingsUnit: this._sourceSettingsSource()?.unit,
+        sourceSettingsScaleGroup: this._sourceSettingsSource()?.scaleGroup,
+        onSourceSettingsOpen: (source) => this._openSourceSettings(source),
+        onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
+        onSourceSettingsUnitChanged: (value) => {
+          const unit = value.trim();
+          this._updateSourceSettings({ unit: unit || undefined });
+        },
+        onSourceSettingsScaleGroupChanged: (value) => {
+          const scaleGroup = value.trim();
+          this._updateSourceSettings({ scaleGroup: scaleGroup || undefined });
+        },
         onBreadcrumbClick: (path) => {
           this._path = path;
         },

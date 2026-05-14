@@ -14,6 +14,7 @@ export interface HistorySource {
   path?: string[];
   valueType: HistoryValueType;
   unit?: string;
+  scaleGroup?: string;
 }
 
 export interface HistoryPoint {

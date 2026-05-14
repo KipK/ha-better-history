@@ -7,6 +7,7 @@ const HA_KEYS: Record<string, string> = {
   add_target: "ui.components.target-picker.add_target",
   attributes: "ui.dialogs.more_info_control.attributes",
   back: "ui.common.back",
+  done: "ui.common.done",
   search_entity: "ui.components.entity.entity-picker.search"
 };
 
@@ -24,8 +25,13 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_column: "Columns",
     export_data: "Export",
     import_data: "Import",
+    done: "Done",
     search_entity: "Search entity",
     search_attributes: "Search attributes",
+    attribute_unit: "Unit",
+    attribute_unit_placeholder: "Auto",
+    scale_group: "Scale group",
+    scale_group_placeholder: "Default",
     no_matching_attributes: "No matching attributes",
     attribute_results_limited: "Showing first 50 matches"
   },
@@ -43,8 +49,13 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
     mode_column: "Colonnes",
     export_data: "Exporter",
     import_data: "Importer",
+    done: "Terminé",
     search_entity: "Rechercher une entité",
     search_attributes: "Rechercher des attributs",
+    attribute_unit: "Unité",
+    attribute_unit_placeholder: "Auto",
+    scale_group: "Groupe d'échelle",
+    scale_group_placeholder: "Défaut",
     no_matching_attributes: "Aucun attribut correspondant",
     attribute_results_limited: "50 premiers résultats affichés"
   },

@@ -1039,6 +1039,61 @@ export const chartStyles = css`
     color: var(--primary-text-color, #fff);
   }
 
+  .source-settings-popover {
+    position: fixed;
+    top: -9999px;
+    left: -9999px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 260px;
+    padding: 12px;
+    border: var(--wa-panel-border-width, 1px) var(--wa-panel-border-style, solid) var(--wa-color-surface-border, var(--divider-color, rgba(0, 0, 0, 0.12)));
+    border-radius: var(--better-history-radius, 8px);
+    background: var(--wa-color-surface-raised, var(--card-background-color, #fff));
+    box-shadow: var(--wa-shadow-m, var(--ha-box-shadow-m, 0 4px 8px rgba(0, 0, 0, 0.08)));
+    box-sizing: border-box;
+    z-index: 110;
+  }
+
+  .source-settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    color: var(--wa-color-text-normal, var(--primary-text-color));
+    font-size: var(--wa-font-size-s, 13px);
+  }
+
+  .source-settings-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
+    border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+    border-radius: var(--better-history-radius, 8px);
+    background: var(--card-background-color, #fff);
+    color: var(--primary-text-color, #111);
+    font: inherit;
+    padding: 0 10px;
+  }
+
+  .source-settings-input:focus {
+    border-color: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    outline: none;
+  }
+
+  .source-settings-close {
+    align-self: flex-end;
+    min-height: 32px;
+    border: 0;
+    border-radius: var(--better-history-radius, 8px);
+    background: var(--better-history-info-color, var(--info-color, var(--primary-color, #03a9f4)));
+    color: var(--text-primary-color, #fff);
+    cursor: pointer;
+    font: inherit;
+    padding: 0 12px;
+  }
+
   .entity-browser {
     min-height: 0;
     display: flex;

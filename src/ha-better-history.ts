@@ -16,6 +16,7 @@ import {
   X_AXIS_LABEL_SPACE,
   type ChartRenderData,
   type GraphGroup,
+  type NumericLineRenderData,
   type RenderableSeries
 } from "./render/chart.js";
 import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
@@ -177,6 +178,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _entityPickerOpen = false;
   @state() private _datePickerOpen = false;
   @state() private _draggingSourceId?: string;
+  @state() private _sourceSettingsSourceId?: string;
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
@@ -189,6 +191,7 @@ export class HaBetterHistory extends LitElement {
   private _prevContainerWidth = 0;
   private _wasLoading = false;
   private _suppressLineAnimation = false;
+  private _suppressLiveRangeAnimation = false;
   private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
   private _liveNowTimer?: ReturnType<typeof setInterval>;
@@ -549,6 +552,7 @@ export class HaBetterHistory extends LitElement {
     this._attributeMenuOpen = false;
     this._entityPickerOpen = false;
     this._attributeSearch = "";
+    this._sourceSettingsSourceId = undefined;
   }
 
   private _closeDatePickerOverlay(): void {
@@ -697,6 +701,7 @@ export class HaBetterHistory extends LitElement {
       || changed.has("config")
       || changed.has("hours");
     const liveRangeTick = (futureRange || rollingRelativeRange) && timeChanged && !containerChanged && !explicitRangeChanged;
+    this._suppressLiveRangeAnimation = liveRangeTick;
 
     if (timeChanged || containerChanged) {
       if (!liveRangeTick) {
@@ -830,16 +835,25 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_attributeMenuOpen") && this._attributeMenuOpen) {
       this._positionEntityMenu();
     }
-    if (changed.has("_attributeMenuOpen") || changed.has("_entityPickerOpen") || changed.has("_datePickerOpen")) {
+    if (changed.has("_sourceSettingsSourceId") && this._sourceSettingsSourceId) {
+      this._positionSourceSettingsPopover();
+    }
+    if (
+      changed.has("_attributeMenuOpen") ||
+      changed.has("_entityPickerOpen") ||
+      changed.has("_datePickerOpen") ||
+      changed.has("_sourceSettingsSourceId")
+    ) {
       this._emitPickerOverlayState();
     }
     this._emitGraphVisibilityState();
     this._animateClipPaths();
     this._wasLoading = this._data.loading;
+    this._suppressLiveRangeAnimation = false;
   }
 
   private _emitPickerOverlayState(): void {
-    const open = this._datePickerOpen || this._attributeMenuOpen || this._entityPickerOpen;
+    const open = this._datePickerOpen || this._attributeMenuOpen || this._entityPickerOpen || this._sourceSettingsSourceId !== undefined;
     if (open === this._lastPickerOverlayOpen) return;
 
     this._lastPickerOverlayOpen = open;
@@ -882,6 +896,8 @@ export class HaBetterHistory extends LitElement {
 
   private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[]): string {
     if (source.valueType !== "number") return `series:${source.id}`;
+    if (source.scaleGroup) return `group:${source.scaleGroup}`;
+
     const climateTemperatureAttribute = source.entityId.startsWith("climate.")
       && source.path?.length === 1
       && CLIMATE_TEMPERATURE_ATTRIBUTES.has(source.path[0]);
@@ -1044,6 +1060,7 @@ export class HaBetterHistory extends LitElement {
           effectiveSource.label,
           effectiveSource.kind,
           effectiveSource.unit ?? "",
+          effectiveSource.scaleGroup ?? "",
           effectiveSource.valueType,
           this._defaultLineMode(),
           this._defaultLineWidth()
@@ -1128,6 +1145,23 @@ export class HaBetterHistory extends LitElement {
     return groups;
   }
 
+  private _lineTargetX(line: NumericLineRenderData): number {
+    const points = line.points.split(" ");
+    const lastPoint = points[points.length - 1];
+    const targetX = lastPoint ? parseFloat(lastPoint.split(",")[0]) : 0;
+
+    return Number.isFinite(targetX) ? targetX : 0;
+  }
+
+  private _shouldAnimateLine(line: NumericLineRenderData, targetX = this._lineTargetX(line)): boolean {
+    const prevX = this._prevClipX.get(line.id) ?? 0;
+
+    return this._data.loading
+      && !this._suppressLineAnimation
+      && !this._suppressLiveRangeAnimation
+      && targetX > prevX;
+  }
+
   private _graphHeightFor(data: ChartRenderData): number {
     if (!this._chartSurfaceConstrained || this._chartSurfaceHeight <= 0) return GRAPH_HEIGHT;
 
@@ -1202,9 +1236,13 @@ export class HaBetterHistory extends LitElement {
                   const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
                   const clipId = `clip-${safeId}`;
                   const rectId = `rect-${safeId}`;
+                  const targetX = this._lineTargetX(line);
+                  const initialX = this._shouldAnimateLine(line, targetX)
+                    ? this._prevClipX.get(line.id) ?? 0
+                    : targetX;
                   return svg`
                     <clipPath id=${clipId}>
-                      <rect id=${rectId} x="0" y="0" width="0" height=${group.svgHeight}></rect>
+                      <rect id=${rectId} x="0" y="0" width=${initialX} height=${group.svgHeight}></rect>
                     </clipPath>
                   `;
                 })}
@@ -1219,11 +1257,8 @@ export class HaBetterHistory extends LitElement {
                 (line) => {
                   const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
                   const clipId = `clip-${safeId}`;
-                  const pts = line.points.split(" ");
-                  const lastPt = pts[pts.length - 1];
-                  const targetX = lastPt ? parseFloat(lastPt.split(",")[0]) : 0;
-                  const prevX = this._prevClipX.get(line.id) ?? 0;
-                  const needAnim = !this._suppressLineAnimation && targetX > prevX;
+                  const targetX = this._lineTargetX(line);
+                  const needAnim = this._shouldAnimateLine(line, targetX);
 
                   return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
                 }
@@ -1435,6 +1470,19 @@ export class HaBetterHistory extends LitElement {
       onSourceDragOver: (sourceId, event) => this._onSourceDragOver(sourceId, event),
       onSourceDragEnd: () => this._onSourceDragEnd(),
       onSourceDrop: (sourceId, event) => this._onSourceDrop(sourceId, event),
+      sourceSettingsSourceId: this._sourceSettingsSourceId,
+      sourceSettingsUnit: this._sourceSettingsSource()?.unit,
+      sourceSettingsScaleGroup: this._sourceSettingsSource()?.scaleGroup,
+      onSourceSettingsOpen: (source) => this._openSourceSettings(source),
+      onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
+      onSourceSettingsUnitChanged: (value) => {
+        const unit = value.trim();
+        this._updateSourceSettings({ unit: unit || undefined });
+      },
+      onSourceSettingsScaleGroupChanged: (value) => {
+        const scaleGroup = value.trim();
+        this._updateSourceSettings({ scaleGroup: scaleGroup || undefined });
+      },
       onBreadcrumbClick: (path) => { this._path = path; },
       onCloseMenu: () => this._closeAttributeMenu(),
     });
@@ -2112,6 +2160,39 @@ export class HaBetterHistory extends LitElement {
     menu.style.right = "";
   }
 
+  private _positionSourceSettingsPopover(): void {
+    const sourceId = this._sourceSettingsSourceId;
+    if (!sourceId) return;
+
+    const popover = this.renderRoot?.querySelector("[data-source-settings-popover]") as HTMLElement | null;
+    const chips = Array.from(this.renderRoot?.querySelectorAll(".source-chip") ?? []) as HTMLElement[];
+    const chip = chips.find((item) => item.dataset.sourceId === sourceId);
+    if (!popover || !chip) return;
+
+    popover.style.top = "0";
+    popover.style.left = "0";
+    popover.style.right = "";
+
+    const originRect = popover.getBoundingClientRect();
+    const chipRect = chip.getBoundingClientRect();
+    const hostRect = this.getBoundingClientRect();
+    const margin = 8;
+    const popoverWidth = Math.min(280, Math.max(220, hostRect.width - margin * 2));
+    popover.style.width = `${popoverWidth}px`;
+
+    const leftBoundary = hostRect.left + margin;
+    const rightBoundary = hostRect.right - margin;
+    const leftVp = Math.max(leftBoundary, Math.min(chipRect.left, rightBoundary - popoverWidth));
+    const topBelow = chipRect.bottom + 6;
+    const topAbove = chipRect.top - popover.offsetHeight - 6;
+    const topVp = topBelow + popover.offsetHeight <= window.innerHeight - margin
+      ? topBelow
+      : Math.max(margin, topAbove);
+
+    popover.style.left = `${leftVp - originRect.left}px`;
+    popover.style.top = `${topVp - originRect.top}px`;
+  }
+
   private _closeAttributeMenu(): void {
     this._closeBrowserHistoryLayer("attribute-picker", () => this._closePickerOverlay());
   }
@@ -2165,14 +2246,14 @@ export class HaBetterHistory extends LitElement {
   // only meant to dismiss the attribute browser.
   private _handleDocumentPointerDown = (event: Event): void => {
     this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
-    if (!this._attributeMenuOpen) return;
+    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId) return;
     if (this._lastPointerDownInside) return;
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
 
   private _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen) {
+    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId) {
       this._lastPointerDownInside = false;
       return;
     }
@@ -2180,6 +2261,14 @@ export class HaBetterHistory extends LitElement {
     this._lastPointerDownInside = false;
     if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
+
+    if (this._sourceSettingsSourceId) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this._sourceSettingsSourceId = undefined;
+      return;
+    }
 
     event.preventDefault();
     event.stopPropagation();
@@ -2195,6 +2284,9 @@ export class HaBetterHistory extends LitElement {
 
     const trigger = this.renderRoot?.querySelector(".entity-trigger");
     if (trigger && this._pathContainsElement(path, trigger)) return true;
+
+    const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
+    if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
 
     for (const el of path) {
       if (el === this) break;
@@ -2220,6 +2312,7 @@ export class HaBetterHistory extends LitElement {
 
   private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
     if (source.kind !== "entity_attribute" || !source.path) return source;
+    if (source.unit) return source;
     const mappedUnit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
     const unit = isAttributeTemperatureUnit(mappedUnit) ? this._resolvedTemperatureUnit() ?? mappedUnit : mappedUnit;
     if (!unit || source.unit === unit) return source;
@@ -2317,6 +2410,9 @@ export class HaBetterHistory extends LitElement {
   private _removeSource(sourceId: string): void {
     const source = this._selectedSources.find((s) => s.id === sourceId);
     this._pendingAddedSources = this._pendingAddedSources.filter((s) => s.id !== sourceId);
+    if (this._sourceSettingsSourceId === sourceId) {
+      this._sourceSettingsSourceId = undefined;
+    }
 
     const removableConfigSource = this._activeResolvedSeries().find((s) => s.id === sourceId && s.forced === false);
     if (removableConfigSource) {
@@ -2347,6 +2443,26 @@ export class HaBetterHistory extends LitElement {
         composed: true
       })
     );
+
+    void this.requestUpdate();
+  }
+
+  private _sourceSettingsSource(): HistorySource | undefined {
+    return this._selectedSources.find((source) => source.id === this._sourceSettingsSourceId);
+  }
+
+  private _openSourceSettings(source: HistorySource): void {
+    if (source.kind !== "entity_attribute") return;
+    this._sourceSettingsSourceId = source.id;
+  }
+
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "scaleGroup">): void {
+    const sourceId = this._sourceSettingsSourceId;
+    if (!sourceId) return;
+
+    this._selectedSources = this._selectedSources.map((source) => source.id === sourceId
+      ? { ...source, ...patch }
+      : source);
 
     void this.requestUpdate();
   }

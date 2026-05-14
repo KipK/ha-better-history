@@ -215,6 +215,13 @@ interface EntityPickerRenderOpts {
   onSourceDragOver(sourceId: string | undefined, event: DragEvent): void;
   onSourceDragEnd(): void;
   onSourceDrop(sourceId: string | undefined, event: DragEvent): void;
+  sourceSettingsSourceId?: string;
+  sourceSettingsUnit?: string;
+  sourceSettingsScaleGroup?: string;
+  onSourceSettingsOpen(source: HistorySource, event: Event): void;
+  onSourceSettingsClose(): void;
+  onSourceSettingsUnitChanged(value: string): void;
+  onSourceSettingsScaleGroupChanged(value: string): void;
   onBreadcrumbClick(path: string[]): void;
   onCloseMenu(): void;
   hideEmptyPickerState?: boolean;
@@ -280,6 +287,7 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           ${rowSources.map((source) => renderChip(source, opts))}
         </div>
       ` : nothing}
+      ${renderSourceSettingsPopup(opts)}
     </div>
   `;
 }
@@ -375,14 +383,51 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
   const entity = opts.hass?.states[source.entityId];
   const chipClass = isEntity ? "entity-source-chip" : "attr-source-chip";
   const isDragging = opts.draggingSourceId === source.id;
+  const canEditSettings = source.kind === "entity_attribute" && isSelected && !isFixed;
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+  let longPressStart: { x: number; y: number } | undefined;
+  const cancelLongPress = (): void => {
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
+    longPressStart = undefined;
+  };
+  const openSettings = (event: Event): void => {
+    if (!canEditSettings) return;
+    event.preventDefault();
+    event.stopPropagation();
+    opts.onSourceSettingsOpen(source, event);
+  };
+  const onPointerDown = (event: PointerEvent): void => {
+    if (!canEditSettings || event.button !== 0) return;
+    longPressStart = { x: event.clientX, y: event.clientY };
+    longPressTimer = setTimeout(() => {
+      longPressTimer = undefined;
+      openSettings(event);
+    }, 560);
+  };
+  const onPointerMove = (event: PointerEvent): void => {
+    if (!longPressStart) return;
+    if (Math.abs(event.clientX - longPressStart.x) > 8 || Math.abs(event.clientY - longPressStart.y) > 8) {
+      cancelLongPress();
+    }
+  };
 
   return html`
     <div
       class="source-chip ${chipClass}"
+      data-source-id=${source.id}
       draggable=${isSelected && !isFixed}
       ?dragging=${isDragging}
-      @dragstart=${(e: DragEvent) => { if (isSelected && !isFixed) opts.onSourceDragStart(source.id, e); }}
-      @dragend=${() => opts.onSourceDragEnd()}
+      @contextmenu=${openSettings}
+      @pointerdown=${onPointerDown}
+      @pointermove=${onPointerMove}
+      @pointerup=${cancelLongPress}
+      @pointercancel=${cancelLongPress}
+      @pointerleave=${cancelLongPress}
+      @dragstart=${(e: DragEvent) => { cancelLongPress(); if (isSelected && !isFixed) opts.onSourceDragStart(source.id, e); }}
+      @dragend=${() => { cancelLongPress(); opts.onSourceDragEnd(); }}
       @dragover=${(e: DragEvent) => { if (isSelected && !isFixed) opts.onSourceDragOver(source.id, e); }}
       @drop=${(e: DragEvent) => opts.onSourceDrop(source.id, e)}
     >
@@ -398,6 +443,46 @@ function renderChip(source: HistorySource, opts: EntityPickerRenderOpts): Templa
             @click=${(e: Event) => { e.preventDefault(); opts.onSourceRemoved(source.id); }}
           >&#x2715;</button>`
         : nothing}
+    </div>
+  `;
+}
+
+function renderSourceSettingsPopup(opts: EntityPickerRenderOpts): TemplateResult | typeof nothing {
+  const sourceId = opts.sourceSettingsSourceId;
+  if (!sourceId) return nothing;
+
+  return html`
+    <div
+      class="source-settings-popover"
+      data-source-settings-popover
+      @click=${(event: Event) => event.stopPropagation()}
+      @pointerdown=${(event: Event) => event.stopPropagation()}
+      @keydown=${(event: KeyboardEvent) => {
+        event.stopPropagation();
+        if (event.key === "Escape") opts.onSourceSettingsClose();
+      }}
+    >
+      <label class="source-settings-field">
+        <span>${localize(opts.hass, "attribute_unit")}</span>
+        <input
+          class="source-settings-input"
+          .value=${opts.sourceSettingsUnit ?? ""}
+          placeholder=${localize(opts.hass, "attribute_unit_placeholder")}
+          @input=${(event: InputEvent) => opts.onSourceSettingsUnitChanged((event.target as HTMLInputElement).value)}
+        />
+      </label>
+      <label class="source-settings-field">
+        <span>${localize(opts.hass, "scale_group")}</span>
+        <input
+          class="source-settings-input"
+          .value=${opts.sourceSettingsScaleGroup ?? ""}
+          placeholder=${localize(opts.hass, "scale_group_placeholder")}
+          @input=${(event: InputEvent) => opts.onSourceSettingsScaleGroupChanged((event.target as HTMLInputElement).value)}
+        />
+      </label>
+      <button class="source-settings-close" @click=${opts.onSourceSettingsClose}>
+        ${localize(opts.hass, "done")}
+      </button>
     </div>
   `;
 }
