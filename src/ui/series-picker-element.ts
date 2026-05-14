@@ -31,6 +31,7 @@ export class SeriesPickerElement extends LitElement {
 
   @property({ attribute: false }) hass?: HomeAssistant;
   @property({ attribute: false }) initialSources?: HistorySource[];
+  @property({ type: Boolean, attribute: "browser-history" }) browserHistory = true;
 
   @state() private _selectedSources: HistorySource[] = [];
   @state() private _attributeMenuOpen = false;
@@ -205,6 +206,7 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private _pushBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (!this.browserHistory) return;
     if (this._syncingBrowserHistory) return;
     if (this._browserHistoryEntry()?.layer === layer) return;
 
@@ -212,13 +214,14 @@ export class SeriesPickerElement extends LitElement {
   }
 
   private _replaceBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
+    if (!this.browserHistory) return;
     if (this._syncingBrowserHistory) return;
 
     window.history.replaceState(this._browserHistoryState(layer), "", window.location.href);
   }
 
   private _closeBrowserHistoryLayer(layer: BrowserHistoryLayer, close: () => void): void {
-    if (!this._syncingBrowserHistory && this._browserHistoryEntry()?.layer === layer) {
+    if (this.browserHistory && !this._syncingBrowserHistory && this._browserHistoryEntry()?.layer === layer) {
       window.history.back();
       return;
     }

@@ -333,6 +333,27 @@ The date picker, entity picker, and attribute browser participate in browser his
 
 The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 
+### Standalone series picker
+
+The package also registers `<abh-series-picker>` for integrations that want the same entity/attribute picker without rendering the chart. It dispatches `sources-confirmed` with `{ sources: HistorySource[] }` when the user closes the attribute browser after selecting sources.
+
+```html
+<abh-series-picker></abh-series-picker>
+<script>
+  const picker = document.querySelector("abh-series-picker");
+  picker.hass = hass;
+  picker.addEventListener("sources-confirmed", (e) => {
+    console.log(e.detail.sources);
+  });
+</script>
+```
+
+By default, standalone picker overlays use browser history just like `<ha-better-history>`: Back closes the entity picker or attribute browser before leaving the current Home Assistant view. When embedding the picker inside a Home Assistant config editor, disable that behavior so the parent editor's navigation/unsaved-change guard is not triggered:
+
+```js
+picker.browserHistory = false;
+```
+
 ### Viewer tools
 
 The viewer toolbar appears above the graph when `tools-open` is `true`. It includes:
