@@ -165,16 +165,14 @@ export class SeriesPickerElement extends LitElement {
     menu.style.left = "0";
     menu.style.right = "";
     menu.style.width = "";
+    menu.style.maxHeight = "";
     // When inside a CSS-transformed ancestor (e.g. a dialog), fixed positions
     // are relative to that ancestor. We measure the origin offset and convert.
     const originRect = menu.getBoundingClientRect();
     const triggerRect = trigger.getBoundingClientRect();
     const hostRect = this.getBoundingClientRect();
     const margin = 8;
-
-    const available = hostRect.bottom - margin - triggerRect.bottom - margin;
-    menu.style.maxHeight = `${Math.min(Math.max(available, 120), 420)}px`;
-    menu.style.top = `${triggerRect.bottom - originRect.top + 6}px`;
+    const gap = 6;
 
     const leftBoundaryVp = hostRect.left + margin;
     const rightBoundaryVp = hostRect.right - margin;
@@ -191,6 +189,23 @@ export class SeriesPickerElement extends LitElement {
       leftVp = leftBoundaryVp;
       menu.style.width = `${availableWidth}px`;
     }
+
+    const viewport = window.visualViewport;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+    const availableBelow = viewportBottom - margin - triggerRect.bottom - gap;
+    const availableAbove = triggerRect.top - viewportTop - margin - gap;
+    const menuLimit = menu.classList.contains("entity-select-menu") ? 360 : 420;
+    const desiredHeight = Math.min(menu.scrollHeight || menu.offsetHeight || menuLimit, menuLimit);
+    const openAbove = availableBelow < desiredHeight && availableAbove > availableBelow;
+    const availableHeight = openAbove ? availableAbove : availableBelow;
+    const maxHeight = Math.min(Math.max(availableHeight, 120), menuLimit);
+    const topVp = openAbove
+      ? Math.max(viewportTop + margin, triggerRect.top - gap - maxHeight)
+      : triggerRect.bottom + gap;
+
+    menu.style.maxHeight = `${maxHeight}px`;
+    menu.style.top = `${topVp - originRect.top}px`;
     menu.style.left = `${leftVp - originRect.left}px`;
     menu.style.right = "";
   }
