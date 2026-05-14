@@ -372,10 +372,18 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _effectiveStartDate(): Date {
-    return this._rangeStart ?? this.startDate ?? this.config?.startDate ?? new Date(Date.now() - (this.config?.hours ?? this.hours ?? 24) * 3600000);
+    if (this._usesRollingRelativeRange()) {
+      return new Date(Date.now() - this._relativeRangeMs());
+    }
+
+    return this._rangeStart ?? this.startDate ?? this.config?.startDate ?? new Date(Date.now() - this._relativeRangeMs());
   }
 
   private _effectiveEndDate(): Date {
+    if (this._usesRollingRelativeRange()) {
+      return new Date();
+    }
+
     const requestedEnd = this._requestedEndDate();
     const liveNow = this._liveNow || Date.now();
 
@@ -388,6 +396,29 @@ export class HaBetterHistory extends LitElement {
 
   private _rangeExtendsFuture(): boolean {
     return this._requestedEndDate().getTime() > Date.now();
+  }
+
+  private _relativeRangeMs(): number {
+    return (this.config?.hours ?? this.hours ?? 24) * 3600000;
+  }
+
+  private _usesRollingRelativeRange(): boolean {
+    return !this._importedDataActive
+      && !this._rangeStart
+      && !this._rangeEnd
+      && !this.startDate
+      && !this.endDate
+      && !this.config?.startDate
+      && !this.config?.endDate;
+  }
+
+  private _effectiveDateRange(): { start: Date; end: Date } {
+    if (this._usesRollingRelativeRange()) {
+      const end = new Date();
+      return { start: new Date(end.getTime() - this._relativeRangeMs()), end };
+    }
+
+    return { start: this._effectiveStartDate(), end: this._effectiveEndDate() };
   }
 
   private _syncLiveClock(): void {
@@ -645,13 +676,15 @@ export class HaBetterHistory extends LitElement {
   protected willUpdate(changed: PropertyValues): void {
     this._data.debugPerformance = this.debugPerformance || this.config?.debugPerformance === true;
 
-    const startTime = this._effectiveStartDate().getTime();
-    const endTime = this._effectiveEndDate().getTime();
+    const rollingRelativeRange = this._usesRollingRelativeRange();
+    const effectiveRange = this._effectiveDateRange();
+    const startTime = effectiveRange.start.getTime();
+    const endTime = effectiveRange.end.getTime();
     const futureRange = this._rangeExtendsFuture();
 
     this._syncLiveClock();
 
-    if (changed.has("hass") && futureRange) {
+    if (changed.has("hass") && (futureRange || rollingRelativeRange)) {
       this._data.updateLivePoints(this.hass, this._lastFetchSources, new Date(startTime), new Date(endTime));
     }
 
@@ -663,7 +696,7 @@ export class HaBetterHistory extends LitElement {
       || changed.has("endDate")
       || changed.has("config")
       || changed.has("hours");
-    const liveRangeTick = futureRange && timeChanged && !containerChanged && !explicitRangeChanged;
+    const liveRangeTick = (futureRange || rollingRelativeRange) && timeChanged && !containerChanged && !explicitRangeChanged;
 
     if (timeChanged || containerChanged) {
       if (!liveRangeTick) {
@@ -692,11 +725,11 @@ export class HaBetterHistory extends LitElement {
       if (hassOnly) {
         const now = Date.now();
         const rounded = Math.floor(now / 1000) * 1000;
-        if (futureRange && this._lastFetchKey) {
+        if ((futureRange || rollingRelativeRange) && this._lastFetchKey) {
           this._lastHassResolveTime = rounded;
-          return;
+          if (!rollingRelativeRange) return;
         }
-        if (rounded === this._lastHassResolveTime && this._lastFetchKey) return;
+        if (!rollingRelativeRange && rounded === this._lastHassResolveTime && this._lastFetchKey) return;
         this._lastHassResolveTime = rounded;
       }
 
@@ -704,8 +737,8 @@ export class HaBetterHistory extends LitElement {
         config: this.config,
         entities: this.entities,
         hours: this.hours,
-        startDate: this._effectiveStartDate(),
-        endDate: this._effectiveEndDate(),
+        startDate: effectiveRange.start,
+        endDate: effectiveRange.end,
         showDatePicker: this.showDatePicker,
         showEntityPicker: this.showEntityPicker,
         showLegend: this.showLegend,
@@ -729,19 +762,21 @@ export class HaBetterHistory extends LitElement {
       this._reconcileRemovedConfigSourceIds(resolved);
       this._resolved = resolved;
 
-      if (!this._rangeStart && !this._rangeEnd) {
+      if (!this._rangeStart && !this._rangeEnd && !rollingRelativeRange) {
         this._rangeStart = resolved.startDate;
         this._rangeEnd = resolved.endDate;
       }
 
-      if (!this._viewStart && !this._viewEnd) {
+      if (!this._viewStart && !this._viewEnd && !rollingRelativeRange) {
         this._viewStart = resolved.startDate;
         this._viewEnd = resolved.endDate;
       }
 
       const sources = this._fetchSources();
       const sourceIds = sources.map((s) => s.id).sort().join("|");
-      const fetchKey = `${sourceIds}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
+      const fetchKey = rollingRelativeRange
+        ? `${sourceIds}|rolling|${this._relativeRangeMs()}`
+        : `${sourceIds}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
 
       if (fetchKey !== this._lastFetchKey) {
         const prevSourceIds = this._lastFetchKey.split("|").slice(0, -2).join("|");

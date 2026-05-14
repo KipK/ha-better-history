@@ -70,13 +70,48 @@ function mergeLivePoint(points: HistoryPoint[], point: HistoryPoint): HistoryPoi
     return next;
   }
 
-  const previous = [...points].reverse().find((item) => item.time < point.time);
+  let previousIndex = -1;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].time < point.time) {
+      previousIndex = i;
+      break;
+    }
+  }
+  const previous = previousIndex === -1 ? undefined : points[previousIndex];
 
   if (previous?.value === point.value) {
-    return points;
+    let anchor: HistoryPoint | undefined;
+    for (let i = previousIndex - 1; i >= 0; i--) {
+      if (points[i].time < previous.time) {
+        anchor = points[i];
+        break;
+      }
+    }
+
+    if (anchor?.value === point.value) {
+      const next = [...points];
+      next[previousIndex] = point;
+
+      return next.sort((left, right) => left.time - right.time);
+    }
+
+    return [...points, point].sort((left, right) => left.time - right.time);
   }
 
   return [...points, point].sort((left, right) => left.time - right.time);
+}
+
+function trimPointsToStart(points: HistoryPoint[], startTime: number): HistoryPoint[] {
+  const firstVisibleIndex = points.findIndex((point) => point.time >= startTime);
+
+  if (firstVisibleIndex === -1) {
+    return points.length > 1 ? [points[points.length - 1]] : points;
+  }
+
+  const startIndex = Math.max(0, firstVisibleIndex - 1);
+  if (startIndex === 0) return points;
+
+  return points.slice(startIndex);
 }
 
 export class DataController implements ReactiveController {
@@ -525,7 +560,7 @@ export class DataController implements ReactiveController {
         ...current,
         time: Math.min(Math.max(current.time, startTime), endTime)
       };
-      const points = mergeLivePoint(series.points, livePoint);
+      const points = trimPointsToStart(mergeLivePoint(series.points, livePoint), startTime);
       if (points === series.points) return series;
 
       changed = true;
