@@ -214,6 +214,7 @@ export class HaBetterHistory extends LitElement {
   private _surfaceHeaderObserver?: ResizeObserver;
   private _observedSurfaceHeader?: Element;
   private _lastContentHeight = 0;
+  private _measuredGraphLayout?: { graphCount: number; graphHeight: number; overheadHeight: number };
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -285,6 +286,7 @@ export class HaBetterHistory extends LitElement {
     const surface = this._observedChartSurface;
     const graphs = surface?.querySelector<HTMLElement>(".chart-graphs");
     const contentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+    this._measureGraphLayout(graphs ?? undefined, contentHeight);
 
     if (this._lastContentHeight > 0 && contentHeight > 0 && contentHeight === this._lastContentHeight
       && Math.abs(height - this._chartSurfaceHeight) > CHART_SURFACE_SIZE_TOLERANCE) {
@@ -337,6 +339,17 @@ export class HaBetterHistory extends LitElement {
     }
   }
 
+  private _measureGraphLayout(graphs: HTMLElement | undefined, contentHeight: number): void {
+    if (!graphs || contentHeight <= 0) return;
+
+    const graphCount = graphs.querySelectorAll(".graph-section").length;
+    const graphHeight = this._graphGroupRenderCache?.graphHeight;
+    if (graphCount <= 0 || graphHeight === undefined) return;
+
+    const overheadHeight = Math.max(0, contentHeight - graphCount * graphHeight);
+    this._measuredGraphLayout = { graphCount, graphHeight, overheadHeight };
+  }
+
   private _syncSurfaceHeaderOffset(headerHeight: number): void {
     const surface = this.renderRoot.querySelector(".chart-surface") as HTMLElement | null;
     if (!surface) return;
@@ -358,6 +371,16 @@ export class HaBetterHistory extends LitElement {
     const overlap = headerHeight + minGap - emptySpaceAbove;
     const currentOffset = surface.style.getPropertyValue("--better-history-surface-header-offset");
     const hasOffset = currentOffset !== "";
+    const useStableHeaderOffset = this._chartSurfaceConstrained || contentOverflows;
+
+    if (useStableHeaderOffset) {
+      const offsetPx = Math.ceil(headerHeight + minGap);
+      if (currentOffset === `${offsetPx}px`) return;
+
+      this._lastContentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
+      surface.style.setProperty("--better-history-surface-header-offset", `${offsetPx}px`);
+      return;
+    }
 
     if (overlap <= 0) {
       if (!hasOffset) return;
@@ -367,7 +390,7 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
-    const offsetPx = Math.ceil(contentOverflows ? headerHeight + minGap : 2 * overlap);
+    const offsetPx = Math.ceil(2 * overlap);
     if (currentOffset === `${offsetPx}px`) return;
 
     this._lastContentHeight = graphs ? Math.round(graphs.offsetHeight) : 0;
@@ -1165,13 +1188,12 @@ export class HaBetterHistory extends LitElement {
   private _graphHeightFor(data: ChartRenderData): number {
     if (!this._chartSurfaceConstrained || this._chartSurfaceHeight <= 0) return GRAPH_HEIGHT;
 
-    const graphCount = Math.max(
-      new Set(data.numericScales.map((scale) => scale.graphKey)).size,
-      data.allSeries.some((s) => s.valueType !== "number" && s.valueType !== "boolean") ? 1 : 0,
-      1
-    );
-    const segmentCount = data.allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
-    const staticCanvasHeight = graphCount * (GRAPH_TOP + 18 + 16) + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
+    const graphCount = this._graphCountFor(data);
+    const measuredOverhead = this._measuredGraphLayout?.graphCount === graphCount
+      ? this._measuredGraphLayout.overheadHeight
+      : undefined;
+    const estimatedOverhead = this._estimatedGraphOverhead(data, graphCount);
+    const staticCanvasHeight = measuredOverhead ?? estimatedOverhead;
     const availableForGraphs = this._chartSurfaceHeight - staticCanvasHeight;
     const plotWidth = this._containerWidth > 0
       ? this._containerWidth * PLOT_WIDTH / CHART_WIDTH
@@ -1188,6 +1210,21 @@ export class HaBetterHistory extends LitElement {
     const height = Math.min(constrainedHeight, maxHeight);
 
     return Math.max(MIN_GRAPH_HEIGHT, height);
+  }
+
+  private _graphCountFor(data: ChartRenderData): number {
+    return Math.max(
+      new Set(data.numericScales.map((scale) => scale.graphKey)).size,
+      data.allSeries.some((s) => s.valueType !== "number" && s.valueType !== "boolean") ? 1 : 0,
+      1
+    );
+  }
+
+  private _estimatedGraphOverhead(data: ChartRenderData, graphCount: number): number {
+    const segmentCount = data.allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;
+    const legendHeight = (this._resolved?.showLegend ?? true) ? graphCount * 30 : 0;
+
+    return graphCount * (GRAPH_TOP + 18 + 16) + legendHeight + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
   }
 
   private _renderGraphGroup(group: GraphGroup): TemplateResult {
