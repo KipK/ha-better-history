@@ -246,6 +246,32 @@ export const chartStyles = css`
     position: relative;
   }
 
+  .axis-color-dots {
+    position: absolute;
+    display: flex;
+    gap: 3px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .axis-color-dots--left {
+    right: var(--axis-label-gap);
+    justify-content: flex-end;
+  }
+
+  .axis-color-dots--right {
+    left: var(--axis-label-gap);
+    justify-content: flex-start;
+  }
+
+  .axis-color-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 70%, transparent);
+  }
+
   .graph-canvas {
     min-width: 0;
     position: relative;

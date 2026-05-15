@@ -702,11 +702,14 @@ function buildGroupYLabels(scale: NumericScale, graphHeight: number): YAxisLabel
   const ticks = scale.ticks.length <= desiredCount
     ? scale.ticks
     : computeNiceTicks(scale.min, scale.max, desiredCount);
+  const tickTolerance = Math.max(Math.abs(scale.max - scale.min), 1) * 1e-9;
+  const visibleTicks = ticks.filter((v) => v >= scale.min - tickTolerance && v <= scale.max + tickTolerance);
+  const renderTicks = visibleTicks.length > 0 ? visibleTicks : [scale.min, scale.max];
   const precision = scale.ticks === ticks
     ? scale.precision
-    : Math.max(scale.precision, tickPrecision(ticks));
+    : Math.max(scale.precision, tickPrecision(renderTicks));
 
-  return ticks.map((v) => ({
+  return renderTicks.map((v) => ({
     y: GRAPH_TOP + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
     value: formatTickValue(v, precision)
   }));

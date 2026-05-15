@@ -78,9 +78,12 @@ function axisLabelWidthPx(value: string): number {
   return Math.ceil(width);
 }
 
-function axisGutter(labels: Array<{ value: string }>): string {
+function axisGutter(labels: Array<{ value: string }>, markerCount = 0): string {
   const width = Math.max(0, ...labels.map((label) => axisLabelWidthPx(label.value)));
-  return width > 0 ? `${width + AXIS_LABEL_GAP_PX}px` : "0px";
+  const markerWidth = markerCount > 0 ? markerCount * 7 + (markerCount - 1) * 3 : 0;
+  const gutterWidth = Math.max(width, markerWidth);
+
+  return gutterWidth > 0 ? `${gutterWidth + AXIS_LABEL_GAP_PX}px` : "0px";
 }
 
 function isTemperatureUnit(unit: string): boolean {
@@ -1309,8 +1312,10 @@ export class HaBetterHistory extends LitElement {
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
-    const leftGutter = showScale ? axisGutter(group.yLabels) : "0px";
-    const rightGutter = showScale ? axisGutter(group.rightYLabels) : "0px";
+    const leftAxisColors = showScale ? this._axisSeriesColors(group, "left") : [];
+    const rightAxisColors = showScale ? this._axisSeriesColors(group, "right") : [];
+    const leftGutter = showScale ? axisGutter(group.yLabels, leftAxisColors.length) : "0px";
+    const rightGutter = showScale ? axisGutter(group.rightYLabels, rightAxisColors.length) : "0px";
     const plotBottom = GRAPH_TOP + group.graphHeight;
     const xLabelTop = plotBottom + 3;
     const segmentStartY = plotBottom + X_AXIS_LABEL_SPACE + 6;
@@ -1319,6 +1324,7 @@ export class HaBetterHistory extends LitElement {
       <div class="graph-section">
         <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
           <div class="axis-labels axis-labels--left" style="height:${group.canvasHeight}px">
+            ${showScale ? this._renderAxisColorDots(leftAxisColors, "left") : nothing}
             ${showScale
               ? group.yLabels.map(
                   (label) => html`<span class="y-axis-label y-axis-label--left" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
@@ -1422,6 +1428,7 @@ export class HaBetterHistory extends LitElement {
               : nothing}
           </div>
           <div class="axis-labels axis-labels--right" style="height:${group.canvasHeight}px">
+            ${showScale ? this._renderAxisColorDots(rightAxisColors, "right") : nothing}
             ${showScale
               ? group.rightYLabels.map(
                   (label) => html`<span class="y-axis-label y-axis-label--right" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
@@ -1449,6 +1456,34 @@ export class HaBetterHistory extends LitElement {
           `
           : nothing}
       </div>
+    `;
+  }
+
+  private _axisSeriesColors(group: GraphGroup, axis: "left" | "right"): string[] {
+    const axisIds = new Set(group.scales.filter((scale) => scale.axis === axis).flatMap((scale) => [...scale.ids]));
+    const seen = new Set<string>();
+    const colors: string[] = [];
+
+    for (const series of group.series) {
+      if ((series.valueType !== "number" && series.valueType !== "boolean") || !axisIds.has(series.id)) continue;
+
+      const key = series.color.trim().toLowerCase();
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      colors.push(series.color);
+    }
+
+    return colors;
+  }
+
+  private _renderAxisColorDots(colors: string[], side: "left" | "right"): TemplateResult | typeof nothing {
+    if (colors.length === 0) return nothing;
+
+    return html`
+      <span class="axis-color-dots axis-color-dots--${side}" style="top:${PLOT_TOP - 12}px;">
+        ${colors.map((color) => html`<span class="axis-color-dot" style="background:${color};"></span>`)}
+      </span>
     `;
   }
 
