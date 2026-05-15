@@ -679,7 +679,7 @@ export async function fetchHistory(
   sources: HistorySource[],
   start: Date,
   end: Date,
-  onProgress?: (series: HistorySeries[]) => void,
+  onProgress?: (series: HistorySeries[], changedSourceIds: string[]) => void,
   onPerformance?: HistoryPerformanceCallback,
   options: HistoryFetchOptions = {}
 ): Promise<HistorySeries[]> {
@@ -689,13 +689,18 @@ export async function fetchHistory(
 
   const allEntityIds = [...new Set(sources.map((source) => source.entityId))];
 
+  const stateEntityIds = new Set(
+    sources
+      .filter((s) => s.kind === "entity_state")
+      .map((s) => s.entityId)
+  );
   const attrEntityIds = new Set(
     sources
       .filter((s) => s.kind === "entity_attribute")
       .map((s) => s.entityId)
   );
 
-  const stateOnlyIds = allEntityIds.filter((id) => !attrEntityIds.has(id));
+  const stateIds = allEntityIds.filter((id) => stateEntityIds.has(id));
   const attrIds = allEntityIds.filter((id) => attrEntityIds.has(id));
 
   interface Batch extends HistoryQueueTask<HistoryResponse> {
@@ -763,7 +768,7 @@ export async function fetchHistory(
   };
   const attributeIntervals: Array<{ entityId: string; start: Date; end: Date }> = [];
 
-  for (const entityId of stateOnlyIds) {
+  for (const entityId of stateIds) {
     for (const interval of accumulator.missingIntervals(entityId, start, end, "state")) {
       addBatch(entityId, interval.start, interval.end, "state", true, true, true);
     }
@@ -864,10 +869,16 @@ export async function fetchHistory(
       await yieldToBrowser();
 
       const buildStart = performanceNow();
+      const changedSourceIds = new Set<string>();
       for (const source of sources) {
-        if (changedEntityIds.has(source.entityId) || !seriesBySourceId.has(source.id)) {
+        const sourceMatchesBatch = batch.coverageKind === "full"
+          ? source.kind === "entity_attribute"
+          : source.kind === "entity_state";
+
+        if ((sourceMatchesBatch && changedEntityIds.has(source.entityId)) || !seriesBySourceId.has(source.id)) {
           if (source.kind === "entity_attribute" ? accumulator.hasFullStates(source.entityId) : accumulator.hasStates(source.entityId)) {
             seriesBySourceId.set(source.id, accumulator.buildSeries(source, hass, start, end));
+            changedSourceIds.add(source.id);
           }
         }
       }
@@ -886,7 +897,7 @@ export async function fetchHistory(
         }
       });
 
-      onProgress(progressSeries);
+      onProgress(progressSeries, [...changedSourceIds]);
 
       await yieldToBrowser(120);
     }

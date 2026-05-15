@@ -118,6 +118,7 @@ export class DataController implements ReactiveController {
   readonly host: ReactiveControllerHost;
 
   series: HistorySeries[] = [];
+  changedSourceIds = new Set<string>();
   loading = false;
   error = "";
   debugPerformance = false;
@@ -278,6 +279,7 @@ export class DataController implements ReactiveController {
 
     if (sources.length === 0) {
       this.series = [];
+      this.changedSourceIds = new Set();
       this.loading = false;
       this.error = "";
       this.host.requestUpdate();
@@ -286,6 +288,7 @@ export class DataController implements ReactiveController {
 
     if (!hass) {
       this.series = [];
+      this.changedSourceIds = new Set();
       this.loading = false;
       this.error = "No hass object";
       this.host.requestUpdate();
@@ -296,6 +299,7 @@ export class DataController implements ReactiveController {
     const fetchStart = performanceNow();
 
     this.series = [];
+    this.changedSourceIds = new Set();
     this.loading = true;
     this.error = "";
     this._beginLoad(session, sources);
@@ -313,11 +317,12 @@ export class DataController implements ReactiveController {
       session.sources,
       start,
       end,
-      (partial) => {
+      (partial, changedSourceIds) => {
         if (!this._isCurrentSession(session)) return;
         const updateStart = performanceNow();
         const nextPartial = this._availableSessionSeries(session, hass, start, end, partial);
         this.series = this._mergeSeries(this.series.filter((series) => !session.sources.some((source) => source.id === series.source.id)), nextPartial);
+        this.changedSourceIds = new Set(changedSourceIds);
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
         }
@@ -350,6 +355,7 @@ export class DataController implements ReactiveController {
           if (!seriesContentEquals(this.series, mergedSeries)) {
             this.series = mergedSeries;
           }
+          this.changedSourceIds = new Set();
           for (const item of nextSeries) {
             session.sourceStates.set(item.source.id, "ready");
           }
@@ -386,6 +392,7 @@ export class DataController implements ReactiveController {
   setImportedSeries(series: HistorySeries[], start: Date, end: Date): void {
     this._cancelSession();
     this.series = series;
+    this.changedSourceIds = new Set(series.map((item) => item.source.id));
     this.loading = false;
     this.error = "";
     this._prevKey = `${series.map((item) => item.source.id).join("|")}|${start.getTime()}|${end.getTime()}`;
@@ -394,9 +401,16 @@ export class DataController implements ReactiveController {
 
   setError(error: string): void {
     this._cancelSession();
+    this.changedSourceIds = new Set();
     this.loading = false;
     this.error = error;
     this.host.requestUpdate();
+  }
+
+  clearChangedSourceIds(): void {
+    if (this.changedSourceIds.size === 0) return;
+
+    this.changedSourceIds = new Set();
   }
 
   addSources(
@@ -433,6 +447,7 @@ export class DataController implements ReactiveController {
       const availableSeries = this._availableSessionSeries(session, hass, start, end, []);
       if (availableSeries.length > 0) {
         this._mergePartial(availableSeries);
+        this.changedSourceIds = new Set(availableSeries.map((item) => item.source.id));
         for (const item of availableSeries) {
           session.sourceStates.set(item.source.id, "partial");
         }
@@ -467,11 +482,12 @@ export class DataController implements ReactiveController {
       fetchSources,
       start,
       end,
-      (partial) => {
+      (partial, changedSourceIds) => {
         if (!this._isCurrentSession(session)) return;
         const mergeStart = performanceNow();
         const nextPartial = this._availableSessionSeries(session, hass, start, end, partial);
         this._mergePartial(nextPartial);
+        this.changedSourceIds = new Set(changedSourceIds);
         for (const item of nextPartial) {
           session.sourceStates.set(item.source.id, "partial");
         }
@@ -504,6 +520,7 @@ export class DataController implements ReactiveController {
           if (!seriesContentEquals(this.series, mergedSeries)) {
             this.series = mergedSeries;
           }
+          this.changedSourceIds = new Set();
           for (const item of nextResults) {
             session.sourceStates.set(item.source.id, "ready");
           }
@@ -570,6 +587,7 @@ export class DataController implements ReactiveController {
 
     if (changed) {
       this.series = nextSeries;
+      this.changedSourceIds = new Set();
       this.host.requestUpdate();
     }
   }
@@ -599,6 +617,7 @@ export class DataController implements ReactiveController {
     const removed = new Set(sourceIds);
 
     this.series = this.series.filter((s) => !removed.has(s.source.id));
+    this.changedSourceIds = new Set();
     for (const sourceId of sourceIds) {
       this._session?.sourceStates.delete(sourceId);
     }

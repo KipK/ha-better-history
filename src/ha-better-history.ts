@@ -884,6 +884,7 @@ export class HaBetterHistory extends LitElement {
     }
     this._emitGraphVisibilityState();
     this._animateClipPaths();
+    this._data.clearChangedSourceIds();
     this._wasLoading = this._data.loading;
     this._suppressLiveRangeAnimation = false;
   }
@@ -1243,12 +1244,21 @@ export class HaBetterHistory extends LitElement {
     return Number.isFinite(targetX) ? targetX : 0;
   }
 
-  private _shouldAnimateLine(line: NumericLineRenderData, targetX = this._lineTargetX(line)): boolean {
-    const prevX = this._prevClipX.get(line.id) ?? 0;
+  private _lineDomKey(lineId: string, graphIndex: number): string {
+    return `${graphIndex}:${lineId}`;
+  }
+
+  private _safeLineDomId(lineDomKey: string): string {
+    return lineDomKey.replace(/[^a-zA-Z0-9]/g, "_");
+  }
+
+  private _shouldAnimateLine(line: NumericLineRenderData, lineDomKey: string, targetX = this._lineTargetX(line)): boolean {
+    const prevX = this._prevClipX.get(lineDomKey) ?? 0;
 
     return this._data.loading
       && !this._suppressLineAnimation
       && !this._suppressLiveRangeAnimation
+      && this._data.changedSourceIds.has(line.id)
       && targetX > prevX;
   }
 
@@ -1294,7 +1304,7 @@ export class HaBetterHistory extends LitElement {
     return graphCount * (GRAPH_TOP + 18 + 16) + legendHeight + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
   }
 
-  private _renderGraphGroup(group: GraphGroup): TemplateResult {
+  private _renderGraphGroup(group: GraphGroup, graphIndex: number): TemplateResult {
     const showLegend = this._resolved?.showLegend ?? true;
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
@@ -1337,12 +1347,13 @@ export class HaBetterHistory extends LitElement {
                 : nothing}
               <defs>
                 ${group.lines.map((line) => {
-                  const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                  const lineDomKey = this._lineDomKey(line.id, graphIndex);
+                  const safeId = this._safeLineDomId(lineDomKey);
                   const clipId = `clip-${safeId}`;
                   const rectId = `rect-${safeId}`;
                   const targetX = this._lineTargetX(line);
-                  const initialX = this._shouldAnimateLine(line, targetX)
-                    ? this._prevClipX.get(line.id) ?? 0
+                  const initialX = this._shouldAnimateLine(line, lineDomKey, targetX)
+                    ? this._prevClipX.get(lineDomKey) ?? 0
                     : targetX;
                   return svg`
                     <clipPath id=${clipId}>
@@ -1359,12 +1370,13 @@ export class HaBetterHistory extends LitElement {
               )}
               ${group.lines.map(
                 (line) => {
-                  const safeId = line.id.replace(/[^a-zA-Z0-9]/g, "_");
+                  const lineDomKey = this._lineDomKey(line.id, graphIndex);
+                  const safeId = this._safeLineDomId(lineDomKey);
                   const clipId = `clip-${safeId}`;
                   const targetX = this._lineTargetX(line);
-                  const needAnim = this._shouldAnimateLine(line, targetX);
+                  const needAnim = this._shouldAnimateLine(line, lineDomKey, targetX);
 
-                  return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
+                  return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-line-dom-key=${lineDomKey} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
                 }
               )}
               ${group.segments.map(
@@ -1446,18 +1458,19 @@ export class HaBetterHistory extends LitElement {
 
     root.querySelectorAll<SVGPolylineElement>("polyline[data-line-id]").forEach((poly) => {
       const lineId = poly.getAttribute("data-line-id");
+      const lineDomKey = poly.getAttribute("data-line-dom-key") ?? lineId;
       const targetX = Number(poly.getAttribute("data-target-x"));
-      if (!lineId || !Number.isFinite(targetX)) return;
+      if (!lineId || !lineDomKey || !Number.isFinite(targetX)) return;
 
-      const prevX = this._prevClipX.get(lineId) ?? 0;
-      const safeId = lineId.replace(/[^a-zA-Z0-9]/g, "_");
+      const prevX = this._prevClipX.get(lineDomKey) ?? 0;
+      const safeId = this._safeLineDomId(lineDomKey);
       const rect = root.querySelector(`#rect-${safeId}`);
 
       if (rect instanceof SVGRectElement) {
         if (poly.getAttribute("data-animate-clip") !== "true") {
           rect.style.removeProperty("transition");
           rect.setAttribute("width", targetX.toString());
-          this._prevClipX.set(lineId, targetX);
+          this._prevClipX.set(lineDomKey, targetX);
           return;
         }
 
@@ -1472,7 +1485,7 @@ export class HaBetterHistory extends LitElement {
         rect.style.setProperty("transition", "width 0.9s cubic-bezier(0.25, 0.1, 0.25, 1)");
         rect.setAttribute("width", targetX.toString());
 
-        this._prevClipX.set(lineId, targetX);
+        this._prevClipX.set(lineDomKey, targetX);
       }
 
       poly.removeAttribute("data-animate-clip");
@@ -1523,7 +1536,7 @@ export class HaBetterHistory extends LitElement {
                 @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
                 @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
-                ${groups.map((g) => this._renderGraphGroup(g))}
+                ${groups.map((g, index) => this._renderGraphGroup(g, index))}
                 ${showTooltip ? this._tooltip.renderTooltip() : nothing}
               </div>`
           : this._data.loading
