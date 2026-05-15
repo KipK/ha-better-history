@@ -24,6 +24,7 @@ export interface RenderableSeries {
   scaleMode: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  scalePreference: "auto" | "primary" | "secondary";
   lineMode: BetterHistoryLineMode;
   lineWidth: string;
   valueType: HistoryValueType;
@@ -527,6 +528,29 @@ function scaleGroupKeyFor(series: RenderableSeries): string {
   return series.valueType === "boolean" ? "group:boolean" : series.scaleGroupKey;
 }
 
+function unitKey(unit: string | undefined): string {
+  return unit && unit.trim() !== "" ? unit : "__unitless__";
+}
+
+function graphKeyForSeriesUnitGroup(series: RenderableSeries, groupSeries: RenderableSeries[]): string {
+  const sourceGraphKey = scaleGroupKeyFor(series);
+  if (sourceGraphKey === "group:boolean") return sourceGraphKey;
+
+  const units: string[] = [];
+
+  for (const item of groupSeries) {
+    const unit = unitKey(item.unit);
+    if (!units.includes(unit)) units.push(unit);
+  }
+
+  const unitIndex = units.indexOf(unitKey(series.unit));
+  if (unitIndex < 0 || units.length <= 2) return sourceGraphKey;
+
+  return unitIndex < 2
+    ? sourceGraphKey
+    : `${sourceGraphKey}::unit-graph:${Math.floor(unitIndex / 2) + 1}`;
+}
+
 function seriesForVisibleScaleBounds(
   allSeries: RenderableSeries[],
   visibleSeries: RenderableSeries[],
@@ -790,10 +814,12 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     const leftScale = graphScales.find((scale) => scale.axis === "left") ?? graphScales[0];
     const rightScale = graphScales.find((scale) => scale.axis === "right");
     const graphIds = new Set(graphScales.flatMap((scale) => [...scale.ids]));
-    const allNumericGraph = data.allSeries.filter((s) =>
+    const sourceGraphKey = graphScales[0]?.sourceGraphKey ?? graphKey;
+    const sourceGroupSeries = data.allSeries.filter((s) =>
       (s.valueType === "number" || s.valueType === "boolean") &&
-      scaleGroupKeyFor(s) === graphKey
+      scaleGroupKeyFor(s) === sourceGraphKey
     );
+    const allNumericGraph = sourceGroupSeries.filter((s) => graphKeyForSeriesUnitGroup(s, sourceGroupSeries) === graphKey);
     const visibleNumeric = data.visibleSeries.filter((s) => graphIds.has(s.id));
     const visibleGroup = i === 0 ? [...visibleNumeric, ...visibleNonNumeric] : visibleNumeric;
     const allGroup = i === 0

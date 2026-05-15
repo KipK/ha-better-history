@@ -622,7 +622,8 @@ function resolvedSeriesToPickerSource(series: ResolvedSeries): HistorySource {
     label: series.label,
     path: series.attribute,
     valueType: series.valueType,
-    unit: series.unit
+    unit: series.unit,
+    scalePreference: series.scalePreference
   };
 }
 

@@ -13,7 +13,8 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
     label: s.label,
     path: s.attribute,
     valueType: s.valueType,
-    unit: s.unit
+    unit: s.unit,
+    scalePreference: s.scalePreference
   };
 }
 
@@ -56,6 +57,10 @@ function normalizeLineWidth(lineWidth: number | string | undefined): string {
   }
 
   return DEFAULT_LINE_WIDTH;
+}
+
+function normalizeScalePreference(preference: SeriesConfig["scalePreference"]): "auto" | "primary" | "secondary" {
+  return preference === "primary" || preference === "secondary" ? preference : "auto";
 }
 
 function seriesId(entity: string, attribute?: string[]): string {
@@ -135,6 +140,7 @@ function seriesFromConfig(
     scaleMode: cfg.scaleMode ?? "auto",
     scaleMin: cfg.scaleMin,
     scaleMax: cfg.scaleMax,
+    scalePreference: normalizeScalePreference(cfg.scalePreference),
     lineMode: normalizeLineMode(cfg.lineMode ?? defaultLineMode),
     lineWidth: normalizeLineWidth(cfg.lineWidth ?? defaultLineWidth),
     valueType: vt
@@ -161,6 +167,7 @@ function seriesFromEntityId(
       color: paletteColor(index),
       scaleGroupKey: `series:${id}`,
       scaleMode: "auto",
+      scalePreference: "auto",
       lineMode: normalizeLineMode(defaultLineMode),
       lineWidth: normalizeLineWidth(defaultLineWidth),
       valueType: "number"
@@ -180,6 +187,7 @@ function seriesFromEntityId(
     unit: source.unit,
     scaleGroupKey: scaleGroupKey(source.id, source.unit, undefined, source.valueType),
     scaleMode: "auto",
+    scalePreference: "auto",
     lineMode: normalizeLineMode(defaultLineMode),
     lineWidth: normalizeLineWidth(defaultLineWidth),
     valueType: source.valueType
@@ -227,6 +235,7 @@ function expandClimateSeries(
       unit: attrUnit,
       scaleGroupKey: scaleGroupKey(id, attrUnit, scaleGroup, vt),
       scaleMode: "auto" as const,
+      scalePreference: s.scalePreference,
       lineMode: s.lineMode,
       lineWidth: s.lineWidth,
       valueType: vt

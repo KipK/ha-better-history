@@ -4,6 +4,7 @@ import type { HistoryValueType } from "../data/value-type.js";
 export interface NumericScale {
   ids: Set<string>;
   graphKey: string;
+  sourceGraphKey: string;
   axis: "left" | "right";
   min: number;
   max: number;
@@ -21,6 +22,7 @@ interface ScaleInput {
   scaleMode: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  scalePreference: "auto" | "primary" | "secondary";
   valueType: HistoryValueType;
   points: HistoryPoint[];
 }
@@ -146,6 +148,7 @@ type SeriesRange = {
   min: number;
   max: number;
   precision: number;
+  scalePreference: "auto" | "primary" | "secondary";
   order: number;
 };
 
@@ -154,8 +157,9 @@ type GroupAccum = {
   series: SeriesRange[];
 };
 
-const SPLIT_MIN_RATIO = 0.15;
-const SPLIT_SPAN_RATIO = 8;
+const AUTO_SPLIT_MIN_RATIO = 0.1;
+const AUTO_SPLIT_SPAN_RATIO = 12;
+const AUTO_SPLIT_GAIN_RATIO = 2.5;
 
 function rangeSpan(series: SeriesRange): number {
   return Math.max(series.max - series.min, 1e-9);
@@ -181,20 +185,6 @@ function unitKey(unit: string | undefined): string {
   return unit && unit.trim() !== "" ? unit : "__unitless__";
 }
 
-function splitByUnit(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] | undefined {
-  if (series.length < 2) return undefined;
-
-  const firstUnit = unitKey(series[0].unit);
-  const hasUnitMismatch = series.some((item) => unitKey(item.unit) !== firstUnit);
-
-  if (!hasUnitMismatch) return undefined;
-
-  const left = series.filter((item) => unitKey(item.unit) === firstUnit);
-  const right = series.filter((item) => unitKey(item.unit) !== firstUnit);
-
-  return left.length > 0 && right.length > 0 ? [left, right] : undefined;
-}
-
 function shouldSplitGroup(series: SeriesRange[]): boolean {
   if (series.length < 2) return false;
 
@@ -207,9 +197,13 @@ function shouldSplitGroup(series: SeriesRange[]): boolean {
 
   const minSpan = Math.min(...spans);
   const maxSpan = Math.max(...spans);
-  const minUsage = Math.min(...spans.map((span) => span / globalSpan));
+  const smallSeries = spans.find((span) => span / globalSpan <= AUTO_SPLIT_MIN_RATIO);
+  if (smallSeries === undefined) return false;
 
-  return minUsage <= SPLIT_MIN_RATIO && (maxSpan / Math.max(minSpan, 1e-9) >= SPLIT_SPAN_RATIO || globalSpan / minSpan >= SPLIT_SPAN_RATIO);
+  const gain = globalSpan / smallSeries;
+
+  return gain >= AUTO_SPLIT_GAIN_RATIO
+    && (maxSpan / Math.max(minSpan, 1e-9) >= AUTO_SPLIT_SPAN_RATIO || globalSpan / minSpan >= AUTO_SPLIT_SPAN_RATIO);
 }
 
 function pickAxisAnchors(series: SeriesRange[]): [SeriesRange, SeriesRange] {
@@ -232,10 +226,16 @@ function pickAxisAnchors(series: SeriesRange[]): [SeriesRange, SeriesRange] {
   return bestLeft.order <= bestRight.order ? [bestLeft, bestRight] : [bestRight, bestLeft];
 }
 
-function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
-  const unitSplit = splitByUnit(series);
+function splitSameUnitSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+  const forcedLeft = series.filter((item) => item.scalePreference === "primary");
+  const forcedRight = series.filter((item) => item.scalePreference === "secondary");
+  const auto = series.filter((item) => item.scalePreference === "auto");
 
-  if (unitSplit) return unitSplit;
+  if (forcedRight.length > 0 && forcedRight.length < series.length) {
+    return [[...forcedLeft, ...auto], forcedRight];
+  }
+  if (forcedLeft.length > 0) return [series, []];
+
   if (!shouldSplitGroup(series)) return [series, []];
 
   const [leftAnchor, rightAnchor] = pickAxisAnchors(series);
@@ -257,8 +257,50 @@ function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]]
   return [left, right];
 }
 
+function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+  const unitGroups = groupByUnit(series);
+
+  if (unitGroups.length >= 2) {
+    return [unitGroups[0].series, unitGroups[1].series];
+  }
+
+  return splitSameUnitSeries(series);
+}
+
+function groupByUnit(series: SeriesRange[]): Array<{ unit: string; series: SeriesRange[] }> {
+  const groups: Array<{ unit: string; series: SeriesRange[] }> = [];
+
+  for (const item of series) {
+    const unit = unitKey(item.unit);
+    const group = groups.find((entry) => entry.unit === unit);
+
+    if (group) {
+      group.series.push(item);
+    } else {
+      groups.push({ unit, series: [item] });
+    }
+  }
+
+  return groups;
+}
+
+function splitGraphUnits(series: SeriesRange[]): SeriesRange[][] {
+  const unitGroups = groupByUnit(series);
+
+  if (unitGroups.length <= 2) return [series];
+
+  const result: SeriesRange[][] = [];
+
+  for (let i = 0; i < unitGroups.length; i += 2) {
+    result.push(unitGroups.slice(i, i + 2).flatMap((group) => group.series));
+  }
+
+  return result;
+}
+
 function scaleFromSeries(
   graphKey: string,
+  sourceGraphKey: string,
   axis: "left" | "right",
   series: SeriesRange[],
   top: number
@@ -272,6 +314,7 @@ function scaleFromSeries(
   return {
     ids: new Set(series.map((s) => s.id)),
     graphKey,
+    sourceGraphKey,
     axis,
     min: range.min,
     max: range.max,
@@ -317,16 +360,31 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
       if (s.scaleMax !== undefined) dataMax = Math.max(dataMax, s.scaleMax);
     }
 
-    group.series.push({ id: s.id, unit: s.unit, min: dataMin, max: dataMax, precision: prec, order });
+    group.series.push({
+      id: s.id,
+      unit: s.unit,
+      min: dataMin,
+      max: dataMax,
+      precision: prec,
+      scalePreference: s.scalePreference,
+      order
+    });
   }
 
-  return groups.flatMap((group, index) => {
-    const [left, right] = group.key === "group:boolean" ? [group.series, []] : splitGroupSeries(group.series);
-    const top = GRAPH_TOP + index * GRAPH_STEP;
-    const leftScale = scaleFromSeries(group.key, "left", left, top);
+  let graphOffset = 0;
 
-    return right.length > 0
-      ? [leftScale, scaleFromSeries(group.key, "right", right, top)]
-      : [leftScale];
+  return groups.flatMap((group) => {
+    const unitGraphs = group.key === "group:boolean" ? [group.series] : splitGraphUnits(group.series);
+
+    return unitGraphs.flatMap((graphSeries, graphIndex) => {
+      const graphKey = graphIndex === 0 ? group.key : `${group.key}::unit-graph:${graphIndex + 1}`;
+      const [left, right] = group.key === "group:boolean" ? [graphSeries, []] : splitGroupSeries(graphSeries);
+      const top = GRAPH_TOP + graphOffset++ * GRAPH_STEP;
+      const leftScale = scaleFromSeries(graphKey, group.key, "left", left, top);
+
+      return right.length > 0
+        ? [leftScale, scaleFromSeries(graphKey, group.key, "right", right, top)]
+        : [leftScale];
+    });
   });
 }

@@ -2,6 +2,7 @@ import type { HistoryValueType } from "../data/value-type.js";
 
 export type AttributeUnitMap = Record<string, string>;
 export type BetterHistoryLineMode = "stair" | "line" | "column";
+export type ScalePreference = "auto" | "primary" | "secondary";
 
 export interface SeriesConfig {
   entity: string;
@@ -16,6 +17,7 @@ export interface SeriesConfig {
   scaleMode?: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  scalePreference?: ScalePreference;
   lineMode?: BetterHistoryLineMode;
   lineWidth?: number | string;
 }
@@ -62,6 +64,7 @@ export interface ResolvedSeries {
   scaleMode: "auto" | "manual";
   scaleMin?: number;
   scaleMax?: number;
+  scalePreference: ScalePreference;
   lineMode: BetterHistoryLineMode;
   lineWidth: string;
   valueType: HistoryValueType;

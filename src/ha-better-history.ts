@@ -124,6 +124,7 @@ interface GraphGroupRenderCache {
 interface ImportedSeriesMeta {
   color?: string;
   lineMode?: BetterHistoryLineMode;
+  scalePreference?: "auto" | "primary" | "secondary";
 }
 
 interface BetterHistorySeriesExportV1 {
@@ -190,10 +191,13 @@ export class HaBetterHistory extends LitElement {
   @state() private _path: string[] = [];
   @state() private _selectedSources: HistorySource[] = [];
   @state() private _removedConfigSourceIds: string[] = [];
+  @state() private _scalePreferences: Record<string, "auto" | "primary" | "secondary"> = {};
   @state() private _customEntityIds: string[] = [];
   @state() private _entityPickerOpen = false;
   @state() private _datePickerOpen = false;
   @state() private _draggingSourceId?: string;
+  @state() private _draggingAxisSeriesId?: string;
+  @state() private _axisDropTarget?: "left" | "right";
   @state() private _sourceSettingsSourceId?: string;
 
   private readonly _data = new DataController(this);
@@ -755,7 +759,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "_scalePreferences", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -1008,6 +1012,7 @@ export class HaBetterHistory extends LitElement {
       unit: source.unit,
       scaleGroupKey,
       scaleMode: "auto",
+      scalePreference: this._effectiveScalePreference(source.id, source.scalePreference ?? this._importedSeriesMeta.get(source.id)?.scalePreference),
       lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
       lineWidth: this._defaultLineWidth(),
       valueType: source.valueType,
@@ -1033,6 +1038,10 @@ export class HaBetterHistory extends LitElement {
     }
 
     return "2.5";
+  }
+
+  private _effectiveScalePreference(seriesId: string, fallback: "auto" | "primary" | "secondary" | undefined): "auto" | "primary" | "secondary" {
+    return this._scalePreferences[seriesId] ?? fallback ?? "auto";
   }
 
   private _showImportButton(): boolean {
@@ -1086,6 +1095,7 @@ export class HaBetterHistory extends LitElement {
           scaleMode: resolved.scaleMode,
           scaleMin: resolved.scaleMin,
           scaleMax: resolved.scaleMax,
+          scalePreference: this._effectiveScalePreference(resolved.id, resolved.scalePreference),
           lineMode: this._runtimeLineMode ?? resolved.lineMode,
           lineWidth: resolved.lineWidth,
           valueType: resolved.valueType,
@@ -1144,6 +1154,7 @@ export class HaBetterHistory extends LitElement {
         source.scaleMode,
         source.scaleMin ?? "",
         source.scaleMax ?? "",
+        this._effectiveScalePreference(source.id, source.scalePreference),
         source.lineMode,
         source.lineWidth,
         source.valueType
@@ -1155,6 +1166,7 @@ export class HaBetterHistory extends LitElement {
           effectiveSource.kind,
           effectiveSource.unit ?? "",
           sourceGroup(effectiveSource) ?? "",
+          this._effectiveScalePreference(effectiveSource.id, effectiveSource.scalePreference),
           effectiveSource.valueType,
           this._defaultLineMode(),
           this._defaultLineWidth()
@@ -1312,10 +1324,12 @@ export class HaBetterHistory extends LitElement {
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
-    const leftAxisColors = showScale ? this._axisSeriesColors(group, "left") : [];
-    const rightAxisColors = showScale ? this._axisSeriesColors(group, "right") : [];
-    const leftGutter = showScale ? axisGutter(group.yLabels, leftAxisColors.length) : "0px";
-    const rightGutter = showScale ? axisGutter(group.rightYLabels, rightAxisColors.length) : "0px";
+    const leftAxisDots = showScale ? this._axisSeriesDots(group, "left") : [];
+    const rightAxisDots = showScale ? this._axisSeriesDots(group, "right") : [];
+    const leftMarkerCount = leftAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
+    const rightMarkerCount = rightAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
+    const leftGutter = showScale ? axisGutter(group.yLabels, leftMarkerCount) : "0px";
+    const rightGutter = showScale ? axisGutter(group.rightYLabels, rightMarkerCount) : "0px";
     const plotBottom = GRAPH_TOP + group.graphHeight;
     const xLabelTop = plotBottom + 3;
     const segmentStartY = plotBottom + X_AXIS_LABEL_SPACE + 6;
@@ -1324,7 +1338,7 @@ export class HaBetterHistory extends LitElement {
       <div class="graph-section">
         <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
           <div class="axis-labels axis-labels--left" style="height:${group.canvasHeight}px">
-            ${showScale ? this._renderAxisColorDots(leftAxisColors, "left") : nothing}
+            ${showScale ? this._renderAxisColorDots(group, leftAxisDots, "left") : nothing}
             ${showScale
               ? group.yLabels.map(
                   (label) => html`<span class="y-axis-label y-axis-label--left" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
@@ -1428,7 +1442,7 @@ export class HaBetterHistory extends LitElement {
               : nothing}
           </div>
           <div class="axis-labels axis-labels--right" style="height:${group.canvasHeight}px">
-            ${showScale ? this._renderAxisColorDots(rightAxisColors, "right") : nothing}
+            ${showScale ? this._renderAxisColorDots(group, rightAxisDots, "right") : nothing}
             ${showScale
               ? group.rightYLabels.map(
                   (label) => html`<span class="y-axis-label y-axis-label--right" style="top:${label.y.toFixed(1)}px;">${label.value}</span>`
@@ -1459,32 +1473,136 @@ export class HaBetterHistory extends LitElement {
     `;
   }
 
-  private _axisSeriesColors(group: GraphGroup, axis: "left" | "right"): string[] {
+  private _axisSeriesDots(group: GraphGroup, axis: "left" | "right"): RenderableSeries[] {
     const axisIds = new Set(group.scales.filter((scale) => scale.axis === axis).flatMap((scale) => [...scale.ids]));
-    const seen = new Set<string>();
-    const colors: string[] = [];
 
-    for (const series of group.series) {
-      if ((series.valueType !== "number" && series.valueType !== "boolean") || !axisIds.has(series.id)) continue;
-
-      const key = series.color.trim().toLowerCase();
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      colors.push(series.color);
-    }
-
-    return colors;
+    return group.series.filter((series) =>
+      (series.valueType === "number" || series.valueType === "boolean") && axisIds.has(series.id)
+    );
   }
 
-  private _renderAxisColorDots(colors: string[], side: "left" | "right"): TemplateResult | typeof nothing {
-    if (colors.length === 0) return nothing;
+  private _renderAxisColorDots(
+    group: GraphGroup,
+    series: RenderableSeries[],
+    side: "left" | "right"
+  ): TemplateResult | typeof nothing {
+    const draggingAxisSeriesId = this._draggingAxisSeriesId;
+    if (series.length === 0 && !draggingAxisSeriesId) return nothing;
+    const dropState = this._axisDropTarget === side && draggingAxisSeriesId
+      ? this._canDropAxisSeries(group, draggingAxisSeriesId, side) ? "valid" : "invalid"
+      : undefined;
+    const dropPreviewColor = dropState === "valid" && draggingAxisSeriesId
+      ? group.series.find((item) => item.id === draggingAxisSeriesId)?.color
+      : undefined;
 
     return html`
-      <span class="axis-color-dots axis-color-dots--${side}" style="top:${PLOT_TOP - 12}px;">
-        ${colors.map((color) => html`<span class="axis-color-dot" style="background:${color};"></span>`)}
+      <span
+        class="axis-color-dots axis-color-dots--${side}"
+        style="top:${PLOT_TOP - 12}px;"
+        data-drop-state=${dropState ?? nothing}
+        @dragover=${(event: DragEvent) => this._onAxisDragOver(side, event)}
+        @dragleave=${() => this._onAxisDragLeave(side)}
+        @drop=${(event: DragEvent) => this._onAxisDrop(group, side, event)}
+      >
+        ${dropPreviewColor && side === "left"
+          ? html`<span class="axis-drop-preview"><span class="axis-color-dot" style="background:${dropPreviewColor};"></span></span>`
+          : nothing}
+        ${series.map((item) => {
+          const draggable = this._canDragAxisSeries(group, item.id, side);
+          return html`
+            <span
+              class="axis-color-dot-hit axis-color-dot-hit--${side}"
+              style="color:${item.color};"
+              draggable=${draggable}
+              ?dragging=${this._draggingAxisSeriesId === item.id}
+              title=${item.label}
+              @dragstart=${(event: DragEvent) => this._onAxisDotDragStart(group, item.id, side, event)}
+              @dragend=${() => this._onAxisDotDragEnd()}
+            >
+              <span class="axis-color-dot" style="background:${item.color};"></span>
+            </span>
+          `;
+        })}
+        ${dropPreviewColor && side === "right"
+          ? html`<span class="axis-drop-preview"><span class="axis-color-dot" style="background:${dropPreviewColor};"></span></span>`
+          : nothing}
       </span>
     `;
+  }
+
+  private _axisDraggableSeries(group: GraphGroup): RenderableSeries[] {
+    const numeric = group.series.filter((series) => series.valueType === "number" || series.valueType === "boolean");
+    const units = new Set(numeric.map((series) => series.unit ?? ""));
+
+    return numeric.length >= 2 && units.size === 1 ? numeric : [];
+  }
+
+  private _canDragAxisSeries(group: GraphGroup, seriesId: string, side: "left" | "right"): boolean {
+    return this._canDropAxisSeries(group, seriesId, side === "left" ? "right" : "left");
+  }
+
+  private _canDropAxisSeries(group: GraphGroup, seriesId: string, target: "left" | "right"): boolean {
+    const draggable = this._axisDraggableSeries(group);
+    const source = draggable.find((series) => series.id === seriesId);
+    if (!source) return false;
+
+    const targetScale = group.scales.find((scale) => scale.axis === target);
+    if (!targetScale) return target === "right";
+
+    const targetSeries = group.series.filter((series) => targetScale.ids.has(series.id));
+    return targetSeries.every((series) => (series.unit ?? "") === (source.unit ?? ""));
+  }
+
+  private _onAxisDotDragStart(group: GraphGroup, seriesId: string, side: "left" | "right", event: DragEvent): void {
+    if (!this._canDragAxisSeries(group, seriesId, side)) {
+      event.preventDefault();
+      return;
+    }
+
+    this._draggingAxisSeriesId = seriesId;
+    event.dataTransfer?.setData("text/plain", seriesId);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+    }
+  }
+
+  private _onAxisDotDragEnd(): void {
+    this._draggingAxisSeriesId = undefined;
+    this._axisDropTarget = undefined;
+  }
+
+  private _onAxisDragOver(target: "left" | "right", event: DragEvent): void {
+    const seriesId = this._draggingAxisSeriesId ?? event.dataTransfer?.getData("text/plain");
+    if (!seriesId) return;
+
+    this._axisDropTarget = target;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+  }
+
+  private _onAxisDragLeave(target: "left" | "right"): void {
+    if (this._axisDropTarget === target) {
+      this._axisDropTarget = undefined;
+    }
+  }
+
+  private _onAxisDrop(group: GraphGroup, target: "left" | "right", event: DragEvent): void {
+    const seriesId = this._draggingAxisSeriesId ?? event.dataTransfer?.getData("text/plain");
+    if (!seriesId) return;
+
+    event.preventDefault();
+    this._axisDropTarget = undefined;
+
+    if (!this._canDropAxisSeries(group, seriesId, target)) {
+      return;
+    }
+
+    this._scalePreferences = {
+      ...this._scalePreferences,
+      [seriesId]: target === "right" ? "secondary" : "primary"
+    };
   }
 
   private _animateClipPaths(): void {
@@ -1911,6 +2029,7 @@ export class HaBetterHistory extends LitElement {
         unit: item.unit,
         valueType: item.valueType,
         lineMode: item.lineMode,
+        scalePreference: item.scalePreference,
         color: item.color,
         points: item.points
           .filter((point) => point.time >= viewRange.start.getTime() && point.time <= viewRange.end.getTime())
@@ -2037,7 +2156,8 @@ export class HaBetterHistory extends LitElement {
         label,
         path: attribute?.split("."),
         valueType,
-        unit: typeof record.unit === "string" ? record.unit : undefined
+        unit: typeof record.unit === "string" ? record.unit : undefined,
+        scalePreference: record.scalePreference === "primary" || record.scalePreference === "secondary" ? record.scalePreference : "auto"
       };
       const parsedPoints = points
         .map((point) => this._parseImportedPoint(point, valueType))
@@ -2047,7 +2167,8 @@ export class HaBetterHistory extends LitElement {
       series.push({ source, points: parsedPoints });
       meta.set(id, {
         color: typeof record.color === "string" && record.color.trim() !== "" ? record.color : undefined,
-        lineMode: record.lineMode === "line" || record.lineMode === "column" || record.lineMode === "stair" ? record.lineMode : undefined
+        lineMode: record.lineMode === "line" || record.lineMode === "column" || record.lineMode === "stair" ? record.lineMode : undefined,
+        scalePreference: record.scalePreference === "primary" || record.scalePreference === "secondary" ? record.scalePreference : undefined
       });
     }
 
@@ -2507,16 +2628,17 @@ export class HaBetterHistory extends LitElement {
         label: attribute,
         path: [attribute],
         valueType: attribute === "hvac_action" ? "string" : "number",
-        unit: CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) ? tempUnit : undefined
+        unit: CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) ? tempUnit : undefined,
+        scalePreference: source.scalePreference
       };
       const sourceForAttribute = attrSource ?? fallbackSource;
       const group = sourceGroup(source);
       if (CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute) && tempUnit) {
-        return { ...sourceForAttribute, unit: tempUnit, group };
+        return { ...sourceForAttribute, unit: tempUnit, group, scalePreference: source.scalePreference };
       }
       return CLIMATE_TEMPERATURE_ATTRIBUTES.has(attribute)
-        ? { ...sourceForAttribute, group }
-        : sourceForAttribute;
+        ? { ...sourceForAttribute, group, scalePreference: source.scalePreference }
+        : { ...sourceForAttribute, scalePreference: source.scalePreference };
     });
 
     return [this._sourceWithAttributeUnit(source), ...attributeSources.map((item) => this._sourceWithAttributeUnit(item))];

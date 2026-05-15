@@ -17,6 +17,7 @@ export interface HistorySource {
   group?: string;
   /** @deprecated Use `group` instead. */
   scaleGroup?: string;
+  scalePreference?: "auto" | "primary" | "secondary";
 }
 
 export interface HistoryPoint {

@@ -250,26 +250,104 @@ export const chartStyles = css`
     position: absolute;
     display: flex;
     gap: 3px;
-    pointer-events: none;
+    min-width: 15px;
+    min-height: 24px;
+    align-items: center;
+    padding: 7px 9px;
+    border-radius: 14px;
+    pointer-events: auto;
     z-index: 2;
   }
 
   .axis-color-dots--left {
-    right: var(--axis-label-gap);
+    right: calc(var(--axis-label-gap) * -1 - 9px);
     justify-content: flex-end;
   }
 
   .axis-color-dots--right {
-    left: var(--axis-label-gap);
+    left: calc(var(--axis-label-gap) * -1 - 9px);
     justify-content: flex-start;
+  }
+
+  .axis-color-dot-hit {
+    position: relative;
+    display: inline-flex;
+    width: 7px;
+    height: 7px;
+    padding: 8px;
+    margin: -8px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex: 0 0 auto;
   }
 
   .axis-color-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    flex: 0 0 auto;
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 70%, transparent);
+    transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+  }
+
+  .axis-color-dot-hit[draggable="true"] {
+    cursor: grab;
+  }
+
+  .axis-color-dot-hit[draggable="true"]:hover .axis-color-dot {
+    transform: scale(1.85);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 70%, transparent),
+      0 0 0 4px color-mix(in srgb, currentColor 14%, transparent);
+  }
+
+  .axis-color-dot-hit[draggable="false"] {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .axis-color-dot-hit[dragging] {
+    cursor: grabbing;
+    opacity: 0.65;
+  }
+
+  .axis-color-dot-hit[dragging] .axis-color-dot {
+    transform: scale(1.85);
+  }
+
+  .axis-drop-preview {
+    display: inline-flex;
+    width: 7px;
+    height: 7px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    pointer-events: none;
+    animation: axis-drop-preview-in 120ms ease-out;
+  }
+
+  .axis-drop-preview .axis-color-dot {
+    opacity: 0.95;
+  }
+
+  @keyframes axis-drop-preview-in {
+    from {
+      opacity: 0;
+      transform: translateX(var(--axis-drop-preview-offset, 0)) scale(0.75);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+  }
+
+  .axis-color-dots--left {
+    --axis-drop-preview-offset: 6px;
+  }
+
+  .axis-color-dots--right {
+    --axis-drop-preview-offset: -6px;
   }
 
   .graph-canvas {
