@@ -112,6 +112,7 @@ interface ChartRenderCache {
   startTime: number;
   endTime: number;
   extendStairToEnd: boolean;
+  autoScaleSplit: boolean;
   containerWidth: number;
   data: ChartRenderData;
 }
@@ -162,6 +163,7 @@ export class HaBetterHistory extends LitElement {
   @property({ type: Boolean, attribute: "show-tooltip" }) showTooltip = true;
   @property({ type: Boolean, attribute: "show-grid" }) showGrid = true;
   @property({ type: Boolean, attribute: "show-scale" }) showScale = true;
+  @property({ type: Boolean, attribute: "auto-scale-split" }) autoScaleSplit = true;
   @property({ type: Boolean, attribute: "show-controls" }) showControls = true;
   @property() width?: string;
   @property() height?: string;
@@ -761,7 +763,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "_scalePreferences", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "_scalePreferences", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "autoScaleSplit", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -795,6 +797,7 @@ export class HaBetterHistory extends LitElement {
         showTooltip: this.showTooltip,
         showGrid: this.showGrid,
         showScale: this.showScale,
+        autoScaleSplit: this.autoScaleSplit,
         width: this.width,
         height: this.height,
         lineMode: this._effectiveLineMode(),
@@ -1186,6 +1189,7 @@ export class HaBetterHistory extends LitElement {
     const endTime = viewRange.end.getTime();
     const containerWidth = this._containerWidth;
     const extendStairToEnd = !this._data.loading;
+    const autoScaleSplit = this._resolved?.autoScaleSplit ?? true;
 
     if (
       cache &&
@@ -1195,6 +1199,7 @@ export class HaBetterHistory extends LitElement {
       cache.startTime === startTime &&
       cache.endTime === endTime &&
       cache.extendStairToEnd === extendStairToEnd &&
+      cache.autoScaleSplit === autoScaleSplit &&
       cache.containerWidth === containerWidth
     ) {
       return cache.data;
@@ -1212,7 +1217,8 @@ export class HaBetterHistory extends LitElement {
       timeBounds,
       this._resolved?.disableClimateOverlay ?? false,
       maxXTicks,
-      extendStairToEnd
+      extendStairToEnd,
+      autoScaleSplit
     );
     const chartBuildDurationMs = debugPerformance ? performanceNow() - chartBuildStart : 0;
 
@@ -1228,7 +1234,17 @@ export class HaBetterHistory extends LitElement {
       });
     }
 
-    this._chartRenderCache = { seriesRef: this._data.series, sourceKey, hiddenKey, startTime, endTime, extendStairToEnd, containerWidth, data };
+    this._chartRenderCache = {
+      seriesRef: this._data.series,
+      sourceKey,
+      hiddenKey,
+      startTime,
+      endTime,
+      extendStairToEnd,
+      autoScaleSplit,
+      containerWidth,
+      data
+    };
 
     return data;
   }

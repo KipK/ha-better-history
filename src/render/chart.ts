@@ -584,11 +584,12 @@ export function buildChartData(
   timeBounds: { start: number; end: number },
   disableClimateOverlay = false,
   maxXTicks = 12,
-  extendStairToEnd = true
+  extendStairToEnd = true,
+  autoScaleSplit = true
 ): ChartRenderData {
   const lineRenderOptions = { extendStairToEnd };
   const columnRenderOptions = { extendColumnToEnd: extendStairToEnd };
-  const numericScales = numericScalesFor(seriesForVisibleScaleBounds(allSeries, visibleSeries, timeBounds));
+  const numericScales = numericScalesFor(seriesForVisibleScaleBounds(allSeries, visibleSeries, timeBounds), { autoScaleSplit });
   const numericGraphCount = new Set(numericScales.map((scale) => scale.graphKey)).size;
   const plotBottom = plotBottomFor(numericGraphCount);
   const segmentCount = allSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean").length;

@@ -226,7 +226,11 @@ function pickAxisAnchors(series: SeriesRange[]): [SeriesRange, SeriesRange] {
   return bestLeft.order <= bestRight.order ? [bestLeft, bestRight] : [bestRight, bestLeft];
 }
 
-function splitSameUnitSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+export interface NumericScalesOptions {
+  autoScaleSplit?: boolean;
+}
+
+function splitSameUnitSeries(series: SeriesRange[], autoScaleSplit: boolean): [SeriesRange[], SeriesRange[]] {
   const forcedLeft = series.filter((item) => item.scalePreference === "primary");
   const forcedRight = series.filter((item) => item.scalePreference === "secondary");
   const auto = series.filter((item) => item.scalePreference === "auto");
@@ -236,7 +240,7 @@ function splitSameUnitSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange
   }
   if (forcedLeft.length > 0) return [series, []];
 
-  if (!shouldSplitGroup(series)) return [series, []];
+  if (!autoScaleSplit || !shouldSplitGroup(series)) return [series, []];
 
   const [leftAnchor, rightAnchor] = pickAxisAnchors(series);
   const left: SeriesRange[] = [];
@@ -257,14 +261,14 @@ function splitSameUnitSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange
   return [left, right];
 }
 
-function splitGroupSeries(series: SeriesRange[]): [SeriesRange[], SeriesRange[]] {
+function splitGroupSeries(series: SeriesRange[], autoScaleSplit: boolean): [SeriesRange[], SeriesRange[]] {
   const unitGroups = groupByUnit(series);
 
   if (unitGroups.length >= 2) {
     return [unitGroups[0].series, unitGroups[1].series];
   }
 
-  return splitSameUnitSeries(series);
+  return splitSameUnitSeries(series, autoScaleSplit);
 }
 
 function groupByUnit(series: SeriesRange[]): Array<{ unit: string; series: SeriesRange[] }> {
@@ -325,7 +329,8 @@ function scaleFromSeries(
   };
 }
 
-export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
+export function numericScalesFor(series: ScaleInput[], options: NumericScalesOptions = {}): NumericScale[] {
+  const autoScaleSplit = options.autoScaleSplit ?? true;
   const groups: GroupAccum[] = [];
 
   for (const [order, s] of series.entries()) {
@@ -378,7 +383,7 @@ export function numericScalesFor(series: ScaleInput[]): NumericScale[] {
 
     return unitGraphs.flatMap((graphSeries, graphIndex) => {
       const graphKey = graphIndex === 0 ? group.key : `${group.key}::unit-graph:${graphIndex + 1}`;
-      const [left, right] = group.key === "group:boolean" ? [graphSeries, []] : splitGroupSeries(graphSeries);
+      const [left, right] = group.key === "group:boolean" ? [graphSeries, []] : splitGroupSeries(graphSeries, autoScaleSplit);
       const top = GRAPH_TOP + graphOffset++ * GRAPH_STEP;
       const leftScale = scaleFromSeries(graphKey, group.key, "left", left, top);
 

@@ -36,6 +36,7 @@ export interface BetterHistoryConfig {
   showTooltip?: boolean;
   showGrid?: boolean;
   showScale?: boolean;
+  autoScaleSplit?: boolean;
   width?: string;
   height?: string;
   lineMode?: BetterHistoryLineMode;
@@ -79,6 +80,7 @@ export interface ResolvedConfig {
   showTooltip: boolean;
   showGrid: boolean;
   showScale: boolean;
+  autoScaleSplit: boolean;
   width: string;
   height: string | undefined;
   backgroundColor: string | undefined;
