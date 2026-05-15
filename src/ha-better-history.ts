@@ -1498,7 +1498,7 @@ export class HaBetterHistory extends LitElement {
     return html`
       <span
         class="axis-color-dots axis-color-dots--${side}"
-        style="top:${PLOT_TOP - 12}px;"
+        style="top:${PLOT_TOP - 17}px;"
         data-drop-state=${dropState ?? nothing}
         @dragover=${(event: DragEvent) => this._onAxisDragOver(side, event)}
         @dragleave=${() => this._onAxisDragLeave(side)}

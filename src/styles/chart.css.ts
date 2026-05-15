@@ -250,22 +250,22 @@ export const chartStyles = css`
     position: absolute;
     display: flex;
     gap: 3px;
-    min-width: 15px;
+    min-width: 20px;
     min-height: 24px;
     align-items: center;
-    padding: 7px 9px;
+    padding: 12px 14px;
     border-radius: 14px;
     pointer-events: auto;
     z-index: 2;
   }
 
   .axis-color-dots--left {
-    right: calc(var(--axis-label-gap) * -1 - 9px);
+    right: calc(var(--axis-label-gap) * -1 - 14px);
     justify-content: flex-end;
   }
 
   .axis-color-dots--right {
-    left: calc(var(--axis-label-gap) * -1 - 9px);
+    left: calc(var(--axis-label-gap) * -1 - 14px);
     justify-content: flex-start;
   }
 
@@ -274,8 +274,8 @@ export const chartStyles = css`
     display: inline-flex;
     width: 7px;
     height: 7px;
-    padding: 8px;
-    margin: -8px;
+    padding: 14px;
+    margin: -14px;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
@@ -303,7 +303,6 @@ export const chartStyles = css`
 
   .axis-color-dot-hit[draggable="false"] {
     cursor: default;
-    opacity: 0.55;
   }
 
   .axis-color-dot-hit[dragging] {
