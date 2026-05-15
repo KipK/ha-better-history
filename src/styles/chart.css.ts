@@ -292,6 +292,8 @@ export const chartStyles = css`
 
   .axis-color-dot-hit[draggable="true"] {
     cursor: grab;
+    touch-action: none;
+    -webkit-touch-callout: none;
   }
 
   .axis-color-dot-hit[draggable="true"]:hover .axis-color-dot {
@@ -347,6 +349,39 @@ export const chartStyles = css`
 
   .axis-color-dots--right {
     --axis-drop-preview-offset: -6px;
+  }
+
+  .axis-touch-drag-preview {
+    display: none;
+    position: fixed;
+    pointer-events: none;
+    z-index: 200;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--better-history-bg, var(--card-background-color, #1e1e2e)) 80%, transparent),
+      0 2px 8px rgb(0 0 0 / 30%);
+  }
+
+  @media (pointer: coarse) {
+    .axis-color-dots {
+      gap: 7px;
+      padding-inline: 18px;
+    }
+
+    .axis-color-dot-hit {
+      width: 9px;
+      height: 9px;
+      padding: 18px;
+      margin: -18px;
+    }
+
+    .axis-color-dot {
+      width: 9px;
+      height: 9px;
+    }
   }
 
   .graph-canvas {

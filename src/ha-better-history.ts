@@ -53,6 +53,8 @@ const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
 const MAX_GRAPH_HEIGHT_ABSOLUTE = 720;
 const CHART_SURFACE_SIZE_TOLERANCE = 2;
+const AXIS_TOUCH_PREVIEW_OFFSET_Y = 46;
+const AXIS_TOUCH_DROP_X_PADDING = 22;
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
 const AXIS_LABEL_GAP_PX = 5;
@@ -80,7 +82,7 @@ function axisLabelWidthPx(value: string): number {
 
 function axisGutter(labels: Array<{ value: string }>, markerCount = 0): string {
   const width = Math.max(0, ...labels.map((label) => axisLabelWidthPx(label.value)));
-  const markerWidth = markerCount > 0 ? markerCount * 7 + (markerCount - 1) * 3 : 0;
+  const markerWidth = markerCount > 0 ? markerCount * 9 + (markerCount - 1) * 7 : 0;
   const gutterWidth = Math.max(width, markerWidth);
 
   return gutterWidth > 0 ? `${gutterWidth + AXIS_LABEL_GAP_PX}px` : "0px";
@@ -1337,7 +1339,13 @@ export class HaBetterHistory extends LitElement {
     return html`
       <div class="graph-section">
         <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
-          <div class="axis-labels axis-labels--left" style="height:${group.canvasHeight}px">
+          <div
+            class="axis-labels axis-labels--left"
+            style="height:${group.canvasHeight}px"
+            @dragover=${(event: DragEvent) => this._onAxisDragOver("left", event)}
+            @dragleave=${(event: DragEvent) => this._onAxisDragLeave("left", event)}
+            @drop=${(event: DragEvent) => this._onAxisDrop(group, "left", event)}
+          >
             ${showScale ? this._renderAxisColorDots(group, leftAxisDots, "left") : nothing}
             ${showScale
               ? group.yLabels.map(
@@ -1441,7 +1449,13 @@ export class HaBetterHistory extends LitElement {
                 )
               : nothing}
           </div>
-          <div class="axis-labels axis-labels--right" style="height:${group.canvasHeight}px">
+          <div
+            class="axis-labels axis-labels--right"
+            style="height:${group.canvasHeight}px"
+            @dragover=${(event: DragEvent) => this._onAxisDragOver("right", event)}
+            @dragleave=${(event: DragEvent) => this._onAxisDragLeave("right", event)}
+            @drop=${(event: DragEvent) => this._onAxisDrop(group, "right", event)}
+          >
             ${showScale ? this._renderAxisColorDots(group, rightAxisDots, "right") : nothing}
             ${showScale
               ? group.rightYLabels.map(
@@ -1518,6 +1532,8 @@ export class HaBetterHistory extends LitElement {
               title=${item.label}
               @dragstart=${(event: DragEvent) => this._onAxisDotDragStart(group, item.id, side, event)}
               @dragend=${() => this._onAxisDotDragEnd()}
+              @touchstart=${(event: TouchEvent) => this._onAxisDotTouchStart(group, item.id, side, event)}
+              @contextmenu=${(event: Event) => event.preventDefault()}
             >
               <span class="axis-color-dot" style="background:${item.color};"></span>
             </span>
@@ -1566,9 +1582,13 @@ export class HaBetterHistory extends LitElement {
     }
   }
 
-  private _onAxisDotDragEnd(): void {
+  private _clearAxisDrag(): void {
     this._draggingAxisSeriesId = undefined;
     this._axisDropTarget = undefined;
+  }
+
+  private _onAxisDotDragEnd(): void {
+    this._clearAxisDrag();
   }
 
   private _onAxisDragOver(target: "left" | "right", event: DragEvent): void {
@@ -1582,17 +1602,21 @@ export class HaBetterHistory extends LitElement {
     }
   }
 
-  private _onAxisDragLeave(target: "left" | "right"): void {
+  private _onAxisDragLeave(target: "left" | "right", event?: DragEvent): void {
+    const current = event?.currentTarget;
+    const related = event?.relatedTarget;
+    if (current instanceof Node && related instanceof Node && current.contains(related)) return;
+
     if (this._axisDropTarget === target) {
       this._axisDropTarget = undefined;
     }
   }
 
-  private _onAxisDrop(group: GraphGroup, target: "left" | "right", event: DragEvent): void {
-    const seriesId = this._draggingAxisSeriesId ?? event.dataTransfer?.getData("text/plain");
+  private _onAxisDrop(group: GraphGroup, target: "left" | "right", event?: DragEvent): void {
+    const seriesId = this._draggingAxisSeriesId ?? event?.dataTransfer?.getData("text/plain");
     if (!seriesId) return;
 
-    event.preventDefault();
+    event?.preventDefault();
     this._axisDropTarget = undefined;
 
     if (!this._canDropAxisSeries(group, seriesId, target)) {
@@ -1603,6 +1627,86 @@ export class HaBetterHistory extends LitElement {
       ...this._scalePreferences,
       [seriesId]: target === "right" ? "secondary" : "primary"
     };
+  }
+
+  private _onAxisDotTouchStart(group: GraphGroup, seriesId: string, side: "left" | "right", event: TouchEvent): void {
+    if (!this._canDragAxisSeries(group, seriesId, side)) return;
+    event.preventDefault();
+
+    const series = group.series.find((s) => s.id === seriesId);
+    if (!series) return;
+
+    const graphRow = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>(".graph-row");
+    this._draggingAxisSeriesId = seriesId;
+
+    const preview = this.renderRoot?.querySelector<HTMLElement>(".axis-touch-drag-preview");
+    if (preview) {
+      preview.style.display = "block";
+      preview.style.background = series.color;
+      const touch = event.touches?.[0];
+      if (touch) {
+        this._positionAxisTouchPreview(preview, touch);
+      }
+    }
+
+    const onMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (!touch) return;
+      this._axisDropTarget = graphRow ? this._touchDropTarget(graphRow, touch.clientX, touch.clientY) : undefined;
+      if (preview) {
+        this._positionAxisTouchPreview(preview, touch);
+      }
+    };
+
+    const onEnd = () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
+      if (preview) {
+        preview.style.display = "none";
+        preview.style.background = "";
+      }
+      const target = this._axisDropTarget;
+      if (target) {
+        this._onAxisDrop(group, target);
+      }
+      this._clearAxisDrag();
+    };
+
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+  }
+
+  private _positionAxisTouchPreview(preview: HTMLElement, touch: Touch): void {
+    preview.style.left = `${touch.clientX}px`;
+    preview.style.top = `${touch.clientY - AXIS_TOUCH_PREVIEW_OFFSET_Y}px`;
+  }
+
+  private _touchDropTarget(graphRow: HTMLElement, x: number, y: number): "left" | "right" | undefined {
+    const leftZone = graphRow.querySelector<HTMLElement>(".axis-labels--left");
+    const rightZone = graphRow.querySelector<HTMLElement>(".axis-labels--right");
+
+    if (leftZone && this._isTouchInsideAxisDropZone(leftZone, x, y)) {
+      return "left";
+    }
+    if (rightZone && this._isTouchInsideAxisDropZone(rightZone, x, y)) {
+      return "right";
+    }
+
+    return;
+  }
+
+  private _isTouchInsideAxisDropZone(zone: HTMLElement, x: number, y: number): boolean {
+    const rect = zone.getBoundingClientRect();
+
+    return (
+      x >= rect.left - AXIS_TOUCH_DROP_X_PADDING &&
+      x <= rect.right + AXIS_TOUCH_DROP_X_PADDING &&
+      y >= rect.top &&
+      y <= rect.bottom
+    );
   }
 
   private _animateClipPaths(): void {
@@ -2349,6 +2453,7 @@ export class HaBetterHistory extends LitElement {
           </div>
         </div>
       </div>
+      <span class="axis-touch-drag-preview"></span>
     `;
   }
 
