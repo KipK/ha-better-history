@@ -82,7 +82,7 @@ function axisLabelWidthPx(value: string): number {
 
 function axisGutter(labels: Array<{ value: string }>, markerCount = 0): string {
   const width = Math.max(0, ...labels.map((label) => axisLabelWidthPx(label.value)));
-  const markerWidth = markerCount > 0 ? markerCount * 9 + (markerCount - 1) * 7 : 0;
+  const markerWidth = markerCount > 0 ? markerCount * 10 : 0;
   const gutterWidth = Math.max(width, markerWidth);
 
   return gutterWidth > 0 ? `${gutterWidth + AXIS_LABEL_GAP_PX}px` : "0px";
@@ -1533,6 +1533,7 @@ export class HaBetterHistory extends LitElement {
         @dragover=${(event: DragEvent) => this._onAxisDragOver(side, event)}
         @dragleave=${() => this._onAxisDragLeave(side)}
         @drop=${(event: DragEvent) => this._onAxisDrop(group, side, event)}
+        @touchstart=${(event: TouchEvent) => this._onAxisDotsTouchStart(group, side, event)}
       >
         ${dropPreviewColor && side === "left"
           ? html`<span class="axis-drop-preview"><span class="axis-color-dot" style="background:${dropPreviewColor};"></span></span>`
@@ -1543,12 +1544,12 @@ export class HaBetterHistory extends LitElement {
             <span
               class="axis-color-dot-hit axis-color-dot-hit--${side}"
               style="color:${item.color};"
+              data-series-id=${item.id}
               draggable=${draggable}
               ?dragging=${this._draggingAxisSeriesId === item.id}
               title=${item.label}
               @dragstart=${(event: DragEvent) => this._onAxisDotDragStart(group, item.id, side, event)}
               @dragend=${() => this._onAxisDotDragEnd()}
-              @touchstart=${(event: TouchEvent) => this._onAxisDotTouchStart(group, item.id, side, event)}
               @contextmenu=${(event: Event) => event.preventDefault()}
             >
               <span class="axis-color-dot" style="background:${item.color};"></span>
@@ -1643,6 +1644,37 @@ export class HaBetterHistory extends LitElement {
       ...this._scalePreferences,
       [seriesId]: target === "right" ? "secondary" : "primary"
     };
+  }
+
+  private _onAxisDotsTouchStart(group: GraphGroup, side: "left" | "right", event: TouchEvent): void {
+    const touch = event.touches?.[0];
+    const target = event.currentTarget as HTMLElement | null;
+    if (!touch || !target) return;
+
+    const nearest = this._nearestAxisDot(target, touch.clientX, touch.clientY);
+    if (!nearest) return;
+
+    this._onAxisDotTouchStart(group, nearest, side, event);
+  }
+
+  private _nearestAxisDot(container: HTMLElement, x: number, y: number): string | undefined {
+    let best: { id: string; distance: number } | undefined;
+
+    container.querySelectorAll<HTMLElement>(".axis-color-dot-hit[data-series-id]").forEach((dot) => {
+      const id = dot.dataset.seriesId;
+      if (!id) return;
+
+      const rect = dot.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const distance = Math.hypot(x - centerX, y - centerY);
+
+      if (!best || distance < best.distance) {
+        best = { id, distance };
+      }
+    });
+
+    return best?.id;
   }
 
   private _onAxisDotTouchStart(group: GraphGroup, seriesId: string, side: "left" | "right", event: TouchEvent): void {

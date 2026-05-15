@@ -249,7 +249,7 @@ export const chartStyles = css`
   .axis-color-dots {
     position: absolute;
     display: flex;
-    gap: 3px;
+    gap: 0;
     min-width: 20px;
     min-height: 24px;
     align-items: center;
@@ -272,10 +272,8 @@ export const chartStyles = css`
   .axis-color-dot-hit {
     position: relative;
     display: inline-flex;
-    width: 7px;
-    height: 7px;
-    padding: 14px;
-    margin: -14px;
+    width: 10px;
+    height: 24px;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
@@ -367,15 +365,13 @@ export const chartStyles = css`
 
   @media (pointer: coarse) {
     .axis-color-dots {
-      gap: 7px;
+      gap: 0;
       padding-inline: 18px;
     }
 
     .axis-color-dot-hit {
-      width: 9px;
-      height: 9px;
-      padding: 18px;
-      margin: -18px;
+      width: 12px;
+      height: 24px;
     }
 
     .axis-color-dot {
