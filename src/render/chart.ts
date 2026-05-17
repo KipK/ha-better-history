@@ -1,5 +1,6 @@
 import { graphColor, graphColorKey, PALETTE } from "./colors.js";
 import { numericScalesFor, plotBottomFor, GRAPH_TOP, GRAPH_HEIGHT, PLOT_PADDING, computeNiceTicks, tickPrecision, type NumericScale } from "./scales.js";
+import { canonicalUnitKey } from "../data/temperature-units.js";
 import { displayNumericPoints } from "./downsample.js";
 import { buildClimateHeatingAreas, type HeatingAreaRenderData } from "./climate-overlay.js";
 import type { HistoryPoint } from "../data/history.js";
@@ -529,7 +530,7 @@ function scaleGroupKeyFor(series: RenderableSeries): string {
 }
 
 function unitKey(unit: string | undefined): string {
-  return unit && unit.trim() !== "" ? unit : "__unitless__";
+  return canonicalUnitKey(unit);
 }
 
 function graphKeyForSeriesUnitGroup(series: RenderableSeries, groupSeries: RenderableSeries[]): string {

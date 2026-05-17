@@ -29,6 +29,11 @@ export interface HassAreaRegistryEntry {
 
 export interface HomeAssistant {
   states: Record<string, HassEntity | undefined>;
+  config?: {
+    unit_system?: {
+      temperature?: string;
+    };
+  };
   entities?: Record<string, HassEntityRegistryEntry | undefined>;
   devices?: Record<string, HassDeviceRegistryEntry | undefined>;
   areas?: Record<string, HassAreaRegistryEntry | undefined>;

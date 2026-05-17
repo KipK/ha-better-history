@@ -1,5 +1,6 @@
 import type { HistoryPoint } from "../data/history.js";
 import type { HistoryValueType } from "../data/value-type.js";
+import { canonicalUnitKey, isTemperatureUnit } from "../data/temperature-units.js";
 
 export interface NumericScale {
   ids: Set<string>;
@@ -182,7 +183,11 @@ function rangeDistance(a: SeriesRange, b: SeriesRange): number {
 }
 
 function unitKey(unit: string | undefined): string {
-  return unit && unit.trim() !== "" ? unit : "__unitless__";
+  return canonicalUnitKey(unit);
+}
+
+function isTemperatureSeriesGroup(series: SeriesRange[]): boolean {
+  return series.length > 0 && series.every((item) => isTemperatureUnit(item.unit));
 }
 
 function shouldSplitGroup(series: SeriesRange[]): boolean {
@@ -383,7 +388,8 @@ export function numericScalesFor(series: ScaleInput[], options: NumericScalesOpt
 
     return unitGraphs.flatMap((graphSeries, graphIndex) => {
       const graphKey = graphIndex === 0 ? group.key : `${group.key}::unit-graph:${graphIndex + 1}`;
-      const [left, right] = group.key === "group:boolean" ? [graphSeries, []] : splitGroupSeries(graphSeries, autoScaleSplit);
+      const allowAutoScaleSplit = autoScaleSplit && group.key !== "group:temperature" && !isTemperatureSeriesGroup(graphSeries);
+      const [left, right] = group.key === "group:boolean" ? [graphSeries, []] : splitGroupSeries(graphSeries, allowAutoScaleSplit);
       const top = GRAPH_TOP + graphOffset++ * GRAPH_STEP;
       const leftScale = scaleFromSeries(graphKey, group.key, "left", left, top);
 

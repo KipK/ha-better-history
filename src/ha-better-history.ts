@@ -25,6 +25,7 @@ import { chartStyles } from "./styles/chart.css.js";
 import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig, ResolvedSeries } from "./types/config.js";
 import { attributeSource, type HistorySeries, type HistorySource } from "./data/history.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
+import { canonicalUnitKey, isSameTemperatureUnit, isTemperatureUnit } from "./data/temperature-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
 import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
 import {
@@ -37,7 +38,6 @@ import {
 import { ensureHaComponents } from "./load-ha-components.js";
 import { logPerformance, performanceNow } from "./utils/performance.js";
 
-const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
 const MIN_VIEW_RANGE_GAP_PX = 24;
@@ -88,8 +88,8 @@ function axisGutter(labels: Array<{ value: string }>, markerCount = 0): string {
   return gutterWidth > 0 ? `${gutterWidth + AXIS_LABEL_GAP_PX}px` : "0px";
 }
 
-function isTemperatureUnit(unit: string): boolean {
-  return TEMPERATURE_UNIT_RE.test(unit);
+function axisUnitKey(unit: string | undefined): string {
+  return canonicalUnitKey(unit);
 }
 
 function scaleGroupIndex(scaleGroup: string | undefined): number | undefined {
@@ -103,6 +103,29 @@ function scaleGroupIndex(scaleGroup: string | undefined): number | undefined {
 
 function sourceGroup(source: HistorySource): string | undefined {
   return source.group ?? source.scaleGroup;
+}
+
+function isRenderableClimateTemperatureSeries(series: RenderableSeries): boolean {
+  return series.id.startsWith("attr:climate.")
+    && (series.id.endsWith(":current_temperature") || series.id.endsWith(":temperature"));
+}
+
+function resolvedTemperatureUnitForRender(series: RenderableSeries[]): string | undefined {
+  return series.find((s) => s.scaleGroupKey === "group:temperature" && s.unit && isTemperatureUnit(s.unit))?.unit
+    ?? series.find((s) => s.unit && isTemperatureUnit(s.unit))?.unit;
+}
+
+function normalizeRenderableTemperatureUnitSeries(series: RenderableSeries[]): RenderableSeries[] {
+  const tempUnit = resolvedTemperatureUnitForRender(series);
+  if (!tempUnit) return series;
+
+  return series.map((s) => {
+    const unit = isSameTemperatureUnit(s.unit, tempUnit) || (s.unit === undefined && isRenderableClimateTemperatureSeries(s))
+      ? tempUnit
+      : s.unit;
+
+    return unit !== s.unit ? { ...s, unit } : s;
+  });
 }
 
 interface ChartRenderCache {
@@ -965,12 +988,16 @@ export class HaBetterHistory extends LitElement {
 
     if (source.unit) {
       const existingMatch = existing.find(
-        (s) => s.unit === source.unit && s.valueType === "number"
+        (s) => s.valueType === "number" && (
+          s.unit === source.unit || isSameTemperatureUnit(s.unit, source.unit)
+        )
       );
       if (existingMatch) return existingMatch.scaleGroupKey;
 
       const match = this._resolved?.series.find(
-        (s) => s.unit === source.unit && s.valueType === "number"
+        (s) => s.valueType === "number" && (
+          s.unit === source.unit || isSameTemperatureUnit(s.unit, source.unit)
+        )
       );
       if (match) return match.scaleGroupKey;
 
@@ -978,6 +1005,11 @@ export class HaBetterHistory extends LitElement {
         (s) => s.scaleGroupKey === "group:temperature"
       );
       if (tempGroup && isTemperatureUnit(source.unit)) return tempGroup.scaleGroupKey;
+
+      const existingTemperatureGroup = existing.find(
+        (s) => s.scaleGroupKey === "group:temperature"
+      );
+      if (existingTemperatureGroup && isTemperatureUnit(source.unit)) return existingTemperatureGroup.scaleGroupKey;
     }
 
     if (climateTemperatureAttribute) {
@@ -1006,7 +1038,8 @@ export class HaBetterHistory extends LitElement {
     source: HistorySource,
     fetched: HistorySeries | undefined,
     scaleGroupKey: string,
-    colorIndex: number
+    colorIndex: number,
+    unit = source.unit
   ): RenderableSeries {
     const climateAttr = source.entityId.startsWith("climate.") && source.path?.length === 1 ? source.path[0] : undefined;
 
@@ -1014,7 +1047,7 @@ export class HaBetterHistory extends LitElement {
       id: source.id,
       label: source.label,
       color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
-      unit: source.unit,
+      unit,
       scaleGroupKey,
       scaleMode: "auto",
       scalePreference: this._effectiveScalePreference(source.id, source.scalePreference ?? this._importedSeriesMeta.get(source.id)?.scalePreference),
@@ -1023,6 +1056,21 @@ export class HaBetterHistory extends LitElement {
       valueType: source.valueType,
       points: fetched?.points ?? []
     };
+  }
+
+  private _unitForScaleGroup(source: HistorySource, scaleGroupKey: string, existing: RenderableSeries[]): string | undefined {
+    if (!source.unit || !isTemperatureUnit(source.unit)) return source.unit;
+
+    const existingMatch = existing.find(
+      (s) => s.scaleGroupKey === scaleGroupKey && isSameTemperatureUnit(s.unit, source.unit)
+    );
+    if (existingMatch?.unit) return existingMatch.unit;
+
+    const resolvedMatch = this._activeResolvedSeries().find(
+      (s) => s.scaleGroupKey === scaleGroupKey && isSameTemperatureUnit(s.unit, source.unit)
+    );
+
+    return resolvedMatch?.unit ?? source.unit;
   }
 
   private _defaultLineMode(): BetterHistoryLineMode {
@@ -1125,27 +1173,40 @@ export class HaBetterHistory extends LitElement {
     }
 
     const aliasSeed = [...result];
+    const pendingScalePlacement = new Map<string, { scaleGroupKey: string; unit?: string }>();
 
     for (const { source, fetched } of pendingSources) {
       if (this._usesScaleGraphAlias(source)) continue;
+      const scaleGroupKey = this._pickScaleGroup(source, aliasSeed);
+      const unit = this._unitForScaleGroup(source, scaleGroupKey, aliasSeed);
+
+      pendingScalePlacement.set(source.id, { scaleGroupKey, unit });
 
       aliasSeed.push(this._renderSeriesFromSource(
         source,
         fetched,
-        this._pickScaleGroup(source, aliasSeed),
-        aliasSeed.length
+        scaleGroupKey,
+        aliasSeed.length,
+        unit
       ));
     }
 
     const aliasGraphKeys = this._scaleGraphKeys(aliasSeed);
 
     for (const { source, fetched } of pendingSources) {
-      const scaleGroupKey = this._pickScaleGroup(source, result, aliasGraphKeys);
+      const placement = pendingScalePlacement.get(source.id);
+      const scaleGroupKey = placement?.scaleGroupKey ?? this._pickScaleGroup(source, result, aliasGraphKeys);
 
-      result.push(this._renderSeriesFromSource(source, fetched, scaleGroupKey, result.length));
+      result.push(this._renderSeriesFromSource(
+        source,
+        fetched,
+        scaleGroupKey,
+        result.length,
+        placement?.unit ?? this._unitForScaleGroup(source, scaleGroupKey, aliasSeed)
+      ));
     }
 
-    return result;
+    return normalizeRenderableTemperatureUnitSeries(result);
   }
 
   private _chartSourceKey(): string {
@@ -1565,7 +1626,7 @@ export class HaBetterHistory extends LitElement {
 
   private _axisDraggableSeries(group: GraphGroup): RenderableSeries[] {
     const numeric = group.series.filter((series) => series.valueType === "number" || series.valueType === "boolean");
-    const units = new Set(numeric.map((series) => series.unit ?? ""));
+    const units = new Set(numeric.map((series) => axisUnitKey(series.unit)));
 
     return numeric.length >= 2 && units.size === 1 ? numeric : [];
   }
@@ -1583,7 +1644,7 @@ export class HaBetterHistory extends LitElement {
     if (!targetScale) return target === "right";
 
     const targetSeries = group.series.filter((series) => targetScale.ids.has(series.id));
-    return targetSeries.every((series) => (series.unit ?? "") === (source.unit ?? ""));
+    return targetSeries.every((series) => axisUnitKey(series.unit) === axisUnitKey(source.unit));
   }
 
   private _onAxisDotDragStart(group: GraphGroup, seriesId: string, side: "left" | "right", event: DragEvent): void {
@@ -2753,10 +2814,28 @@ export class HaBetterHistory extends LitElement {
   private _sourceWithAttributeUnit(source: HistorySource): HistorySource {
     if (source.kind !== "entity_attribute" || !source.path) return source;
     if (source.unit) return source;
+    if (
+      source.entityId.startsWith("climate.")
+      && source.path.length === 1
+      && CLIMATE_TEMPERATURE_ATTRIBUTES.has(source.path[0])
+    ) {
+      const unit = this._climateTemperatureUnit(source.entityId);
+      if (unit) return { ...source, unit };
+    }
     const mappedUnit = unitForAttributePath(source.path, this.attributeUnits ?? this.config?.attributeUnits);
     const unit = isAttributeTemperatureUnit(mappedUnit) ? this._resolvedTemperatureUnit() ?? mappedUnit : mappedUnit;
     if (!unit || source.unit === unit) return source;
     return { ...source, unit };
+  }
+
+  private _climateTemperatureUnit(entityId: string): string | undefined {
+    const entity = this.hass?.states[entityId];
+    const tempUnit = entity?.attributes.temperature_unit;
+    if (typeof tempUnit === "string" && tempUnit !== "") return tempUnit;
+    const uom = entity?.attributes.unit_of_measurement;
+    if (typeof uom === "string" && uom !== "") return uom;
+    const systemTempUnit = this.hass?.config?.unit_system?.temperature;
+    return typeof systemTempUnit === "string" && systemTempUnit !== "" ? systemTempUnit : undefined;
   }
 
   private _expandedSelectedSources(source: HistorySource): HistorySource[] {
@@ -2767,11 +2846,7 @@ export class HaBetterHistory extends LitElement {
     const entity = this.hass?.states[source.entityId];
     if (!entity) return [this._sourceWithAttributeUnit(source)];
 
-    const tempUnit = typeof entity.attributes.temperature_unit === "string" && entity.attributes.temperature_unit !== ""
-      ? entity.attributes.temperature_unit
-      : typeof entity.attributes.unit_of_measurement === "string" && entity.attributes.unit_of_measurement !== ""
-        ? entity.attributes.unit_of_measurement
-        : undefined;
+    const tempUnit = this._climateTemperatureUnit(source.entityId);
     const attributeSources = CLIMATE_LINE_ATTRIBUTES.map((attribute) => {
       const attrSource = attributeSource(entity, [attribute]);
       const fallbackSource: HistorySource = {

@@ -4,6 +4,7 @@ import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, Reso
 import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./attribute-units.js";
+import { isSameTemperatureUnit, isTemperatureUnit } from "./temperature-units.js";
 
 export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
   return {
@@ -22,12 +23,6 @@ const DEFAULT_HOURS = 24;
 const DEFAULT_LINE_WIDTH = "2.5";
 
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
-
-const TEMPERATURE_UNIT_RE = /°[CF]|[CFK]$/;
-
-function isTemperatureUnit(unit: string): boolean {
-  return TEMPERATURE_UNIT_RE.test(unit);
-}
 
 function isManualBoundedSeries(series: ResolvedSeries): boolean {
   return series.scaleMode === "manual" && (series.scaleMin !== undefined || series.scaleMax !== undefined);
@@ -114,6 +109,16 @@ function scaleGroupKey(id: string, unit: string | undefined, scaleGroup: string 
   return `series:${id}`;
 }
 
+function isClimateTemperatureAttribute(entity: string, attribute: string[] | undefined): boolean {
+  const attrName = attribute?.length === 1 ? attribute[0] : undefined;
+
+  return entity.startsWith("climate.") && (attrName === "current_temperature" || attrName === "temperature");
+}
+
+function isResolvedClimateTemperatureSeries(series: ResolvedSeries): boolean {
+  return isClimateTemperatureAttribute(series.entity, series.attribute);
+}
+
 function seriesFromConfig(
   cfg: SeriesConfig,
   index: number,
@@ -127,6 +132,7 @@ function seriesFromConfig(
   const vt = resolveValueType(hass, cfg.entity, attribute);
   const unit = resolveUnit(hass, cfg.entity, attribute, cfg.unit, attributeUnits);
   const group = cfg.group ?? cfg.scaleGroup;
+  const scaleGroup = group ?? (isClimateTemperatureAttribute(cfg.entity, attribute) ? "temperature" : undefined);
 
   return {
     id,
@@ -136,7 +142,7 @@ function seriesFromConfig(
     label: resolveLabel(hass, cfg.entity, attribute, cfg.label),
     color: cfg.color ?? paletteColor(index),
     unit,
-    scaleGroupKey: scaleGroupKey(id, unit, group, vt),
+    scaleGroupKey: scaleGroupKey(id, unit, scaleGroup, vt),
     scaleMode: cfg.scaleMode ?? "auto",
     scaleMin: cfg.scaleMin,
     scaleMax: cfg.scaleMax,
@@ -196,13 +202,13 @@ function seriesFromEntityId(
 
 function climateTemperatureUnit(entityId: string, hass: HomeAssistant | undefined): string | undefined {
   const entity = hass?.states[entityId];
-  if (!entity) return undefined;
-  const attr = entity.attributes;
-  const tempUnit = attr.temperature_unit;
+  const attr = entity?.attributes;
+  const tempUnit = attr?.temperature_unit;
   if (typeof tempUnit === "string" && tempUnit !== "") return tempUnit;
-  const uom = attr.unit_of_measurement;
+  const uom = attr?.unit_of_measurement;
   if (typeof uom === "string" && uom !== "") return uom;
-  return undefined;
+  const systemTempUnit = hass?.config?.unit_system?.temperature;
+  return typeof systemTempUnit === "string" && systemTempUnit !== "" ? systemTempUnit : undefined;
 }
 
 function expandClimateSeries(
@@ -256,10 +262,18 @@ function normalizeTemperatureUnitSeries(series: ResolvedSeries[]): ResolvedSerie
 
   return series.map((s) => {
     const semanticTemperature = isAttributeTemperatureUnit(s.unit);
-    const unit = semanticTemperature && tempUnit ? tempUnit : s.unit;
-    let scaleGroupKey = semanticTemperature && unit && s.scaleGroupKey === "unit:temperature"
-      ? `unit:${unit}`
-      : s.scaleGroupKey;
+    const climateTemperature = isResolvedClimateTemperatureSeries(s);
+    const unit = tempUnit && (semanticTemperature || isSameTemperatureUnit(s.unit, tempUnit) || (s.unit === undefined && climateTemperature)) ? tempUnit : s.unit;
+    let scaleGroupKey = s.scaleGroupKey;
+
+    if (unit && scaleGroupKey.startsWith("unit:")) {
+      const scaleUnit = scaleGroupKey.slice("unit:".length);
+      if (semanticTemperature && scaleUnit === "temperature") {
+        scaleGroupKey = `unit:${unit}`;
+      } else if (isSameTemperatureUnit(scaleUnit, unit)) {
+        scaleGroupKey = `unit:${unit}`;
+      }
+    }
 
     if (
       hasTempGroup
