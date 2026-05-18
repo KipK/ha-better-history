@@ -787,7 +787,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     const segmentStartY = GRAPH_TOP + graphHeight + X_AXIS_LABEL_SPACE + 6;
     const segArea = segCount > 0 ? X_AXIS_LABEL_SPACE + 6 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + graphHeight + segArea + 18;
-    const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
+    const canvasHeight = svgHeight + (segCount > 0 ? 0 : X_AXIS_LABEL_SPACE);
 
     const colored = withGraphUniqueColors(allNonNumeric, visibleNonNumeric, 0);
 
@@ -834,7 +834,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     const segmentStartY = GRAPH_TOP + graphHeight + X_AXIS_LABEL_SPACE + 6;
     const segArea = segCount > 0 ? X_AXIS_LABEL_SPACE + 6 + segCount * SEGMENT_ROW_HEIGHT : 0;
     const svgHeight = GRAPH_TOP + graphHeight + segArea + 18;
-    const canvasHeight = svgHeight + X_AXIS_LABEL_SPACE;
+    const canvasHeight = svgHeight + (segCount > 0 ? 0 : X_AXIS_LABEL_SPACE);
     const yLabels = buildGroupYLabels(leftScale, graphHeight);
     const rightYLabels = rightScale ? buildGroupYLabels(rightScale, graphHeight) : [];
     const localScales = graphScales.map((scale) => ({ ...scale, top: GRAPH_TOP, height: graphHeight }));

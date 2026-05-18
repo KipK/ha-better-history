@@ -390,7 +390,7 @@ export const chartStyles = css`
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin: 6px calc(40 / 720 * 100%) 0;
+    margin: 3px calc(40 / 720 * 100%) 0;
     padding: 0 6px 8px 6px;
     font-size: 12px;
     color: var(--better-history-muted-color, var(--secondary-text-color, #888));

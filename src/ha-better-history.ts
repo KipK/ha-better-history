@@ -226,6 +226,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _draggingAxisSeriesId?: string;
   @state() private _axisDropTarget?: "left" | "right";
   @state() private _sourceSettingsSourceId?: string;
+  @state() private _pendingAddedSources: HistorySource[] = [];
 
   private readonly _data = new DataController(this);
   private readonly _tooltip = new TooltipController(this);
@@ -239,7 +240,6 @@ export class HaBetterHistory extends LitElement {
   private _wasLoading = false;
   private _suppressLineAnimation = false;
   private _suppressLiveRangeAnimation = false;
-  private _pendingAddedSources: HistorySource[] = [];
   private _sourceAddBatchTimer?: ReturnType<typeof setTimeout>;
   private _liveNowTimer?: ReturnType<typeof setInterval>;
   private _dragStartSourceIds?: string[];
@@ -710,6 +710,19 @@ export class HaBetterHistory extends LitElement {
     return sources;
   }
 
+  private _selectedSourcesForDisplay(): HistorySource[] {
+    const seen = new Set<string>();
+    const sources: HistorySource[] = [];
+
+    for (const source of [...this._selectedSources, ...this._pendingAddedSources]) {
+      if (seen.has(source.id)) continue;
+      seen.add(source.id);
+      sources.push(source);
+    }
+
+    return sources;
+  }
+
   private _isDefaultSource(source: HistorySource): boolean {
     return this._activeResolvedSeries().some((s) => s.id === source.id && s.forced !== false);
   }
@@ -1111,7 +1124,7 @@ export class HaBetterHistory extends LitElement {
 
   private _allSeriesHaveExplicitLineMode(): boolean {
     // Picker-added sources always follow the global/runtime mode — buttons are always relevant.
-    if (this._selectedSources.length > 0) return false;
+    if (this._selectedSourcesForDisplay().length > 0) return false;
     // A global lineMode covers every series that has no per-series override.
     if (this.config?.lineMode != null) return true;
     // Mirror resolveConfig: config.series takes precedence over defaultEntities when non-empty.
@@ -1157,15 +1170,14 @@ export class HaBetterHistory extends LitElement {
       ];
     });
 
-    const pendingSources: Array<{ source: HistorySource; fetched: HistorySeries }> = [];
+    const pendingSources: Array<{ source: HistorySource; fetched: HistorySeries | undefined }> = [];
     const pendingIds = new Set(result.map((s) => s.id));
 
-    for (const selectedSource of this._selectedSources) {
+    for (const selectedSource of this._selectedSourcesForDisplay()) {
       for (const source of this._expandedSelectedSources(selectedSource)) {
         if (pendingIds.has(source.id)) continue;
 
         const fetched = this._data.series.find((s) => s.source.id === source.id);
-        if (!fetched) continue;
 
         pendingIds.add(source.id);
         pendingSources.push({ source, fetched });
@@ -1225,7 +1237,7 @@ export class HaBetterHistory extends LitElement {
         source.lineWidth,
         source.valueType
       ].join("~")) ?? []),
-      ...this._selectedSources.flatMap((source) => this._expandedSelectedSources(source)).map((effectiveSource) => {
+      ...this._selectedSourcesForDisplay().flatMap((source) => this._expandedSelectedSources(source)).map((effectiveSource) => {
         return [
           effectiveSource.id,
           effectiveSource.label,
@@ -1865,7 +1877,7 @@ export class HaBetterHistory extends LitElement {
       return html`<div class="error">${localize(this.hass, isTimeout ? "error_timeout" : "error")}</div>`;
     }
 
-    if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSources.length === 0)) {
+    if (!this._resolved || (this._resolved.series.length === 0 && this._selectedSourcesForDisplay().length === 0)) {
       this._queueGraphVisible(false);
       return nothing;
     }
@@ -1936,7 +1948,7 @@ export class HaBetterHistory extends LitElement {
       entityPickerOpen: this._entityPickerOpen,
       selectedEntityId: this._selectedEntityId,
       path: this._path,
-      selectedSources: this._selectedSources,
+      selectedSources: this._selectedSourcesForDisplay(),
       draggingSourceId: this._draggingSourceId,
       resolved: this._activeResolvedConfig(),
       loading: this._data.loading,
@@ -2788,6 +2800,12 @@ export class HaBetterHistory extends LitElement {
 
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
     if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
+
+    if (this._sourceSettingsSourceId) {
+      const chips = Array.from(this.renderRoot?.querySelectorAll(".source-chip") ?? []) as HTMLElement[];
+      const sourceSettingsChip = chips.find((chip) => chip.dataset.sourceId === this._sourceSettingsSourceId);
+      if (sourceSettingsChip && this._pathContainsElement(path, sourceSettingsChip)) return true;
+    }
 
     for (const el of path) {
       if (el === this) break;

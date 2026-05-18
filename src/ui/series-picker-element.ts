@@ -134,6 +134,12 @@ export class SeriesPickerElement extends LitElement {
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
     if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
 
+    if (this._sourceSettingsSourceId) {
+      const chips = Array.from(this.renderRoot?.querySelectorAll(".source-chip") ?? []) as HTMLElement[];
+      const sourceSettingsChip = chips.find((chip) => chip.dataset.sourceId === this._sourceSettingsSourceId);
+      if (sourceSettingsChip && this._pathContainsElement(path, sourceSettingsChip)) return true;
+    }
+
     for (const el of path) {
       if (el === this) break;
       if (!(el instanceof HTMLElement)) continue;
