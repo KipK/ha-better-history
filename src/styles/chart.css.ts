@@ -384,6 +384,15 @@ export const chartStyles = css`
     min-width: 0;
     position: relative;
     overflow: hidden;
+    touch-action: pan-y;
+  }
+
+  .chart-graphs[zoomed] .graph-canvas {
+    cursor: grab;
+  }
+
+  .graph-canvas[graph-dragging] {
+    cursor: grabbing;
   }
 
   .graph-legend {

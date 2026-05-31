@@ -48,6 +48,14 @@ const RANGE_THUMB_OUTER_HIT_PX = 18;
 const RANGE_TOUCH_THUMB_HIT_PX = 44;
 const RANGE_THUMB_WIDTH_PX = 12;
 const RANGE_TOUCH_THUMB_WIDTH_PX = 14;
+const GRAPH_WHEEL_ZOOM_SENSITIVITY = 0.0025;
+const GRAPH_MOUSE_PAN_THRESHOLD_PX = 6;
+const GRAPH_TOUCH_GESTURE_THRESHOLD_PX = 10;
+const GRAPH_TOUCH_PINCH_MIN_DISTANCE_PX = 24;
+const GRAPH_TOUCH_PINCH_DELTA_SENSITIVITY = 5;
+const GRAPH_TOUCH_PINCH_MIN_FACTOR = 0.1;
+const GRAPH_TOUCH_PINCH_MAX_FACTOR = 10;
+const GRAPH_TOUCH_VERTICAL_BIAS = 1.15;
 const MIN_GRAPH_HEIGHT = 48;
 const MAX_GRAPH_HEIGHT_TO_PLOT_WIDTH = 0.34;
 const MAX_GRAPH_HEIGHT_TO_SURFACE = 0.72;
@@ -166,6 +174,35 @@ interface BetterHistorySeriesExportV1 {
   series?: unknown[];
 }
 
+interface GraphPointerState {
+  x: number;
+  y: number;
+}
+
+interface GraphMouseDrag {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startViewStart: number;
+  startViewEnd: number;
+  width: number;
+  active: boolean;
+  target: HTMLElement;
+}
+
+interface GraphTouchGesture {
+  mode: "pending" | "pinch" | "pan" | "scroll";
+  startCenterX: number;
+  startCenterY: number;
+  startDistanceX: number;
+  startDistanceY: number;
+  startViewStart: number;
+  startViewEnd: number;
+  width: number;
+  anchorPercent: number;
+  target: HTMLElement;
+}
+
 export class HaBetterHistory extends LitElement {
   static styles = chartStyles;
 
@@ -262,6 +299,9 @@ export class HaBetterHistory extends LitElement {
   private _observedSurfaceHeader?: Element;
   private _lastContentHeight = 0;
   private _measuredGraphLayout?: { graphCount: number; graphHeight: number; overheadHeight: number };
+  private _graphMouseDrag?: GraphMouseDrag;
+  private _graphTouchPointers = new Map<number, GraphPointerState>();
+  private _graphTouchGesture?: GraphTouchGesture;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -293,6 +333,7 @@ export class HaBetterHistory extends LitElement {
     this._resizeObserver = undefined;
     this._surfaceHeaderObserver?.disconnect();
     this._surfaceHeaderObserver = undefined;
+    this._resetGraphGestureState();
     if (this._sourceAddBatchTimer !== undefined) {
       clearTimeout(this._sourceAddBatchTimer);
       this._sourceAddBatchTimer = undefined;
@@ -1442,7 +1483,16 @@ export class HaBetterHistory extends LitElement {
                 )
               : nothing}
           </div>
-          <div class="graph-canvas" data-series-ids=${seriesIds} style="height:${group.canvasHeight}px">
+          <div
+            class="graph-canvas"
+            data-series-ids=${seriesIds}
+            style="height:${group.canvasHeight}px"
+            @wheel=${(event: WheelEvent) => this._onGraphWheel(event)}
+            @pointerdown=${(event: PointerEvent) => this._onGraphPointerDown(event)}
+            @pointermove=${(event: PointerEvent) => this._onGraphPointerMove(event)}
+            @pointerup=${(event: PointerEvent) => this._onGraphPointerEnd(event)}
+            @pointercancel=${(event: PointerEvent) => this._onGraphPointerEnd(event)}
+          >
             <svg
               viewBox="${PLOT_LEFT} 0 ${PLOT_WIDTH} ${group.svgHeight}"
               height="${group.svgHeight}"
@@ -1888,6 +1938,7 @@ export class HaBetterHistory extends LitElement {
     const groups = this._graphGroups(chartData);
     const hasStructure = groups.length > 0;
     const showStructure = hasStructure && (hasData || this._data.loading);
+    const zoomed = this._isViewRangeZoomed();
     this._queueGraphVisible(showStructure);
     this._suppressLineAnimation = this._wasLoading && !this._data.loading;
     const totalHeight = groups.reduce((h, g) => h + g.canvasHeight, 0);
@@ -1911,6 +1962,7 @@ export class HaBetterHistory extends LitElement {
         ${showStructure
           ? html`
               <div class="chart-graphs"
+                ?zoomed=${zoomed}
                 @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
                 @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
@@ -2002,6 +2054,275 @@ export class HaBetterHistory extends LitElement {
     const end = Math.max(rawEnd, start + 1);
 
     return { start, end, span: end - start };
+  }
+
+  private _isViewRangeZoomed(): boolean {
+    const loaded = this._loadedRangeMs();
+    const view = this._effectiveViewRange();
+
+    return view.end.getTime() - view.start.getTime() < loaded.span - 1;
+  }
+
+  private _zoomGraphViewAt(
+    anchorPercent: number,
+    factor: number,
+    width: number,
+    startMs?: number,
+    endMs?: number,
+    minFactor = 0.25,
+    maxFactor = 4
+  ): void {
+    const current = this._effectiveViewRange();
+    const viewStart = startMs ?? current.start.getTime();
+    const viewEnd = endMs ?? current.end.getTime();
+    const viewSpan = Math.max(1, viewEnd - viewStart);
+    const nextSpan = Math.max(1, viewSpan * Math.min(maxFactor, Math.max(minFactor, factor)));
+    const clampedAnchor = Math.max(0, Math.min(1, anchorPercent));
+    const anchorTime = viewStart + clampedAnchor * viewSpan;
+    const nextStart = anchorTime - clampedAnchor * nextSpan;
+
+    this._setViewRangeMs(nextStart, nextStart + nextSpan, width);
+  }
+
+  private _panGraphView(deltaPx: number, width: number, startMs: number, endMs: number): void {
+    if (width <= 0) return;
+
+    const viewSpan = Math.max(1, endMs - startMs);
+    const nextStart = startMs - (deltaPx / width) * viewSpan;
+
+    this._setViewRangeMs(nextStart, nextStart + viewSpan, width);
+  }
+
+  private _wheelDeltaPx(event: WheelEvent): number {
+    if (event.deltaMode === 1) return event.deltaY * 16;
+    if (event.deltaMode === 2) return event.deltaY * window.innerHeight;
+    return event.deltaY;
+  }
+
+  private _onGraphWheel(event: WheelEvent): void {
+    if (!(event.ctrlKey || event.metaKey)) return;
+
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLElement)) return;
+
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const anchorPercent = (event.clientX - rect.left) / rect.width;
+    const factor = Math.exp(this._wheelDeltaPx(event) * GRAPH_WHEEL_ZOOM_SENSITIVITY);
+
+    this._zoomGraphViewAt(anchorPercent, factor, rect.width);
+  }
+
+  private _onGraphPointerDown(event: PointerEvent): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (event.pointerType === "mouse") {
+      if (event.button !== 0 || !this._isViewRangeZoomed()) return;
+
+      const rect = target.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      const view = this._effectiveViewRange();
+      this._graphMouseDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startViewStart: view.start.getTime(),
+        startViewEnd: view.end.getTime(),
+        width: rect.width,
+        active: false,
+        target
+      };
+      target.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (event.pointerType !== "touch") return;
+
+    this._graphTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    target.setPointerCapture(event.pointerId);
+
+    if (this._graphTouchPointers.size === 2) {
+      this._startGraphTouchGesture(target);
+    }
+  }
+
+  private _onGraphPointerMove(event: PointerEvent): void {
+    if (event.pointerType === "mouse" && this._graphMouseDrag?.pointerId === event.pointerId) {
+      this._moveGraphMouseDrag(event);
+      return;
+    }
+
+    if (event.pointerType !== "touch" || !this._graphTouchPointers.has(event.pointerId)) return;
+
+    this._graphTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    this._moveGraphTouchGesture(event);
+  }
+
+  private _onGraphPointerEnd(event: PointerEvent): void {
+    if (this._graphMouseDrag?.pointerId === event.pointerId) {
+      this._endGraphMouseDrag(event.pointerId);
+    }
+
+    if (event.pointerType !== "touch") return;
+
+    this._graphTouchPointers.delete(event.pointerId);
+    if (this._graphTouchPointers.size < 2) {
+      this._endGraphTouchGesture();
+    }
+  }
+
+  private _moveGraphMouseDrag(event: PointerEvent): void {
+    const drag = this._graphMouseDrag;
+    if (!drag) return;
+
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+
+    if (!drag.active) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < GRAPH_MOUSE_PAN_THRESHOLD_PX) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        this._endGraphMouseDrag(event.pointerId);
+        return;
+      }
+
+      drag.active = true;
+      drag.target.toggleAttribute("graph-dragging", true);
+      this._tooltip.handlePointerLeave();
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this._panGraphView(deltaX, drag.width, drag.startViewStart, drag.startViewEnd);
+  }
+
+  private _endGraphMouseDrag(pointerId: number): void {
+    const drag = this._graphMouseDrag;
+    if (!drag) return;
+
+    drag.target.toggleAttribute("graph-dragging", false);
+    if (drag.target.hasPointerCapture(pointerId)) {
+      drag.target.releasePointerCapture(pointerId);
+    }
+    this._graphMouseDrag = undefined;
+  }
+
+  private _startGraphTouchGesture(target: HTMLElement): void {
+    const pair = this._graphTouchPair();
+    if (!pair) return;
+
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const [first, second] = pair;
+    const centerX = (first.x + second.x) / 2;
+    const centerY = (first.y + second.y) / 2;
+    const view = this._effectiveViewRange();
+
+    this._graphTouchGesture = {
+      mode: "pending",
+      startCenterX: centerX,
+      startCenterY: centerY,
+      startDistanceX: Math.abs(first.x - second.x),
+      startDistanceY: Math.abs(first.y - second.y),
+      startViewStart: view.start.getTime(),
+      startViewEnd: view.end.getTime(),
+      width: rect.width,
+      anchorPercent: (centerX - rect.left) / rect.width,
+      target
+    };
+  }
+
+  private _moveGraphTouchGesture(event: PointerEvent): void {
+    const gesture = this._graphTouchGesture;
+    const pair = this._graphTouchPair();
+    if (!gesture || !pair) return;
+
+    const [first, second] = pair;
+    const centerX = (first.x + second.x) / 2;
+    const centerY = (first.y + second.y) / 2;
+    const distanceX = Math.abs(first.x - second.x);
+    const distanceY = Math.abs(first.y - second.y);
+    const pinchDeltaX = Math.abs(distanceX - gesture.startDistanceX);
+    const panDeltaX = Math.abs(centerX - gesture.startCenterX);
+    const verticalDelta = Math.max(
+      Math.abs(centerY - gesture.startCenterY),
+      Math.abs(distanceY - gesture.startDistanceY)
+    );
+
+    if (gesture.mode === "pending") {
+      const horizontalDelta = Math.max(pinchDeltaX, panDeltaX);
+      const totalDelta = Math.max(horizontalDelta, verticalDelta);
+      const pinchDistance = Math.max(distanceX, gesture.startDistanceX);
+      const canPinch = pinchDistance >= GRAPH_TOUCH_PINCH_MIN_DISTANCE_PX;
+
+      if (totalDelta < GRAPH_TOUCH_GESTURE_THRESHOLD_PX) return;
+
+      if (verticalDelta > horizontalDelta * GRAPH_TOUCH_VERTICAL_BIAS) {
+        gesture.mode = "scroll";
+        return;
+      }
+
+      if (canPinch && pinchDeltaX >= GRAPH_TOUCH_GESTURE_THRESHOLD_PX && pinchDeltaX >= panDeltaX * 0.8) {
+        gesture.mode = "pinch";
+      } else if (this._isViewRangeZoomed() && panDeltaX >= GRAPH_TOUCH_GESTURE_THRESHOLD_PX && panDeltaX >= verticalDelta) {
+        gesture.mode = "pan";
+        gesture.target.toggleAttribute("graph-dragging", true);
+      } else {
+        gesture.mode = "scroll";
+        return;
+      }
+
+      this._tooltip.handlePointerLeave();
+    }
+
+    if (gesture.mode === "scroll") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (gesture.mode === "pinch") {
+      const currentDistanceX = Math.max(1, distanceX);
+      const distanceDeltaRatio = (currentDistanceX - gesture.startDistanceX) / gesture.width;
+      this._zoomGraphViewAt(
+        gesture.anchorPercent,
+        Math.exp(-distanceDeltaRatio * GRAPH_TOUCH_PINCH_DELTA_SENSITIVITY),
+        gesture.width,
+        gesture.startViewStart,
+        gesture.startViewEnd,
+        GRAPH_TOUCH_PINCH_MIN_FACTOR,
+        GRAPH_TOUCH_PINCH_MAX_FACTOR
+      );
+      return;
+    }
+
+    this._panGraphView(centerX - gesture.startCenterX, gesture.width, gesture.startViewStart, gesture.startViewEnd);
+  }
+
+  private _graphTouchPair(): [GraphPointerState, GraphPointerState] | undefined {
+    const pointers = Array.from(this._graphTouchPointers.values());
+    if (pointers.length < 2) return undefined;
+
+    return [pointers[0], pointers[1]];
+  }
+
+  private _endGraphTouchGesture(): void {
+    this._graphTouchGesture?.target.toggleAttribute("graph-dragging", false);
+    this._graphTouchGesture = undefined;
+    this._graphTouchPointers.clear();
+  }
+
+  private _resetGraphGestureState(): void {
+    this._graphMouseDrag?.target.toggleAttribute("graph-dragging", false);
+    this._graphTouchGesture?.target.toggleAttribute("graph-dragging", false);
+    this._graphMouseDrag = undefined;
+    this._graphTouchGesture = undefined;
+    this._graphTouchPointers.clear();
   }
 
   private _rangeSliderTrackWidthPx(source?: Element | null): number | undefined {
