@@ -114,6 +114,10 @@ export class TooltipController implements ReactiveController {
 
   handlePointerMove(event: PointerEvent): void {
     const pt = this._svgPoint(event);
+    this._queuePoint(pt);
+  }
+
+  private _queuePoint(pt: PointerChartPoint | undefined): void {
     if (!pt) {
       this._clear();
       return;
@@ -295,8 +299,7 @@ export class TooltipController implements ReactiveController {
     return this._timeBounds.start + ratio * (this._timeBounds.end - this._timeBounds.start);
   }
 
-  private _svgPoint(event: PointerEvent): PointerChartPoint | undefined {
-    const container = event.currentTarget;
+  private _svgPoint(event: PointerEvent, container = event.currentTarget): PointerChartPoint | undefined {
     if (!(container instanceof Element)) return undefined;
 
     const canvas = event.composedPath().find((node): node is HTMLElement =>

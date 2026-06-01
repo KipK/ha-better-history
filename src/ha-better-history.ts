@@ -49,6 +49,10 @@ const RANGE_TOUCH_THUMB_HIT_PX = 44;
 const RANGE_THUMB_WIDTH_PX = 12;
 const RANGE_TOUCH_THUMB_WIDTH_PX = 14;
 const GRAPH_WHEEL_ZOOM_SENSITIVITY = 0.0025;
+const GRAPH_TRACKPAD_PINCH_ZOOM_SENSITIVITY = 0.012;
+const GRAPH_TRACKPAD_PINCH_DELTA_MAX_PX = 48;
+const GRAPH_TRACKPAD_PINCH_MIN_FACTOR = 0.5;
+const GRAPH_TRACKPAD_PINCH_MAX_FACTOR = 2;
 const GRAPH_MOUSE_PAN_THRESHOLD_PX = 6;
 const GRAPH_TOUCH_GESTURE_THRESHOLD_PX = 10;
 const GRAPH_TOUCH_PINCH_MIN_DISTANCE_PX = 24;
@@ -191,7 +195,7 @@ interface GraphMouseDrag {
 }
 
 interface GraphTouchGesture {
-  mode: "pending" | "pinch" | "pan" | "scroll";
+  mode: "pending" | "pinch" | "scroll";
   startCenterX: number;
   startCenterY: number;
   startDistanceX: number;
@@ -2099,6 +2103,10 @@ export class HaBetterHistory extends LitElement {
     return event.deltaY;
   }
 
+  private _isTrackpadPinchWheel(event: WheelEvent): boolean {
+    return event.deltaMode === 0 && Math.abs(event.deltaY) < GRAPH_TRACKPAD_PINCH_DELTA_MAX_PX;
+  }
+
   private _onGraphWheel(event: WheelEvent): void {
     if (!(event.ctrlKey || event.metaKey)) return;
 
@@ -2112,9 +2120,21 @@ export class HaBetterHistory extends LitElement {
     event.stopPropagation();
 
     const anchorPercent = (event.clientX - rect.left) / rect.width;
-    const factor = Math.exp(this._wheelDeltaPx(event) * GRAPH_WHEEL_ZOOM_SENSITIVITY);
+    const trackpadPinch = this._isTrackpadPinchWheel(event);
+    const sensitivity = trackpadPinch
+      ? GRAPH_TRACKPAD_PINCH_ZOOM_SENSITIVITY
+      : GRAPH_WHEEL_ZOOM_SENSITIVITY;
+    const factor = Math.exp(this._wheelDeltaPx(event) * sensitivity);
 
-    this._zoomGraphViewAt(anchorPercent, factor, rect.width);
+    this._zoomGraphViewAt(
+      anchorPercent,
+      factor,
+      rect.width,
+      undefined,
+      undefined,
+      trackpadPinch ? GRAPH_TRACKPAD_PINCH_MIN_FACTOR : undefined,
+      trackpadPinch ? GRAPH_TRACKPAD_PINCH_MAX_FACTOR : undefined
+    );
   }
 
   private _onGraphPointerDown(event: PointerEvent): void {
@@ -2145,9 +2165,11 @@ export class HaBetterHistory extends LitElement {
     if (event.pointerType !== "touch") return;
 
     this._graphTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    target.setPointerCapture(event.pointerId);
 
     if (this._graphTouchPointers.size === 2) {
+      for (const pointerId of this._graphTouchPointers.keys()) {
+        target.setPointerCapture(pointerId);
+      }
       this._startGraphTouchGesture(target);
     }
   }
@@ -2268,11 +2290,8 @@ export class HaBetterHistory extends LitElement {
         return;
       }
 
-      if (canPinch && pinchDeltaX >= GRAPH_TOUCH_GESTURE_THRESHOLD_PX && pinchDeltaX >= panDeltaX * 0.8) {
+      if (canPinch && pinchDeltaX >= GRAPH_TOUCH_GESTURE_THRESHOLD_PX && pinchDeltaX >= panDeltaX * 1.35) {
         gesture.mode = "pinch";
-      } else if (this._isViewRangeZoomed() && panDeltaX >= GRAPH_TOUCH_GESTURE_THRESHOLD_PX && panDeltaX >= verticalDelta) {
-        gesture.mode = "pan";
-        gesture.target.toggleAttribute("graph-dragging", true);
       } else {
         gesture.mode = "scroll";
         return;
@@ -2301,7 +2320,6 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
-    this._panGraphView(centerX - gesture.startCenterX, gesture.width, gesture.startViewStart, gesture.startViewEnd);
   }
 
   private _graphTouchPair(): [GraphPointerState, GraphPointerState] | undefined {
