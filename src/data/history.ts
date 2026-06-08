@@ -282,7 +282,7 @@ function timeFromState(state: HistoryState): number {
     return state.lu * 1000;
   }
 
-  const timestamp = state.last_changed ?? state.last_updated;
+  const timestamp = state.last_updated ?? state.last_changed;
 
   return timestamp ? Date.parse(timestamp) : Number.NaN;
 }
