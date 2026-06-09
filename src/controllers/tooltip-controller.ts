@@ -20,6 +20,7 @@ export interface TooltipState {
   tooltipX: number;
   y: number;
   placement: "above" | "below";
+  rowCount: number;
   activeLeft: number;
   activeTop: number;
   activeWidth: number;
@@ -44,6 +45,8 @@ interface InternalSeries {
 interface PointerChartPoint {
   x: number;
   y: number;
+  viewportTop: number;
+  viewportBottom: number;
   activeLeft: number;
   activeTop: number;
   activeWidth: number;
@@ -54,7 +57,7 @@ interface PointerChartPoint {
 }
 
 export class TooltipController implements ReactiveController {
-  private readonly _host: ReactiveControllerHost & EventTarget;
+  private readonly _host: ReactiveControllerHost & EventTarget & { renderRoot?: ParentNode };
 
   tooltip: TooltipState | undefined = undefined;
 
@@ -64,8 +67,9 @@ export class TooltipController implements ReactiveController {
   private _frame?: number;
   private _pendingPoint?: PointerChartPoint;
   private _timeBounds = { start: 0, end: 1 };
+  private _measuredTooltip?: { rowCount: number; height: number };
 
-  constructor(host: ReactiveControllerHost & EventTarget) {
+  constructor(host: ReactiveControllerHost & EventTarget & { renderRoot?: ParentNode }) {
     this._host = host;
     host.addController(this);
   }
@@ -77,6 +81,23 @@ export class TooltipController implements ReactiveController {
       cancelAnimationFrame(this._frame);
       this._frame = undefined;
     }
+  }
+
+  hostUpdated(): void {
+    if (!this.tooltip) return;
+
+    const tooltipEl = this._host.renderRoot?.querySelector?.(".tooltip");
+    if (!(tooltipEl instanceof HTMLElement)) return;
+
+    const height = tooltipEl.getBoundingClientRect().height;
+    const rowCount = this.tooltip.rowCount;
+    const previous = this._measuredTooltip;
+    if (height <= 0 || (previous?.rowCount === rowCount && Math.abs(previous.height - height) < 1)) {
+      return;
+    }
+
+    this._measuredTooltip = { rowCount, height };
+    this._apply();
   }
 
   /** Call each render cycle to keep chart dimensions + series data up to date. */
@@ -166,6 +187,10 @@ export class TooltipController implements ReactiveController {
       const p = this._pointAtOrBefore(s.points, selectedTime);
       return p ? [{ label: s.label, color: s.color, value: String(p.value) }] : [];
     });
+    const rowCount = values.length;
+    const tooltipHeight = this._tooltipHeight(rowCount);
+    const placement = this._placement(pt, tooltipHeight);
+    const tooltipY = this._tooltipY(pt, placement, tooltipHeight);
 
     if (values.length === 0) {
       if (this.tooltip !== undefined) {
@@ -184,20 +209,21 @@ export class TooltipController implements ReactiveController {
       this.tooltip.activeHeight === pt.activeHeight &&
       this.tooltip.activeKey === pt.activeKey &&
       Math.abs(this.tooltip.tooltipX - Math.min(Math.max(pt.x, PLOT_LEFT + 80), PLOT_RIGHT - 80)) < 1 &&
-      Math.abs(this.tooltip.y - this._tooltipY(pt)) < 1 &&
-      this.tooltip.placement === this._placement(pt)
+      Math.abs(this.tooltip.y - tooltipY) < 1 &&
+      this.tooltip.placement === placement &&
+      this.tooltip.rowCount === rowCount
     ) {
       return;
     }
 
     const tooltipX = Math.min(Math.max(pt.x, PLOT_LEFT + 80), PLOT_RIGHT - 80);
-    const tooltipY = this._tooltipY(pt);
 
     this.tooltip = {
       x: xFor(selectedTime, this._timeBounds),
       tooltipX,
       y: tooltipY,
-      placement: this._placement(pt),
+      placement,
+      rowCount,
       activeLeft: pt.activeLeft,
       activeTop: pt.activeTop,
       activeWidth: pt.activeWidth,
@@ -211,26 +237,60 @@ export class TooltipController implements ReactiveController {
     this._emit();
   }
 
-  private _placement(pt: PointerChartPoint): "above" | "below" {
+  private _placement(pt: PointerChartPoint, tooltipHeight: number): "above" | "below" {
     const activeBottom = pt.activeTop + pt.activeHeight;
+    const preferred = pt.touchLike
+      ? pt.y < pt.activeTop + pt.activeHeight / 2 ? "above" : "below"
+      : activeBottom - pt.y < 120 ? "above" : "below";
+    const minTop = this._minTooltipTop(pt);
+    const maxBottom = this._maxTooltipBottom(pt);
+    const aboveTop = this._tooltipAnchorY(pt, "above") - tooltipHeight - 10;
+    const belowBottom = this._tooltipAnchorY(pt, "below") + tooltipHeight + 10;
+    const aboveFits = aboveTop >= minTop;
+    const belowFits = belowBottom <= maxBottom;
 
-    if (pt.touchLike) {
-      return pt.y < pt.activeTop + pt.activeHeight / 2 ? "above" : "below";
-    }
+    if (preferred === "above" && aboveFits) return "above";
+    if (preferred === "below" && belowFits) return "below";
+    if (aboveFits) return "above";
+    if (belowFits) return "below";
 
-    return activeBottom - pt.y < 120 ? "above" : "below";
+    const aboveSpace = this._tooltipAnchorY(pt, "above") - minTop;
+    const belowSpace = maxBottom - this._tooltipAnchorY(pt, "below");
+    return aboveSpace >= belowSpace ? "above" : "below";
   }
 
-  private _tooltipY(pt: PointerChartPoint): number {
-    const activeBottom = pt.activeTop + pt.activeHeight;
+  private _tooltipY(pt: PointerChartPoint, placement: "above" | "below", tooltipHeight: number): number {
+    const desired = placement === "above"
+      ? this._tooltipAnchorY(pt, placement) - tooltipHeight - 10
+      : this._tooltipAnchorY(pt, placement) + 10;
+    const minTop = this._minTooltipTop(pt);
+    const maxTop = Math.max(minTop, this._maxTooltipBottom(pt) - tooltipHeight);
 
+    return Math.min(Math.max(desired, minTop), maxTop);
+  }
+
+  private _tooltipAnchorY(pt: PointerChartPoint, placement: "above" | "below"): number {
     if (pt.touchLike) {
-      return this._placement(pt) === "above"
-        ? activeBottom - 10
+      return placement === "above"
+        ? pt.activeTop + pt.activeHeight - 10
         : pt.activeTop + 10;
     }
 
-    return Math.min(Math.max(pt.y, pt.activeTop + 28), activeBottom - 28);
+    return Math.min(Math.max(pt.y, pt.activeTop + 28), pt.activeTop + pt.activeHeight - 28);
+  }
+
+  private _tooltipHeight(rowCount: number): number {
+    if (this._measuredTooltip?.rowCount === rowCount) return this._measuredTooltip.height;
+
+    return 34 + rowCount * 18;
+  }
+
+  private _minTooltipTop(pt: PointerChartPoint): number {
+    return Math.max(8, pt.viewportTop + 8);
+  }
+
+  private _maxTooltipBottom(pt: PointerChartPoint): number {
+    return Math.max(this._minTooltipTop(pt) + 40, pt.viewportBottom - 8);
   }
 
   private _emit(): void {
@@ -312,6 +372,7 @@ export class TooltipController implements ReactiveController {
 
     const containerRect = container.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || containerRect.height;
 
     if (
       event.clientX < canvasRect.left ||
@@ -327,6 +388,8 @@ export class TooltipController implements ReactiveController {
     return {
       x: PLOT_LEFT + ((event.clientX - canvasRect.left) / canvasRect.width) * PLOT_WIDTH,
       y: event.clientY - containerRect.top,
+      viewportTop: Math.max(0, -containerRect.top),
+      viewportBottom: Math.min(containerRect.height, viewportHeight - containerRect.top),
       activeLeft,
       activeTop,
       activeWidth: canvasRect.width,
@@ -342,15 +405,13 @@ export class TooltipController implements ReactiveController {
 
     const axisLeft = this.tooltip.activeLeft + ((this.tooltip.x - PLOT_LEFT) / PLOT_WIDTH) * this.tooltip.activeWidth;
     const tooltipLeft = this.tooltip.activeLeft + ((this.tooltip.tooltipX - PLOT_LEFT) / PLOT_WIDTH) * this.tooltip.activeWidth;
-    const placement = this.tooltip.placement === "above"
-      ? "translate(-50%, calc(-100% - 10px))"
-      : "translate(-50%, 10px)";
 
     return html`
       <div class="tooltip-axis-pointer" style=${`left:${axisLeft.toFixed(1)}px;top:${this.tooltip.activeTop.toFixed(1)}px;height:${this.tooltip.activeHeight.toFixed(1)}px;`}></div>
       <div
         class="tooltip"
-        style=${`left:clamp(150px,${tooltipLeft.toFixed(1)}px,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:${placement};`}
+        data-placement=${this.tooltip.placement}
+        style=${`left:clamp(150px,${tooltipLeft.toFixed(1)}px,calc(100% - 150px));top:${this.tooltip.y.toFixed(1)}px;transform:translateX(-50%);`}
       >
         <div class="tooltip-time">${new Date(this.tooltip.time).toLocaleString()}</div>
         ${this.tooltip.values.map(
