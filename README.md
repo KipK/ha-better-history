@@ -4,8 +4,6 @@ Author: @KipK
 
 Standalone web component for Home Assistant history charts. Built with **Lit 3** and **TypeScript**. Renders SVG charts with no external charting dependencies.
 
-**Status: WIP** — API not yet stable.
-
 If this component helps you, you can support development on
 [Buy Me a Coffee](https://buymeacoffee.com/kipk).
 
