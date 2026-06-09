@@ -301,7 +301,7 @@ function renderEmptyStateEntityTrigger(opts: EntityPickerRenderOpts): TemplateRe
   return html`
     <ha-button
       class="entity-trigger entity-add-trigger"
-      size="small"
+      size="s"
       appearance="filled"
       @click=${opts.onEntityPickerOpened}
     >
