@@ -152,13 +152,6 @@ class MockIconButton extends HTMLElement {
   }
 }
 
-class MockMdList extends HTMLElement { connectedCallback() { this.style.display = "block"; } }
-class MockMdListItem extends HTMLElement {
-  connectedCallback() {
-    this.style.display = "flex";
-    this.style.cursor = "pointer";
-  }
-}
 class MockInputChip extends HTMLElement {
   connectedCallback() {
     this.style.display = "inline-flex";
@@ -171,8 +164,6 @@ export function registerMockComponents() {
     ["ha-entity-picker", MockEntityPicker],
     ["ha-icon", MockIcon],
     ["ha-icon-button", MockIconButton],
-    ["ha-md-list", MockMdList],
-    ["ha-md-list-item", MockMdListItem],
     ["ha-input-chip", MockInputChip],
   ];
 

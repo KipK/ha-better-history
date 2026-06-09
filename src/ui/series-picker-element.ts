@@ -149,7 +149,6 @@ export class SeriesPickerElement extends LitElement {
         tag === "ha-combo-box" ||
         tag === "vaadin-combo-box-overlay" ||
         tag === "mwc-menu-surface" ||
-        tag === "ha-md-list" ||
         tag === "md-menu"
       ) {
         return true;
