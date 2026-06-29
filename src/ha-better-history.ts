@@ -1108,6 +1108,7 @@ export class HaBetterHistory extends LitElement {
 
     return {
       id: source.id,
+      entity: source.entityId,
       label: source.label,
       color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
       unit,
@@ -1204,6 +1205,7 @@ export class HaBetterHistory extends LitElement {
       return [
         {
           id: resolved.id,
+          entity: resolved.entity,
           label: resolved.label,
           color: resolved.color,
           unit: resolved.unit,

@@ -18,6 +18,7 @@ export const X_AXIS_LABEL_SPACE = 16;
 
 export interface RenderableSeries {
   id: string;
+  entity: string;
   label: string;
   color: string;
   unit?: string;
@@ -107,6 +108,11 @@ export interface GraphGroup {
   rightYLabels: YAxisLabelRenderData[];
   xLabels: XAxisLabelRenderData[];
   heatingAreas: HeatingAreaRenderData[];
+}
+
+interface SegmentGraphTarget {
+  keys: string[];
+  entityIds: Set<string>;
 }
 
 export function xFor(time: number, bounds: { start: number; end: number }): number {
@@ -768,6 +774,25 @@ function withGraphUniqueColors(
   };
 }
 
+function nonNumericSeriesForGraph(
+  series: RenderableSeries[],
+  graphTargets: SegmentGraphTarget[],
+  graphIndex: number,
+  fallbackToFirstGraph: boolean
+): RenderableSeries[] {
+  return series.filter((item) => {
+    const key = scaleGroupKeyFor(item);
+    const matchingIndex = graphTargets.findIndex((target) => target.keys.includes(key));
+    const entityIndex = matchingIndex < 0
+      ? graphTargets.findIndex((target) => target.entityIds.has(item.entity))
+      : -1;
+
+    return matchingIndex === graphIndex
+      || entityIndex === graphIndex
+      || (fallbackToFirstGraph && matchingIndex < 0 && entityIndex < 0 && graphIndex === 0);
+  });
+}
+
 export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHeight = GRAPH_HEIGHT): GraphGroup[] {
   const groups: GraphGroup[] = [];
   const bounds = data.timeBounds;
@@ -809,6 +834,23 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
   }
 
   const graphKeys = [...new Set(data.numericScales.map((scale) => scale.graphKey))];
+  const graphTargets = graphKeys.map((graphKey): SegmentGraphTarget => {
+    const graphScales = data.numericScales.filter((scale) => scale.graphKey === graphKey);
+    const graphIds = new Set(graphScales.flatMap((scale) => [...scale.ids]));
+    const entityIds = new Set(
+      data.allSeries
+        .filter((series) =>
+          (series.valueType === "number" || series.valueType === "boolean") &&
+          graphIds.has(series.id)
+        )
+        .map((series) => series.entity)
+    );
+
+    return {
+      keys: [...new Set([graphKey, graphScales[0]?.sourceGraphKey ?? graphKey])],
+      entityIds
+    };
+  });
 
   for (let i = 0; i < graphKeys.length; i++) {
     const graphKey = graphKeys[i];
@@ -823,10 +865,10 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     );
     const allNumericGraph = sourceGroupSeries.filter((s) => graphKeyForSeriesUnitGroup(s, sourceGroupSeries) === graphKey);
     const visibleNumeric = data.visibleSeries.filter((s) => graphIds.has(s.id));
-    const visibleGroup = i === 0 ? [...visibleNumeric, ...visibleNonNumeric] : visibleNumeric;
-    const allGroup = i === 0
-      ? [...allNumericGraph, ...allNonNumeric]
-      : allNumericGraph;
+    const visibleSegments = nonNumericSeriesForGraph(visibleNonNumeric, graphTargets, i, true);
+    const allSegments = nonNumericSeriesForGraph(allNonNumeric, graphTargets, i, true);
+    const visibleGroup = [...visibleNumeric, ...visibleSegments];
+    const allGroup = [...allNumericGraph, ...allSegments];
     const colored = withGraphUniqueColors(allGroup, visibleGroup, i);
 
     const segSeries = colored.visibleSeries.filter((s) => s.valueType !== "number" && s.valueType !== "boolean");
