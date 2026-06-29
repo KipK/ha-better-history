@@ -79,6 +79,11 @@ interface BrowserHistoryEntry {
   layer: BrowserHistoryLayer;
 }
 
+interface GraphAxisGutters {
+  left: string;
+  right: string;
+}
+
 function axisLabelWidthPx(value: string): number {
   let width = 0;
 
@@ -92,12 +97,12 @@ function axisLabelWidthPx(value: string): number {
   return Math.ceil(width);
 }
 
-function axisGutter(labels: Array<{ value: string }>, markerCount = 0): string {
+function axisGutterWidthPx(labels: Array<{ value: string }>, markerCount = 0): number {
   const width = Math.max(0, ...labels.map((label) => axisLabelWidthPx(label.value)));
   const markerWidth = markerCount > 0 ? markerCount * 10 : 0;
   const gutterWidth = Math.max(width, markerWidth);
 
-  return gutterWidth > 0 ? `${gutterWidth + AXIS_LABEL_GAP_PX}px` : "0px";
+  return gutterWidth > 0 ? gutterWidth + AXIS_LABEL_GAP_PX : 0;
 }
 
 function axisUnitKey(unit: string | undefined): string {
@@ -1455,24 +1460,40 @@ export class HaBetterHistory extends LitElement {
     return graphCount * (GRAPH_TOP + 18 + 16) + legendHeight + (segmentCount > 0 ? 10 + segmentCount * SEGMENT_ROW_HEIGHT : 0);
   }
 
-  private _renderGraphGroup(group: GraphGroup, graphIndex: number): TemplateResult {
+  private _graphAxisGutters(groups: GraphGroup[]): GraphAxisGutters {
+    const showScale = this._resolved?.showScale ?? true;
+    if (!showScale) return { left: "0px", right: "0px" };
+
+    let left = 0;
+    let right = 0;
+
+    for (const group of groups) {
+      const leftAxisDots = this._axisSeriesDots(group, "left");
+      const rightAxisDots = this._axisSeriesDots(group, "right");
+      const leftMarkerCount = leftAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
+      const rightMarkerCount = rightAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
+
+      left = Math.max(left, axisGutterWidthPx(group.yLabels, leftMarkerCount));
+      right = Math.max(right, axisGutterWidthPx(group.rightYLabels, rightMarkerCount));
+    }
+
+    return { left: `${left}px`, right: `${right}px` };
+  }
+
+  private _renderGraphGroup(group: GraphGroup, graphIndex: number, gutters: GraphAxisGutters): TemplateResult {
     const showLegend = this._resolved?.showLegend ?? true;
     const showGrid = this._resolved?.showGrid ?? true;
     const showScale = this._resolved?.showScale ?? true;
     const seriesIds = group.series.map((series) => series.id).join("|");
     const leftAxisDots = showScale ? this._axisSeriesDots(group, "left") : [];
     const rightAxisDots = showScale ? this._axisSeriesDots(group, "right") : [];
-    const leftMarkerCount = leftAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
-    const rightMarkerCount = rightAxisDots.length || (this._draggingAxisSeriesId ? 1 : 0);
-    const leftGutter = showScale ? axisGutter(group.yLabels, leftMarkerCount) : "0px";
-    const rightGutter = showScale ? axisGutter(group.rightYLabels, rightMarkerCount) : "0px";
     const plotBottom = GRAPH_TOP + group.graphHeight;
     const xLabelTop = plotBottom + 3;
     const segmentStartY = plotBottom + X_AXIS_LABEL_SPACE + 6;
 
     return html`
       <div class="graph-section">
-        <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${leftGutter};--axis-right-gutter:${rightGutter};`}>
+        <div class="graph-row" style=${`--axis-label-gap:${AXIS_LABEL_GAP_PX}px;--axis-left-gutter:${gutters.left};--axis-right-gutter:${gutters.right};`}>
           <div
             class="axis-labels axis-labels--left"
             style="height:${group.canvasHeight}px"
@@ -1940,6 +1961,7 @@ export class HaBetterHistory extends LitElement {
     const hasData = chartData.visibleSeries.some((s) => s.points.length > 0);
     const showTooltip = this._resolved.showTooltip;
     const groups = this._graphGroups(chartData);
+    const gutters = this._graphAxisGutters(groups);
     const hasStructure = groups.length > 0;
     const showStructure = hasStructure && (hasData || this._data.loading);
     const zoomed = this._isViewRangeZoomed();
@@ -1970,7 +1992,7 @@ export class HaBetterHistory extends LitElement {
                 @pointermove=${showTooltip ? (e: PointerEvent) => this._tooltip.handlePointerMove(e) : nothing}
                 @pointerleave=${showTooltip ? () => this._tooltip.handlePointerLeave() : nothing}
               >
-                ${groups.map((g, index) => this._renderGraphGroup(g, index))}
+                ${groups.map((g, index) => this._renderGraphGroup(g, index, gutters))}
                 ${showTooltip ? this._tooltip.renderTooltip() : nothing}
               </div>`
           : this._data.loading
