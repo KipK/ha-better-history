@@ -19,14 +19,28 @@ interface DatePickerRenderOptions {
   onClose?: () => void;
 }
 
+function isRangeNavigationInteraction(event: Event): boolean {
+  return event.composedPath().some((target) => {
+    const localName = (target as { localName?: unknown }).localName;
+
+    return localName === "ha-icon-button-prev" || localName === "ha-icon-button-next";
+  });
+}
+
 export function renderDatePicker(
   opts: DatePickerRenderOptions
 ): TemplateResult {
+  const onOpen = (event: Event): void => {
+    if (!isRangeNavigationInteraction(event)) {
+      opts.onOpen?.();
+    }
+  };
+
   return html`
     <div
       class="date-picker-wrapper"
-      @focusin=${() => opts.onOpen?.()}
-      @pointerdown=${() => opts.onOpen?.()}
+      @focusin=${onOpen}
+      @pointerdown=${onOpen}
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape") {
           opts.onClose?.();
