@@ -8,6 +8,9 @@
       body { margin: 24px; font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; }
       h2 { color: #aaa; font-size: 13px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
       ha-better-history { display: block; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-bottom: 24px; background: #16213e; }
+      .fixture-status { margin: -16px 0 24px; color: #aaa; font: 12px/1.4 monospace; }
+      .fixture-status[data-result="pass"] { color: #66bb6a; }
+      .fixture-status[data-result="fail"] { color: #ef5350; }
     </style>
   </head>
   <body>
@@ -31,6 +34,10 @@
 
     <h2>6 — scaleMode: manual</h2>
     <ha-better-history id="c6"></ha-better-history>
+
+    <h2>7 — unavailable numeric classification and recovery</h2>
+    <ha-better-history id="c7"></ha-better-history>
+    <p id="c7-status" class="fixture-status">Checking deterministic history reloads…</p>
 
     <script type="module" src="./main.ts"></script>
   </body>

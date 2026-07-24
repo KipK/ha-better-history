@@ -1,5 +1,13 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { currentSourcePoint, fetchHistory, HistoryDataAccumulator, type HistoryPoint, type HistorySeries, type HistorySource } from "../data/history.js";
+import {
+  currentSourcePoint,
+  fetchHistory,
+  HistoryDataAccumulator,
+  sourceSetLoadSignature,
+  type HistoryPoint,
+  type HistorySeries,
+  type HistorySource
+} from "../data/history.js";
 import type { HomeAssistant } from "../types/ha.js";
 import { logPerformance, performanceNow } from "../utils/performance.js";
 
@@ -41,6 +49,7 @@ function seriesContentEquals(left: HistorySeries[], right: HistorySeries[]): boo
     const rightSeries = right[i];
 
     if (leftSeries.source.id !== rightSeries.source.id) return false;
+    if (leftSeries.source.valueType !== rightSeries.source.valueType) return false;
     if (leftSeries.points.length !== rightSeries.points.length) return false;
 
     for (let j = 0; j < leftSeries.points.length; j++) {
@@ -271,7 +280,7 @@ export class DataController implements ReactiveController {
   }
 
   fetch(hass: HomeAssistant | undefined, sources: HistorySource[], start: Date, end: Date): void {
-    const key = `${sources.map((s) => s.id).join("|")}|${start.getTime()}|${end.getTime()}`;
+    const key = `${sourceSetLoadSignature(sources)}|${start.getTime()}|${end.getTime()}`;
 
     if (key === this._prevKey && !this.error) return;
 
@@ -395,7 +404,7 @@ export class DataController implements ReactiveController {
     this.changedSourceIds = new Set(series.map((item) => item.source.id));
     this.loading = false;
     this.error = "";
-    this._prevKey = `${series.map((item) => item.source.id).join("|")}|${start.getTime()}|${end.getTime()}`;
+    this._prevKey = `${sourceSetLoadSignature(series.map((item) => item.source))}|${start.getTime()}|${end.getTime()}`;
     this.host.requestUpdate();
   }
 
@@ -621,7 +630,7 @@ export class DataController implements ReactiveController {
     for (const sourceId of sourceIds) {
       this._session?.sourceStates.delete(sourceId);
     }
-    this._prevKey = this.series.map((s) => s.source.id).join("|") + "|";
+    this._prevKey = `${sourceSetLoadSignature(this.series.map((item) => item.source))}|`;
 
     this.host.requestUpdate();
   }

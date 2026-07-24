@@ -23,7 +23,13 @@ import { GRAPH_TOP, GRAPH_HEIGHT } from "./render/scales.js";
 import { paletteColor, CLIMATE_ATTR_COLORS } from "./render/colors.js";
 import { chartStyles } from "./styles/chart.css.js";
 import type { AttributeUnitMap, BetterHistoryConfig, BetterHistoryLineMode, ResolvedConfig, ResolvedSeries } from "./types/config.js";
-import { attributeSource, type HistorySeries, type HistorySource } from "./data/history.js";
+import {
+  attributeSource,
+  entityStateSource,
+  sourceSetLoadSignature,
+  type HistorySeries,
+  type HistorySource
+} from "./data/history.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribute-units.js";
 import { canonicalUnitKey, isSameTemperatureUnit, isTemperatureUnit } from "./data/temperature-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
@@ -810,6 +816,24 @@ export class HaBetterHistory extends LitElement {
   private _lastFetchSources: HistorySource[] = [];
   private _lastHassResolveTime = 0;
 
+  private _resolvedSourceValueTypePromotionPending(): boolean {
+    if (!this.hass || this._importedDataActive) return false;
+
+    const resolvedSourceIds = new Set(this._activeResolvedSeries().map((series) => series.id));
+    return this._lastFetchSources.some((source) => {
+      if (!resolvedSourceIds.has(source.id) || source.valueType !== "string") return false;
+
+      const entity = this.hass?.states[source.entityId];
+      if (!entity) return false;
+
+      const currentSource = source.kind === "entity_attribute"
+        ? attributeSource(entity, source.path ?? [])
+        : entityStateSource(entity);
+
+      return currentSource !== undefined && currentSource.valueType !== "string";
+    });
+  }
+
   protected willUpdate(changed: PropertyValues): void {
     this._data.debugPerformance = this.debugPerformance || this.config?.debugPerformance === true;
 
@@ -863,11 +887,12 @@ export class HaBetterHistory extends LitElement {
       if (hassOnly) {
         const now = Date.now();
         const rounded = Math.floor(now / 1000) * 1000;
+        const sourceValueTypePromotionPending = this._resolvedSourceValueTypePromotionPending();
         if ((futureRange || rollingRelativeRange) && this._lastFetchKey) {
           this._lastHassResolveTime = rounded;
-          if (!rollingRelativeRange) return;
+          if (!rollingRelativeRange && !sourceValueTypePromotionPending) return;
         }
-        if (!rollingRelativeRange && rounded === this._lastHassResolveTime && this._lastFetchKey) return;
+        if (!rollingRelativeRange && rounded === this._lastHassResolveTime && this._lastFetchKey && !sourceValueTypePromotionPending) return;
         this._lastHassResolveTime = rounded;
       }
 
@@ -912,16 +937,16 @@ export class HaBetterHistory extends LitElement {
       }
 
       const sources = this._fetchSources();
-      const sourceIds = sources.map((s) => s.id).sort().join("|");
+      const sourceLoadSignature = sourceSetLoadSignature(sources);
       const fetchKey = rollingRelativeRange
-        ? `${sourceIds}|rolling|${this._relativeRangeMs()}`
-        : `${sourceIds}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
+        ? `${sourceLoadSignature}|rolling|${this._relativeRangeMs()}`
+        : `${sourceLoadSignature}|${resolved.startDate.getTime()}|${resolved.endDate.getTime()}`;
 
       if (fetchKey !== this._lastFetchKey) {
-        const prevSourceIds = this._lastFetchKey.split("|").slice(0, -2).join("|");
-        const timeChanged = sourceIds === prevSourceIds && this._lastFetchKey !== "";
+        const previousSourceLoadSignature = sourceSetLoadSignature(this._lastFetchSources);
+        const rangeChanged = sourceLoadSignature === previousSourceLoadSignature && this._lastFetchKey !== "";
 
-        if (this._lastFetchSources.length > 0 && !timeChanged) {
+        if (this._lastFetchSources.length > 0 && !rangeChanged) {
           const prevIds = new Set(this._lastFetchSources.map((s) => s.id));
           const currIds = new Set(sources.map((s) => s.id));
           const added = sources.filter((s) => !prevIds.has(s.id));
@@ -2701,8 +2726,8 @@ export class HaBetterHistory extends LitElement {
     this._chartRenderCache = undefined;
     this._graphGroupRenderCache = undefined;
 
-    const sourceIds = this._selectedSources.map((source) => source.id).sort().join("|");
-    this._lastFetchKey = `${sourceIds}|${loadedStart.getTime()}|${loadedEnd.getTime()}`;
+    const sourceLoadSignature = sourceSetLoadSignature(this._selectedSources);
+    this._lastFetchKey = `${sourceLoadSignature}|${loadedStart.getTime()}|${loadedEnd.getTime()}`;
     this._lastFetchSources = [...this._selectedSources];
     this._data.setImportedSeries(imported.series, loadedStart, loadedEnd);
 

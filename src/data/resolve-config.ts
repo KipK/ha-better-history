@@ -5,6 +5,7 @@ import type { HomeAssistant } from "../types/ha.js";
 import type { HistoryValueType } from "./value-type.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./attribute-units.js";
 import { isSameTemperatureUnit, isTemperatureUnit } from "./temperature-units.js";
+import { isUnavailableState } from "./format.js";
 
 export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
   return {
@@ -78,6 +79,33 @@ function resolveValueType(hass: HomeAssistant | undefined, entity: string, attri
   return attributeSource(hassEntity, attribute)?.valueType ?? "string";
 }
 
+function configuredValueIsUnavailable(
+  hass: HomeAssistant | undefined,
+  entity: string,
+  attribute?: string[]
+): boolean {
+  const hassEntity = hass?.states[entity];
+  if (!hassEntity) return true;
+  if (!attribute) return isUnavailableState(hassEntity.state);
+
+  const value = attribute.reduce<unknown>(
+    (current, key) => typeof current === "object" && current !== null
+      ? (current as Record<string, unknown>)[key]
+      : undefined,
+    hassEntity.attributes
+  );
+
+  return isUnavailableState(value);
+}
+
+function hasConfiguredNumericIntent(cfg: SeriesConfig): boolean {
+  const hasUnit = typeof cfg.unit === "string" && cfg.unit.trim() !== "";
+  const hasFiniteBound = (typeof cfg.scaleMin === "number" && Number.isFinite(cfg.scaleMin))
+    || (typeof cfg.scaleMax === "number" && Number.isFinite(cfg.scaleMax));
+
+  return hasUnit || hasFiniteBound;
+}
+
 function resolveLabel(hass: HomeAssistant | undefined, entity: string, attribute?: string[], label?: string): string {
   if (label) return label;
   if (attribute) return attributeDisplayName(attribute);
@@ -129,7 +157,10 @@ function seriesFromConfig(
 ): ResolvedSeries {
   const attribute = normalizeAttribute(cfg.attribute);
   const id = seriesId(cfg.entity, attribute);
-  const vt = resolveValueType(hass, cfg.entity, attribute);
+  const resolvedValueType = resolveValueType(hass, cfg.entity, attribute);
+  const vt = configuredValueIsUnavailable(hass, cfg.entity, attribute) && hasConfiguredNumericIntent(cfg)
+    ? "number"
+    : resolvedValueType;
   const unit = resolveUnit(hass, cfg.entity, attribute, cfg.unit, attributeUnits);
   const group = cfg.group ?? cfg.scaleGroup;
   const scaleGroup = group ?? (isClimateTemperatureAttribute(cfg.entity, attribute) ? "temperature" : undefined);

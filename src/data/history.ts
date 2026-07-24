@@ -1,6 +1,6 @@
 import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { HistorySourceKind, HistoryValueType } from "./value-type.js";
-import { asNumber, asString } from "./format.js";
+import { asNumber, asString, isUnavailableState } from "./format.js";
 import { performanceNow, type PerformanceDetails } from "../utils/performance.js";
 import { runHistoryQueue, type HistoryQueueTask } from "./history-queue.js";
 
@@ -28,6 +28,13 @@ export interface HistoryPoint {
 export interface HistorySeries {
   source: HistorySource;
   points: HistoryPoint[];
+}
+
+export function sourceSetLoadSignature(sources: HistorySource[]): string {
+  return sources
+    .map((source) => JSON.stringify([source.id, source.valueType]))
+    .sort()
+    .join(",");
 }
 
 export interface HistoryPerformanceEvent {
@@ -222,8 +229,14 @@ export function valueType(value: unknown): HistoryValueType | undefined {
 }
 
 export function entityStateSource(entity: HassEntity): HistorySource | undefined {
-  const type = valueType(Number.isFinite(Number(entity.state)) ? Number(entity.state) : entity.state);
+  const numericState = Number(entity.state);
   const unit = entity.attributes.unit_of_measurement;
+  const stateClass = entity.attributes.state_class;
+  const hasNumericMetadata = (typeof stateClass === "string" && stateClass.trim() !== "")
+    || (typeof unit === "string" && unit.trim() !== "");
+  const type = isUnavailableState(entity.state) && hasNumericMetadata
+    ? "number"
+    : valueType(Number.isFinite(numericState) ? numericState : entity.state);
 
   if (!type) {
     return undefined;

@@ -47,6 +47,10 @@ function makeMockHass(historyData: Record<string, unknown>, hassStates: Record<s
 }
 
 type CElement = HTMLElement & { hass?: unknown; entities?: string[]; config?: Record<string, unknown> };
+type HistoryFixtureElement = CElement & {
+  updateComplete: Promise<unknown>;
+  _resolved?: { series: Array<{ id: string; valueType: string }> };
+};
 
 function c(id: string): CElement {
   return document.getElementById(id) as CElement;
@@ -136,5 +140,151 @@ const data6 = { ...sine("sensor.pressure", "hPa", 980, 1030, 12 * 3600 * 1000) }
 const c6 = c("c6");
 c6.hass = makeMockHass(data6, { "sensor.pressure": { entity_id: "sensor.pressure", state: "1013", attributes: { friendly_name: "Pressure", unit_of_measurement: "hPa" } } });
 c6.config = { series: [{ entity: "sensor.pressure", label: "Pressure", scaleMode: "manual" as const, scaleMin: 960, scaleMax: 1040 }] };
+
+// Chart 7 — unavailable numeric classification and one-time type recovery
+const unavailableNumericHistory = {
+  ...sine("sensor.unavailable_numeric_metadata", "%", 70, 82, 8 * 3600 * 1000),
+  ...sine("sensor.unavailable_numeric_config_unit", "kW", 0, 11, 6 * 3600 * 1000),
+  ...sine("sensor.unavailable_numeric_config_bound", "", 20, 65, 7 * 3600 * 1000),
+  ...states("sensor.unavailable_categorical", ["idle", "running"], 90 * 60 * 1000),
+  ...sine("sensor.numeric_type_recovery", "", 72, 79, 5 * 3600 * 1000)
+};
+const unavailableInitialStates = {
+  "sensor.unavailable_numeric_metadata": {
+    entity_id: "sensor.unavailable_numeric_metadata",
+    state: "unavailable",
+    attributes: { friendly_name: "HA metadata", unit_of_measurement: "%", state_class: "measurement" }
+  },
+  "sensor.unavailable_numeric_config_unit": {
+    entity_id: "sensor.unavailable_numeric_config_unit",
+    state: "unknown",
+    attributes: { friendly_name: "Configured unit" }
+  },
+  "sensor.unavailable_numeric_config_bound": {
+    entity_id: "sensor.unavailable_numeric_config_bound",
+    state: "unavailable",
+    attributes: { friendly_name: "Configured bound" }
+  },
+  "sensor.unavailable_categorical": {
+    entity_id: "sensor.unavailable_categorical",
+    state: "unavailable",
+    attributes: { friendly_name: "Categorical" }
+  },
+  "sensor.numeric_type_recovery": {
+    entity_id: "sensor.numeric_type_recovery",
+    state: "unavailable",
+    attributes: { friendly_name: "Late numeric recovery" }
+  }
+};
+let unavailableNumericHistoryRequestCount = 0;
+const unavailableNumericHistoryRequestWaiters: Array<() => void> = [];
+
+function createUnavailableNumericHass(statesValue: Record<string, unknown>) {
+  return {
+    states: statesValue,
+    locale: { language: "en" },
+    localize(key: string) { return key.split(".").pop() || key; },
+    config: { time_zone: "UTC" },
+    callWS(msg: Record<string, unknown>) {
+      if (msg.type === "history/history_during_period") {
+        unavailableNumericHistoryRequestCount += 1;
+        unavailableNumericHistoryRequestWaiters.splice(0).forEach((resolve) => resolve());
+        const result: Record<string, unknown> = {};
+        for (const id of msg.entity_ids as string[]) {
+          if (unavailableNumericHistory[id as keyof typeof unavailableNumericHistory]) {
+            result[id] = unavailableNumericHistory[id as keyof typeof unavailableNumericHistory];
+          }
+        }
+        return Promise.resolve(result);
+      }
+      return Promise.resolve({});
+    },
+    callService: () => Promise.resolve()
+  };
+}
+
+function waitForUnavailableNumericHistoryRequests(expected: number): Promise<void> {
+  if (unavailableNumericHistoryRequestCount >= expected) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    unavailableNumericHistoryRequestWaiters.push(resolve);
+  });
+}
+
+function waitForIdleWork(): Promise<void> {
+  return new Promise((resolve) => {
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(() => resolve(), { timeout: 200 });
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }
+  });
+}
+
+function resolvedValueTypes(chart: HistoryFixtureElement): Record<string, string> {
+  return Object.fromEntries((chart._resolved?.series ?? []).map((series) => [series.id, series.valueType]));
+}
+
+async function runUnavailableNumericFixture(): Promise<void> {
+  const chart = c("c7") as HistoryFixtureElement;
+  const status = document.getElementById("c7-status") as HTMLParagraphElement;
+  chart.hass = createUnavailableNumericHass(unavailableInitialStates);
+  chart.config = {
+    startDate: new Date(NOW - H24),
+    endDate: new Date(NOW),
+    series: [
+      { entity: "sensor.unavailable_numeric_metadata", label: "HA metadata" },
+      { entity: "sensor.unavailable_numeric_config_unit", label: "Configured unit", unit: "kW", lineMode: "column" },
+      { entity: "sensor.unavailable_numeric_config_bound", label: "Configured bound", scaleMode: "manual", scaleMax: 100 },
+      { entity: "sensor.unavailable_categorical", label: "Categorical" },
+      { entity: "sensor.numeric_type_recovery", label: "Late numeric recovery" }
+    ]
+  };
+
+  await chart.updateComplete;
+  await waitForUnavailableNumericHistoryRequests(1);
+  const initialTypes = resolvedValueTypes(chart);
+  const initialClassificationPassed = initialTypes["state:sensor.unavailable_numeric_metadata"] === "number"
+    && initialTypes["state:sensor.unavailable_numeric_config_unit"] === "number"
+    && initialTypes["state:sensor.unavailable_numeric_config_bound"] === "number"
+    && initialTypes["state:sensor.unavailable_categorical"] === "string"
+    && initialTypes["state:sensor.numeric_type_recovery"] === "string";
+  console.assert(initialClassificationPassed, "Initial unavailable series classification should match numeric hints");
+
+  const recoveredStates = {
+    ...unavailableInitialStates,
+    "sensor.numeric_type_recovery": {
+      entity_id: "sensor.numeric_type_recovery",
+      state: "78",
+      attributes: { friendly_name: "Late numeric recovery" }
+    }
+  };
+  chart.hass = createUnavailableNumericHass(recoveredStates);
+  await chart.updateComplete;
+  await waitForUnavailableNumericHistoryRequests(2);
+  const recoveryClassificationPassed = resolvedValueTypes(chart)["state:sensor.numeric_type_recovery"] === "number";
+  console.assert(recoveryClassificationPassed, "Recovered state should resolve as numeric");
+
+  chart.hass = createUnavailableNumericHass({
+    ...recoveredStates,
+    "sensor.numeric_type_recovery": {
+      entity_id: "sensor.numeric_type_recovery",
+      state: "79",
+      attributes: { friendly_name: "Late numeric recovery" }
+    }
+  });
+  await chart.updateComplete;
+  await waitForIdleWork();
+
+  const requestCountPassed = unavailableNumericHistoryRequestCount === 2;
+  const passed = initialClassificationPassed && recoveryClassificationPassed && requestCountPassed;
+  console.assert(passed, `Expected two history requests, received ${unavailableNumericHistoryRequestCount}`);
+  status.dataset.result = passed ? "pass" : "fail";
+  status.textContent = passed
+    ? "PASS — initial load + exactly one type-change reload; stable numeric update did not refetch."
+    : `FAIL — classification or reload count mismatch (requests: ${unavailableNumericHistoryRequestCount}, expected: 2).`;
+}
+
+void runUnavailableNumericFixture();
 
 console.log("[dev] Charts configured with synthetic data");
