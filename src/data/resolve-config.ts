@@ -22,6 +22,7 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
 
 const DEFAULT_HOURS = 24;
 const DEFAULT_LINE_WIDTH = "2.5";
+export const DEFAULT_POINT_RADIUS = 2.5;
 
 const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_action"];
 
@@ -53,6 +54,14 @@ function normalizeLineWidth(lineWidth: number | string | undefined): string {
   }
 
   return DEFAULT_LINE_WIDTH;
+}
+
+export function normalizePointRadius(pointRadius: unknown): number {
+  if (typeof pointRadius !== "number" || !Number.isFinite(pointRadius) || pointRadius <= 0) {
+    return DEFAULT_POINT_RADIUS;
+  }
+
+  return Math.min(8, Math.max(1, pointRadius));
 }
 
 function normalizeScalePreference(preference: SeriesConfig["scalePreference"]): "auto" | "primary" | "secondary" {
@@ -180,6 +189,8 @@ function seriesFromConfig(
     scalePreference: normalizeScalePreference(cfg.scalePreference),
     lineMode: normalizeLineMode(cfg.lineMode ?? defaultLineMode),
     lineWidth: normalizeLineWidth(cfg.lineWidth ?? defaultLineWidth),
+    showPoints: cfg.showPoints === true,
+    pointRadius: normalizePointRadius(cfg.pointRadius),
     valueType: vt
   };
 }
@@ -207,6 +218,8 @@ function seriesFromEntityId(
       scalePreference: "auto",
       lineMode: normalizeLineMode(defaultLineMode),
       lineWidth: normalizeLineWidth(defaultLineWidth),
+      showPoints: false,
+      pointRadius: DEFAULT_POINT_RADIUS,
       valueType: "number"
     };
   }
@@ -227,6 +240,8 @@ function seriesFromEntityId(
     scalePreference: "auto",
     lineMode: normalizeLineMode(defaultLineMode),
     lineWidth: normalizeLineWidth(defaultLineWidth),
+    showPoints: false,
+    pointRadius: DEFAULT_POINT_RADIUS,
     valueType: source.valueType
   };
 }
@@ -275,6 +290,8 @@ function expandClimateSeries(
       scalePreference: s.scalePreference,
       lineMode: s.lineMode,
       lineWidth: s.lineWidth,
+      showPoints: s.showPoints,
+      pointRadius: s.pointRadius,
       valueType: vt
     };
   });

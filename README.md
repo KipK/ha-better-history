@@ -161,6 +161,8 @@ interface SeriesConfig {
   scaleMax?: number;                 // only when scaleMode = "manual"
   lineMode?: "stair" | "line" | "column"; // overrides global lineMode
   lineWidth?: number | string;       // overrides global lineWidth
+  showPoints?: boolean;              // default: false
+  pointRadius?: number;              // default: 2.5, clamped to 1–8
 }
 ```
 
@@ -208,6 +210,10 @@ If `color` is not set, the built-in palette cycles through: `#ff9800`, `#42a5f5`
 
 Numeric series render as stair-step lines by default to match Home Assistant state history. Set `lineMode: "line"` globally, or per `SeriesConfig`, to connect points with straight segments. Set `lineMode: "column"` to render numeric values as time-span columns. `lineWidth` accepts an SVG stroke width such as `1.5`, `"2px"`, or `"0.18rem"` for line-based modes.
 
+Set `showPoints: true` on a numeric or boolean series to draw dots in `line` and `stair` modes. `pointRadius` changes only their visual size; it does not change their count or temporal spacing. Values are clamped to `1`–`8`, with a default radius of `2.5`. Column and text series ignore these options.
+
+The dots follow the same optimized points retained for the rendered curve after the existing display downsampling. They do not represent every Home Assistant recorder row or every integration poll. Points created only while rendering an interpolated or extended visible-range boundary are not marked. Points already present in `HistorySeries.points`, including a possible loaded-range boundary anchor, remain eligible.
+
 Use top-level HTML attributes for simple global styling:
 
 ```html
@@ -229,7 +235,14 @@ chart.config = {
   lineMode: "stair",
   lineWidth: 2.5,
   series: [
-    { entity: "climate.living", attribute: "current_temperature", lineMode: "line", lineWidth: 2 },
+    {
+      entity: "climate.living",
+      attribute: "current_temperature",
+      lineMode: "line",
+      lineWidth: 2,
+      showPoints: true,
+      pointRadius: 3
+    },
     { entity: "climate.living", attribute: "temperature", lineWidth: 3 }
   ]
 };
@@ -392,6 +405,8 @@ Exports use the compact `ha-better-history-series-v1` format:
       "unit": "°C",
       "valueType": "number",
       "lineMode": "stair",
+      "showPoints": true,
+      "pointRadius": 2.5,
       "color": "#42a5f5",
       "points": [{ "timestamp": "2026-05-07T06:00:00.000Z", "value": 19.5 }]
     }
@@ -399,7 +414,7 @@ Exports use the compact `ha-better-history-series-v1` format:
 }
 ```
 
-The optional import button accepts the same `ha-better-history-series-v1` JSON. Imported files replace the current displayed series, apply the exported loaded range and view range, and render locally without querying Home Assistant history.
+The optional import button accepts the same `ha-better-history-series-v1` JSON. Imported files replace the current displayed series, apply the exported loaded range and view range, and render locally without querying Home Assistant history. The optional `showPoints` and `pointRadius` metadata round-trip with each series; older v1 exports without them remain valid and default to hidden dots with a `2.5` radius.
 
 ## CSS custom properties
 

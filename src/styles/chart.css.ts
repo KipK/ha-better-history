@@ -161,6 +161,14 @@ export const chartStyles = css`
     vector-effect: non-scaling-stroke;
   }
 
+  .point-markers {
+    fill: none;
+    stroke-width: var(--better-history-point-diameter, 5);
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+
   .column {
     opacity: 0.62;
     vector-effect: non-scaling-stroke;

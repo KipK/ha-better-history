@@ -20,6 +20,8 @@ export interface SeriesConfig {
   scalePreference?: ScalePreference;
   lineMode?: BetterHistoryLineMode;
   lineWidth?: number | string;
+  showPoints?: boolean;
+  pointRadius?: number;
 }
 
 export interface BetterHistoryConfig {
@@ -68,6 +70,8 @@ export interface ResolvedSeries {
   scalePreference: ScalePreference;
   lineMode: BetterHistoryLineMode;
   lineWidth: string;
+  showPoints: boolean;
+  pointRadius: number;
   valueType: HistoryValueType;
 }
 

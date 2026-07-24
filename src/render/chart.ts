@@ -29,6 +29,8 @@ export interface RenderableSeries {
   scalePreference: "auto" | "primary" | "secondary";
   lineMode: BetterHistoryLineMode;
   lineWidth: string;
+  showPoints: boolean;
+  pointRadius: number;
   valueType: HistoryValueType;
   points: HistoryPoint[];
 }
@@ -39,6 +41,13 @@ export interface NumericLineRenderData {
   points: string;
   pathLength: number;
   lineWidth: string;
+}
+
+export interface NumericPointRenderData {
+  id: string;
+  color: string;
+  path: string;
+  radius: number;
 }
 
 interface NumericLineRenderOptions {
@@ -102,6 +111,7 @@ export interface GraphGroup {
   svgHeight: number;
   canvasHeight: number;
   lines: NumericLineRenderData[];
+  pointMarkers: NumericPointRenderData[];
   columns: NumericColumnRenderData[];
   segments: SegmentRenderData[];
   yLabels: YAxisLabelRenderData[];
@@ -624,29 +634,73 @@ export function buildChartData(
   };
 }
 
-function buildGroupNumericLines(
+function numericPointKey(point: { time: number; value: number }): string {
+  return `${point.time}\u0000${point.value}`;
+}
+
+function toPointMarkerPath(
+  points: Array<{ time: number; value: number }>,
+  bounds: { start: number; end: number },
+  scale: NumericScale
+): string {
+  return points
+    .map((point) => `M${xFor(point.time, bounds).toFixed(2)},${yFor(point.value, scale).toFixed(2)}h0`)
+    .join("");
+}
+
+function buildGroupNumericRenderData(
   series: RenderableSeries[],
   scales: NumericScale[],
   bounds: { start: number; end: number },
   options: NumericLineRenderOptions,
   graphHeight: number
-): NumericLineRenderData[] {
-  return series
-    .filter((s) => (s.valueType === "number" || s.valueType === "boolean") && s.lineMode !== "column")
-    .flatMap((s) => {
-      const scale = scaleFor(s, scales);
+): { lines: NumericLineRenderData[]; pointMarkers: NumericPointRenderData[] } {
+  const lines: NumericLineRenderData[] = [];
+  const pointMarkers: NumericPointRenderData[] = [];
 
-      if (!scale) return [];
+  for (const item of series) {
+    if ((item.valueType !== "number" && item.valueType !== "boolean") || item.lineMode === "column") continue;
 
-      const localScale: NumericScale = { ...scale, top: GRAPH_TOP, height: graphHeight };
-      const boundedPoints = numericPointsForRender(s.points, bounds, s.lineMode, options);
-      const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
-      const { points, pathLength } = s.lineMode === "line"
-        ? toLinePath(displayPoints, bounds, localScale)
-        : toStepPath(displayPoints, bounds, localScale);
+    const scale = scaleFor(item, scales);
+    if (!scale) continue;
 
-      return { id: s.id, color: s.color, points, pathLength, lineWidth: s.lineWidth };
+    const localScale: NumericScale = { ...scale, top: GRAPH_TOP, height: graphHeight };
+    const boundedPoints = numericPointsForRender(item.points, bounds, item.lineMode, options);
+    const displayPoints = displayNumericPoints(boundedPoints, bounds, PLOT_LEFT, PLOT_WIDTH);
+    const { points, pathLength } = item.lineMode === "line"
+      ? toLinePath(displayPoints, bounds, localScale)
+      : toStepPath(displayPoints, bounds, localScale);
+
+    lines.push({
+      id: item.id,
+      color: item.color,
+      points,
+      pathLength,
+      lineWidth: item.lineWidth
     });
+
+    if (!item.showPoints) continue;
+
+    const originalPointKeys = new Set(
+      item.points
+        .map((point) => ({ time: point.time, value: Number(point.value) }))
+        .filter((point) => Number.isFinite(point.value))
+        .map(numericPointKey)
+    );
+    const markerPoints = displayPoints.filter((point) => originalPointKeys.has(numericPointKey(point)));
+    const path = toPointMarkerPath(markerPoints, bounds, localScale);
+
+    if (path) {
+      pointMarkers.push({
+        id: item.id,
+        color: item.color,
+        path,
+        radius: item.pointRadius
+      });
+    }
+  }
+
+  return { lines, pointMarkers };
 }
 
 function buildGroupNumericColumns(
@@ -824,6 +878,7 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       svgHeight,
       canvasHeight,
       lines: [],
+      pointMarkers: [],
       columns: [],
       segments: buildGroupSegments(colored.visibleSeries, segmentStartY, bounds),
       yLabels: [],
@@ -881,6 +936,9 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
     const rightYLabels = rightScale ? buildGroupYLabels(rightScale, graphHeight) : [];
     const localScales = graphScales.map((scale) => ({ ...scale, top: GRAPH_TOP, height: graphHeight }));
     const localLeftScale = localScales.find((scale) => scale.axis === "left") ?? localScales[0];
+    const numericRenderData = buildGroupNumericRenderData(colored.visibleSeries, localScales, bounds, {
+      extendStairToEnd: data.extendStairToEnd
+    }, graphHeight);
 
     groups.push({
       series: colored.visibleSeries,
@@ -890,9 +948,8 @@ export function buildGraphGroups(data: ChartRenderData, maxXTicks = 12, graphHei
       graphHeight,
       svgHeight,
       canvasHeight,
-      lines: buildGroupNumericLines(colored.visibleSeries, localScales, bounds, {
-        extendStairToEnd: data.extendStairToEnd
-      }, graphHeight),
+      lines: numericRenderData.lines,
+      pointMarkers: numericRenderData.pointMarkers,
       columns: buildGroupNumericColumns(colored.visibleSeries, localScales, bounds, graphHeight, {
         extendColumnToEnd: data.extendStairToEnd
       }),

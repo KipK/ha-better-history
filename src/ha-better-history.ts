@@ -2,7 +2,12 @@ import { LitElement, html, nothing, svg, type PropertyValues, type TemplateResul
 import { property, state } from "lit/decorators.js";
 import { DataController } from "./controllers/data-controller.js";
 import { TooltipController, type SyncedSeries } from "./controllers/tooltip-controller.js";
-import { resolveConfig, resolvedSeriesToSource } from "./data/resolve-config.js";
+import {
+  DEFAULT_POINT_RADIUS,
+  normalizePointRadius,
+  resolveConfig,
+  resolvedSeriesToSource
+} from "./data/resolve-config.js";
 import { localize } from "./localize/localize.js";
 import {
   buildChartData,
@@ -174,6 +179,8 @@ interface ImportedSeriesMeta {
   color?: string;
   lineMode?: BetterHistoryLineMode;
   scalePreference?: "auto" | "primary" | "secondary";
+  showPoints: boolean;
+  pointRadius: number;
 }
 
 interface BetterHistorySeriesExportV1 {
@@ -1130,18 +1137,21 @@ export class HaBetterHistory extends LitElement {
     unit = source.unit
   ): RenderableSeries {
     const climateAttr = source.entityId.startsWith("climate.") && source.path?.length === 1 ? source.path[0] : undefined;
+    const importedMeta = this._importedSeriesMeta.get(source.id);
 
     return {
       id: source.id,
       entity: source.entityId,
       label: source.label,
-      color: this._importedSeriesMeta.get(source.id)?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
+      color: importedMeta?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
       unit,
       scaleGroupKey,
       scaleMode: "auto",
-      scalePreference: this._effectiveScalePreference(source.id, source.scalePreference ?? this._importedSeriesMeta.get(source.id)?.scalePreference),
-      lineMode: this._runtimeLineMode ?? this._importedSeriesMeta.get(source.id)?.lineMode ?? this._defaultLineMode(),
+      scalePreference: this._effectiveScalePreference(source.id, source.scalePreference ?? importedMeta?.scalePreference),
+      lineMode: this._runtimeLineMode ?? importedMeta?.lineMode ?? this._defaultLineMode(),
       lineWidth: this._defaultLineWidth(),
+      showPoints: importedMeta?.showPoints ?? false,
+      pointRadius: importedMeta?.pointRadius ?? DEFAULT_POINT_RADIUS,
       valueType: source.valueType,
       points: fetched?.points ?? []
     };
@@ -1241,6 +1251,8 @@ export class HaBetterHistory extends LitElement {
           scalePreference: this._effectiveScalePreference(resolved.id, resolved.scalePreference),
           lineMode: this._runtimeLineMode ?? resolved.lineMode,
           lineWidth: resolved.lineWidth,
+          showPoints: resolved.showPoints,
+          pointRadius: resolved.pointRadius,
           valueType: resolved.valueType,
           points: fetched?.points ?? []
         }
@@ -1312,6 +1324,8 @@ export class HaBetterHistory extends LitElement {
         this._effectiveScalePreference(source.id, source.scalePreference),
         source.lineMode,
         source.lineWidth,
+        source.showPoints,
+        source.pointRadius,
         source.valueType
       ].join("~")) ?? []),
       ...this._selectedSourcesForDisplay().flatMap((source) => this._expandedSelectedSources(source)).map((effectiveSource) => {
@@ -1324,7 +1338,9 @@ export class HaBetterHistory extends LitElement {
           this._effectiveScalePreference(effectiveSource.id, effectiveSource.scalePreference),
           effectiveSource.valueType,
           this._defaultLineMode(),
-          this._defaultLineWidth()
+          this._defaultLineWidth(),
+          false,
+          DEFAULT_POINT_RADIUS
         ].join("~");
       })
     ].join("|");
@@ -1598,6 +1614,20 @@ export class HaBetterHistory extends LitElement {
                   return svg`<polyline class="line" style=${`--better-history-line-width:${line.lineWidth};`} clip-path="url(#${clipId})" data-line-id=${line.id} data-line-dom-key=${lineDomKey} data-animate-clip=${needAnim ? "true" : nothing} data-target-x=${targetX} points=${line.points} stroke=${line.color}></polyline>`;
                 }
               )}
+              ${group.pointMarkers.map((markers) => {
+                const lineDomKey = this._lineDomKey(markers.id, graphIndex);
+                const clipId = `clip-${this._safeLineDomId(lineDomKey)}`;
+
+                return svg`
+                  <path
+                    class="point-markers"
+                    style=${`--better-history-point-diameter:${markers.radius * 2};`}
+                    clip-path="url(#${clipId})"
+                    d=${markers.path}
+                    stroke=${markers.color}
+                  ></path>
+                `;
+              })}
               ${group.segments.map(
                 (seg) => svg`<rect class="segment" x=${seg.x} y=${seg.y} width=${seg.width} height="9" fill=${seg.fill}></rect>`
               )}
@@ -2642,6 +2672,8 @@ export class HaBetterHistory extends LitElement {
         unit: item.unit,
         valueType: item.valueType,
         lineMode: item.lineMode,
+        showPoints: item.showPoints,
+        pointRadius: item.pointRadius,
         scalePreference: item.scalePreference,
         color: item.color,
         points: item.points
@@ -2781,7 +2813,9 @@ export class HaBetterHistory extends LitElement {
       meta.set(id, {
         color: typeof record.color === "string" && record.color.trim() !== "" ? record.color : undefined,
         lineMode: record.lineMode === "line" || record.lineMode === "column" || record.lineMode === "stair" ? record.lineMode : undefined,
-        scalePreference: record.scalePreference === "primary" || record.scalePreference === "secondary" ? record.scalePreference : undefined
+        scalePreference: record.scalePreference === "primary" || record.scalePreference === "secondary" ? record.scalePreference : undefined,
+        showPoints: record.showPoints === true,
+        pointRadius: normalizePointRadius(record.pointRadius)
       });
     }
 
