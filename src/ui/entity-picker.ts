@@ -186,8 +186,12 @@ let componentsLoaded = false;
 
 export async function preloadEntityPickerComponents(): Promise<void> {
   if (componentsLoaded) return;
-  componentsLoaded = true;
-  await ensureHaComponents();
+  try {
+    await ensureHaComponents();
+  } catch {
+    // The loader reports the failure; retain any components HA defined partially.
+  }
+  componentsLoaded = entityPickerAvailable();
 }
 
 interface EntityPickerRenderOpts {

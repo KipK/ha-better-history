@@ -7,7 +7,11 @@ export function datePickerAvailable(): boolean {
 }
 
 export async function preloadDatePicker(): Promise<void> {
-  await ensureDateRangePicker();
+  try {
+    await ensureDateRangePicker();
+  } catch {
+    // The loader reports the failure; the caller uses datePickerAvailable() as fallback.
+  }
 }
 
 interface DatePickerRenderOptions {

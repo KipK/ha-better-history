@@ -1,4 +1,7 @@
-import { loadHaComponents } from "@kipk/load-ha-components";
+import {
+  HaComponentsLoadError,
+  loadHaComponents as loadRequestedHaComponents,
+} from "@kipk/load-ha-components";
 
 const HA_COMPONENTS = [
   "ha-icon",
@@ -14,40 +17,43 @@ const HA_COMPONENTS = [
 let loadPromise: Promise<void> | undefined;
 
 export function ensureHaComponents(): Promise<void> {
-  loadPromise ??= loadHaComponents(HA_COMPONENTS);
+  if (HA_COMPONENTS.every((component) => customElements.get(component))) {
+    return Promise.resolve();
+  }
+
+  loadPromise ??= loadComponents(HA_COMPONENTS, "Home Assistant UI components");
   return loadPromise;
 }
 
 let dateRangePickerPromise: Promise<void> | undefined;
 
 export function ensureDateRangePicker(): Promise<void> {
-  dateRangePickerPromise ??= _loadDateRangePicker();
+  if (customElements.get("ha-date-range-picker")) {
+    return Promise.resolve();
+  }
+
+  dateRangePickerPromise ??= loadComponents(
+    ["ha-date-range-picker"],
+    "ha-date-range-picker",
+  );
   return dateRangePickerPromise;
 }
 
-async function _loadDateRangePicker(): Promise<void> {
-  if (customElements.get("ha-date-range-picker")) {
-    return;
-  }
-
+async function loadComponents(
+  components: readonly string[],
+  description: string,
+): Promise<void> {
   try {
-    await Promise.race([
-      customElements.whenDefined("partial-panel-resolver"),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000))
-    ]);
-
-    const ppr = document.createElement("partial-panel-resolver") as HTMLElement & {
-      hass: unknown;
-      _updateRoutes(): void;
-      routerOptions?: { routes?: Record<string, { load: () => Promise<unknown> }> };
-    };
-
-    ppr.hass = { panels: [{ url_path: "history", component_name: "history" }] };
-    ppr._updateRoutes();
-
-    await ppr.routerOptions?.routes?.history?.load();
-    await customElements.whenDefined("ha-date-range-picker");
+    await loadRequestedHaComponents(components);
   } catch (error) {
-    console.warn("[ha-better-history] Failed to load ha-date-range-picker:", error);
+    if (error instanceof HaComponentsLoadError) {
+      console.warn(
+        `[ha-better-history] Failed to load ${description}. Missing: ${error.result.missing.join(", ") || "unknown"}.`,
+        error.cause ?? error,
+      );
+    } else {
+      console.warn(`[ha-better-history] Failed to load ${description}.`, error);
+    }
+    throw error;
   }
 }

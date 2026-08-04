@@ -4,6 +4,7 @@ import { chartStyles } from "../styles/chart.css.js";
 import {
   renderEntityPicker,
   preloadEntityPickerComponents,
+  entityPickerAvailable,
   entityPickerItems,
   filterEntityPickerItems,
 } from "./entity-picker.js";
@@ -95,8 +96,8 @@ export class SeriesPickerElement extends LitElement {
     document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
     window.addEventListener("popstate", this._handleBrowserPopState);
-    preloadEntityPickerComponents().then(() => {
-      this._componentsReady = true;
+    void preloadEntityPickerComponents().then(() => {
+      this._componentsReady = entityPickerAvailable();
     });
   }
 

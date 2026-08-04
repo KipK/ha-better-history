@@ -327,7 +327,7 @@ export class HaBetterHistory extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    ensureHaComponents();
+    void ensureHaComponents().catch(() => undefined);
     document.addEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.addEventListener("click", this._handleDocumentClick, true);
     window.addEventListener("popstate", this._handleBrowserPopState);
@@ -980,16 +980,14 @@ export class HaBetterHistory extends LitElement {
       }
 
       if (resolved.showDatePicker && !this._datePickerReady) {
-        preloadDatePicker().then(() => {
+        void preloadDatePicker().then(() => {
           this._datePickerReady = datePickerAvailable();
-          this.requestUpdate();
         });
       }
 
       if (resolved.showEntityPicker && !this._entityComponentsReady) {
-        preloadEntityPickerComponents().then(() => {
+        void preloadEntityPickerComponents().then(() => {
           this._entityComponentsReady = entityPickerAvailable();
-          this.requestUpdate();
         });
       }
     }
