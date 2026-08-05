@@ -21,7 +21,11 @@ export function ensureHaComponents(): Promise<void> {
     return Promise.resolve();
   }
 
-  loadPromise ??= loadComponents(HA_COMPONENTS, "Home Assistant UI components");
+  loadPromise ??= loadComponents(HA_COMPONENTS, "Home Assistant UI components")
+    .catch((error) => {
+      loadPromise = undefined;
+      throw error;
+    });
   return loadPromise;
 }
 
@@ -35,8 +39,53 @@ export function ensureDateRangePicker(): Promise<void> {
   dateRangePickerPromise ??= loadComponents(
     ["ha-date-range-picker"],
     "ha-date-range-picker",
-  );
+  ).catch((error) => {
+    dateRangePickerPromise = undefined;
+    throw error;
+  });
   return dateRangePickerPromise;
+}
+
+let targetPickerPromise: Promise<boolean> | undefined;
+let targetPickerReady = false;
+let targetPickerWarningShown = false;
+
+export function ensureTargetPicker(): Promise<boolean> {
+  if (targetPickerReady || customElements.get("ha-target-picker")) {
+    targetPickerReady = true;
+    return Promise.resolve(true);
+  }
+  targetPickerPromise ??= loadTargetPicker().finally(() => {
+    if (!targetPickerReady) targetPickerPromise = undefined;
+  });
+  return targetPickerPromise;
+}
+
+async function loadTargetPicker(): Promise<boolean> {
+  try {
+    await loadRequestedHaComponents(["ha-target-picker"]);
+    targetPickerReady = customElements.get("ha-target-picker") !== undefined;
+    if (!targetPickerReady) warnTargetPicker();
+  } catch (error) {
+    warnTargetPicker(error);
+  }
+  return targetPickerReady;
+}
+
+function warnTargetPicker(error?: unknown): void {
+  if (targetPickerWarningShown) return;
+  targetPickerWarningShown = true;
+  if (error instanceof HaComponentsLoadError) {
+    console.warn(
+      `[ha-better-history] Failed to load ha-target-picker. Missing: ${error.result.missing.join(", ") || "unknown"}. Falling back to entity-only selection.`,
+      error.cause ?? error,
+    );
+    return;
+  }
+  console.warn(
+    "[ha-better-history] Failed to load ha-target-picker. Falling back to entity-only selection.",
+    error,
+  );
 }
 
 async function loadComponents(
@@ -45,6 +94,10 @@ async function loadComponents(
 ): Promise<void> {
   try {
     await loadRequestedHaComponents(components);
+    const missing = components.filter((component) => !customElements.get(component));
+    if (missing.length > 0) {
+      throw new Error(`Components were not registered: ${missing.join(", ")}`);
+    }
   } catch (error) {
     if (error instanceof HaComponentsLoadError) {
       console.warn(

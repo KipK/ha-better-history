@@ -260,9 +260,10 @@ All events bubble and are composed.
 | `series-added`           | `{ source: HistorySource }`                        | User adds a series via entity picker                                  |
 | `series-removed`         | `{ sourceId: string }`                             | User removes a non-default series                                     |
 | `series-reordered`       | `{ sourceIds: string[] }`                          | User drags selected source chips into a new order                     |
+| `target-selection-changed` | `{ targets: NormalizedHistoryTargetSelection, entityIds: string[] }` | Native target selection changes; grouped changes do not emit a series-event burst |
 | `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported                 |
 | `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts)         |
-| `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, entity picker, or attribute browser overlay opens/closes |
+| `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, target picker, or attribute browser overlay opens/closes |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
 
@@ -345,13 +346,15 @@ chart.config = {
 </script>
 ```
 
-The date picker, entity picker, and attribute browser participate in browser history: Back closes the open overlay before leaving the current Home Assistant view, and Forward restores it when possible.
+The date picker, target picker, and attribute browser participate in browser history: Back closes the open overlay before leaving the current Home Assistant view, and Forward restores it when possible.
 
-The entity picker lets users browse entity attributes and add/remove series at runtime. The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected source chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
+When `showEntityPicker` is enabled, recent Home Assistant versions provide their native target picker for entities, devices, areas, floors, and labels. Grouped targets stay grouped in the picker while the component resolves them locally to concrete entity-state series. If Home Assistant cannot load `ha-target-picker`, the existing entity-only picker remains available. Selecting exactly one direct entity uses it as an attribute-browser context rather than immediately adding its state: the state, attributes, or both are added only when explicitly selected in that browser. Grouped targets and their expansions remain effective state selections.
+
+The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Attribute chips remain independent of target state selection. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected attribute chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 
 ### Standalone series picker
 
-The package also registers `<abh-series-picker>` for integrations that want the same entity/attribute picker without rendering the chart. It dispatches `sources-confirmed` with `{ sources: HistorySource[] }` when the user closes the attribute browser after selecting sources.
+The package also registers `<abh-series-picker>` for integrations that want the same target/attribute picker without rendering the chart. Native grouped targets can be expanded or trimmed before confirmation. Click **Done** to dispatch one `sources-confirmed` event with `{ sources: HistorySource[] }`; grouped targets are emitted as a deduplicated snapshot of concrete entity-state sources followed by selected attributes, never as target objects. The entity-only fallback retains its immediate confirmation behavior.
 
 ```html
 <abh-series-picker></abh-series-picker>

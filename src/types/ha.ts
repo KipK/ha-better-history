@@ -7,23 +7,32 @@ export interface HassEntity {
 }
 
 export interface HassEntityRegistryEntry {
-  entity_id?: string;
+  entity_id: string;
   device_id?: string | null;
   area_id?: string | null;
+  labels?: string[];
   name?: string | null;
   name_by_user?: string | null;
   original_name?: string | null;
 }
 
 export interface HassDeviceRegistryEntry {
-  id?: string;
+  id: string;
   area_id?: string | null;
+  labels?: string[];
   name?: string | null;
   name_by_user?: string | null;
 }
 
 export interface HassAreaRegistryEntry {
-  area_id?: string;
+  area_id: string;
+  floor_id?: string | null;
+  labels?: string[];
+  name?: string | null;
+}
+
+export interface HassFloorRegistryEntry {
+  floor_id: string;
   name?: string | null;
 }
 
@@ -37,6 +46,7 @@ export interface HomeAssistant {
   entities?: Record<string, HassEntityRegistryEntry | undefined>;
   devices?: Record<string, HassDeviceRegistryEntry | undefined>;
   areas?: Record<string, HassAreaRegistryEntry | undefined>;
+  floors?: Record<string, HassFloorRegistryEntry | undefined>;
   language?: string;
   locale?: {
     language?: string;

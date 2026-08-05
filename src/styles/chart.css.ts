@@ -958,6 +958,30 @@ export const chartStyles = css`
     width: fit-content;
   }
 
+  .target-picker {
+    display: block;
+    flex: 1 1 280px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .target-picker-done {
+    display: block;
+    margin: 8px 0 0 auto;
+    padding: 7px 16px;
+    border: 0;
+    border-radius: var(--ha-button-border-radius, 18px);
+    background: var(--primary-color, #03a9f4);
+    color: var(--text-primary-color, #fff);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .target-picker-done:hover {
+    background: var(--primary-color, #03a9f4);
+    filter: brightness(0.94);
+  }
+
   .entity-add-trigger {
     width: fit-content;
   }

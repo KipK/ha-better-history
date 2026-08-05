@@ -47,6 +47,16 @@ import {
   renderEntityPicker
 } from "./ui/entity-picker.js";
 import { ensureHaComponents } from "./load-ha-components.js";
+import { ensureTargetPicker } from "./load-ha-components.js";
+import {
+  explicitTargetEntityIds,
+  groupedTargetWasRemoved,
+  normalizeTargetSelection,
+  resolveTargetEntityIds,
+  targetEntitySources,
+  type HistoryTargetSelection,
+  type NormalizedHistoryTargetSelection,
+} from "./data/targets.js";
 import { logPerformance, performanceNow } from "./utils/performance.js";
 
 const SOURCE_ADD_BATCH_MS = 60;
@@ -82,8 +92,9 @@ const CLIMATE_LINE_ATTRIBUTES = ["current_temperature", "temperature", "hvac_act
 const CLIMATE_TEMPERATURE_ATTRIBUTES = new Set(["current_temperature", "temperature"]);
 const AXIS_LABEL_GAP_PX = 5;
 const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
+const ATTRIBUTE_HANDOFF_DELAY_MS = 50;
 
-type BrowserHistoryLayer = "date-picker" | "entity-picker" | "attribute-picker";
+type BrowserHistoryLayer = "date-picker" | "target-picker" | "attribute-picker";
 
 interface BrowserHistoryEntry {
   instanceId: string;
@@ -269,6 +280,8 @@ export class HaBetterHistory extends LitElement {
   @state() private _liveNow = Date.now();
   @state() private _datePickerReady = false;
   @state() private _entityComponentsReady = false;
+  @state() private _targetPickerReady = false;
+  @state() private _targetPickerLoadComplete = false;
   @state() private _runtimeLineMode?: BetterHistoryLineMode;
 
   @state() private _attributeMenuOpen = false;
@@ -276,6 +289,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _selectedEntityId?: string;
   @state() private _path: string[] = [];
   @state() private _selectedSources: HistorySource[] = [];
+  @state() private _selectedTargets: NormalizedHistoryTargetSelection = {};
   @state() private _removedConfigSourceIds: string[] = [];
   @state() private _scalePreferences: Record<string, "auto" | "primary" | "secondary"> = {};
   @state() private _customEntityIds: string[] = [];
@@ -307,7 +321,10 @@ export class HaBetterHistory extends LitElement {
   private _lastPointerDownInside = false;
   private _syncingBrowserHistory = false;
   private _selectingEntityForAttributeMenu = false;
+  private _pendingAttributeEntityId?: string;
+  private _pendingAttributeOpenTimer?: ReturnType<typeof setTimeout>;
   private _importedSeriesMeta = new Map<string, ImportedSeriesMeta>();
+  private _importedSources: HistorySource[] = [];
   private _lastGraphVisible?: boolean;
   private _pendingGraphVisible?: boolean;
   @state() private _importedDataActive = false;
@@ -359,6 +376,10 @@ export class HaBetterHistory extends LitElement {
     if (this._sourceAddBatchTimer !== undefined) {
       clearTimeout(this._sourceAddBatchTimer);
       this._sourceAddBatchTimer = undefined;
+    }
+    if (this._pendingAttributeOpenTimer !== undefined) {
+      clearTimeout(this._pendingAttributeOpenTimer);
+      this._pendingAttributeOpenTimer = undefined;
     }
     this._stopLiveClock();
   }
@@ -603,7 +624,7 @@ export class HaBetterHistory extends LitElement {
 
     const record = entry as Partial<BrowserHistoryEntry>;
     if (record.instanceId !== this._browserHistoryInstanceId) return undefined;
-    if (record.layer !== "date-picker" && record.layer !== "entity-picker" && record.layer !== "attribute-picker") {
+    if (record.layer !== "date-picker" && record.layer !== "target-picker" && record.layer !== "attribute-picker") {
       return undefined;
     }
 
@@ -664,7 +685,7 @@ export class HaBetterHistory extends LitElement {
 
   private _openBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
     this._datePickerOpen = layer === "date-picker";
-    this._entityPickerOpen = layer === "entity-picker";
+    this._entityPickerOpen = layer === "target-picker";
     this._attributeMenuOpen = layer === "attribute-picker";
 
     if (layer !== "attribute-picker") {
@@ -761,7 +782,10 @@ export class HaBetterHistory extends LitElement {
       }
     }
 
-    for (const s of this._selectedSources) {
+    const interactiveSources = this._importedDataActive
+      ? this._importedSources
+      : [...this._targetSources(), ...this._selectedSources];
+    for (const s of interactiveSources) {
       for (const source of this._expandedSelectedSources(s)) {
         if (!seen.has(source.id)) {
           seen.add(source.id);
@@ -777,13 +801,24 @@ export class HaBetterHistory extends LitElement {
     const seen = new Set<string>();
     const sources: HistorySource[] = [];
 
-    for (const source of [...this._selectedSources, ...this._pendingAddedSources]) {
+    const displaySources = this._importedDataActive
+      ? this._importedSources
+      : [...this._targetSources(), ...this._selectedSources, ...this._pendingAddedSources];
+    for (const source of displaySources) {
       if (seen.has(source.id)) continue;
       seen.add(source.id);
       sources.push(source);
     }
 
     return sources;
+  }
+
+  private _targetEntityIds(): string[] {
+    return this.hass ? resolveTargetEntityIds(this.hass, this._selectedTargets) : [];
+  }
+
+  private _targetSources(): HistorySource[] {
+    return this.hass ? targetEntitySources(this.hass, this._selectedTargets) : [];
   }
 
   private _isDefaultSource(source: HistorySource): boolean {
@@ -880,7 +915,7 @@ export class HaBetterHistory extends LitElement {
       this._prevClipX.clear();
     }
 
-    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_removedConfigSourceIds", "_scalePreferences", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "autoScaleSplit", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
+    const watch = ["_rangeStart", "_rangeEnd", "_selectedSources", "_selectedTargets", "_removedConfigSourceIds", "_scalePreferences", "hass", "config", "entities", "hours", "startDate", "endDate", "showDatePicker", "showEntityPicker", "showLegend", "showTooltip", "showGrid", "showScale", "autoScaleSplit", "width", "height", "lineMode", "lineWidth", "backgroundColor", "graphTitle", "titleFontFamily", "titleFontSize", "titleColor", "language", "debugPerformance", "attributeUnits", "_runtimeLineMode"];
 
     if (watch.some((p) => changed.has(p))) {
       const hassOnly = !watch.some((p) => p !== "hass" && changed.has(p));
@@ -889,6 +924,7 @@ export class HaBetterHistory extends LitElement {
       if (externalDataChanged) {
         this._importedDataActive = false;
         this._importedSeriesMeta.clear();
+        this._importedSources = [];
       }
 
       if (hassOnly) {
@@ -988,6 +1024,12 @@ export class HaBetterHistory extends LitElement {
       if (resolved.showEntityPicker && !this._entityComponentsReady) {
         void preloadEntityPickerComponents().then(() => {
           this._entityComponentsReady = entityPickerAvailable();
+        });
+      }
+      if (resolved.showEntityPicker && !this._targetPickerReady) {
+        void ensureTargetPicker().then((ready) => {
+          this._targetPickerReady = ready && customElements.get("ha-target-picker") !== undefined;
+          this._targetPickerLoadComplete = true;
         });
       }
     }
@@ -2073,7 +2115,11 @@ export class HaBetterHistory extends LitElement {
   };
 
   private _renderEntityPickerUI(): TemplateResult | typeof nothing {
-    if (!this._resolved?.showEntityPicker || !this._entityComponentsReady) return nothing;
+    if (
+      !this._resolved?.showEntityPicker
+      || !this._entityComponentsReady
+      || !this._targetPickerLoadComplete
+    ) return nothing;
 
     return renderEntityPicker({
       hass: this.hass,
@@ -2081,7 +2127,12 @@ export class HaBetterHistory extends LitElement {
       entityPickerOpen: this._entityPickerOpen,
       selectedEntityId: this._selectedEntityId,
       path: this._path,
-      selectedSources: this._selectedSourcesForDisplay(),
+      selectedSources: this._selectedSources,
+      targetSelection: this._selectedTargets,
+      targetPickerReady: this._targetPickerReady,
+      disableTargetPickerWhileLoading: true,
+      targetEntityIds: this._targetEntityIds(),
+      explicitTargetEntityIds: explicitTargetEntityIds(this._selectedTargets),
       draggingSourceId: this._draggingSourceId,
       resolved: this._activeResolvedConfig(),
       loading: this._data.loading,
@@ -2091,6 +2142,9 @@ export class HaBetterHistory extends LitElement {
       onEntityPickerOpened: () => this._onEntityPickerOpened(),
       onEntityPickerClosed: () => this._onEntityPickerClosed(),
       onEntitySelected: (entityId) => this._onEntitySelected(entityId),
+      onTargetSelectionChanged: (value) => this._onTargetSelectionChanged(value),
+      onEntityStateAdded: (entityId) => this._setExplicitTargetEntity(entityId, true, false),
+      onEntityStateRemoved: (entityId) => this._setExplicitTargetEntity(entityId, false, false),
       onAttributeSearchChanged: (value) => { this._attributeSearch = value; },
       onSourceAdded: (source) => this._addSource(source),
       onSourceRemoved: (sourceId) => this._removeSource(sourceId),
@@ -2745,7 +2799,9 @@ export class HaBetterHistory extends LitElement {
 
     this._importedSeriesMeta = imported.meta;
     this._importedDataActive = true;
-    this._selectedSources = imported.series.map((item) => item.source);
+    this._importedSources = imported.series.map((item) => item.source);
+    this._selectedSources = [];
+    this._selectedTargets = {};
     this._removedConfigSourceIds = [];
     this._rangeStart = loadedStart;
     this._rangeEnd = loadedEnd;
@@ -2756,9 +2812,9 @@ export class HaBetterHistory extends LitElement {
     this._chartRenderCache = undefined;
     this._graphGroupRenderCache = undefined;
 
-    const sourceLoadSignature = sourceSetLoadSignature(this._selectedSources);
+    const sourceLoadSignature = sourceSetLoadSignature(this._importedSources);
     this._lastFetchKey = `${sourceLoadSignature}|${loadedStart.getTime()}|${loadedEnd.getTime()}`;
-    this._lastFetchSources = [...this._selectedSources];
+    this._lastFetchSources = [...this._importedSources];
     this._data.setImportedSeries(imported.series, loadedStart, loadedEnd);
 
     this.dispatchEvent(
@@ -3036,7 +3092,7 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _positionEntityMenu(): void {
-    const trigger = this.renderRoot?.querySelector(".entity-trigger") as HTMLElement | null;
+    const trigger = this.renderRoot?.querySelector(".target-picker, .entity-trigger") as HTMLElement | null;
     const menu = this.renderRoot?.querySelector(".entity-menu") as HTMLElement | null;
     if (!trigger || !menu) return;
 
@@ -3132,22 +3188,10 @@ export class HaBetterHistory extends LitElement {
 
   private _onEntitySelected(entityId: string): void {
     this._selectingEntityForAttributeMenu = true;
-    const knownIds = new Set(this._pickerEntities().map((e) => e.entity_id));
-    if (!knownIds.has(entityId)) {
-      this._customEntityIds = [...this._customEntityIds, entityId];
-    }
-    this._selectedEntityId = entityId;
-    this._path = [];
-    this._attributeSearch = "";
     // Selecting an entity closes the HA picker overlay; ensure state stays in sync
     // even if `picker-closed` is not delivered.
     this._entityPickerOpen = false;
-    this._attributeMenuOpen = true;
-    if (this._browserHistoryEntry()?.layer === "entity-picker") {
-      this._replaceBrowserHistoryLayer("attribute-picker");
-    } else {
-      this._pushBrowserHistoryLayer("attribute-picker");
-    }
+    this._openAttributeMenu(entityId);
 
     queueMicrotask(() => {
       this._selectingEntityForAttributeMenu = false;
@@ -3159,18 +3203,117 @@ export class HaBetterHistory extends LitElement {
 
     this._entityPickerOpen = true;
     this._attributeMenuOpen = false;
-    this._pushBrowserHistoryLayer("entity-picker");
+    this._pushBrowserHistoryLayer("target-picker");
+    if (!this._targetPickerReady) {
+      void ensureTargetPicker().then((ready) => {
+        this._targetPickerReady = ready && customElements.get("ha-target-picker") !== undefined;
+        this._targetPickerLoadComplete = true;
+      });
+    }
   }
 
   private _onEntityPickerClosed(): void {
+    if (this._pendingAttributeEntityId) {
+      this._entityPickerOpen = false;
+      this._schedulePendingAttributeMenu();
+      return;
+    }
     if (this._selectingEntityForAttributeMenu) {
       this._entityPickerOpen = false;
       return;
     }
 
-    this._closeBrowserHistoryLayer("entity-picker", () => {
+    this._closeBrowserHistoryLayer("target-picker", () => {
       this._entityPickerOpen = false;
     });
+  }
+
+  private _openAttributeMenu(entityId: string): void {
+    const knownIds = new Set(this._pickerEntities().map((entity) => entity.entity_id));
+    if (!knownIds.has(entityId)) this._customEntityIds = [...this._customEntityIds, entityId];
+    this._selectedEntityId = entityId;
+    this._path = [];
+    this._attributeSearch = "";
+    this._attributeMenuOpen = true;
+    if (this._browserHistoryEntry()?.layer === "target-picker") {
+      this._replaceBrowserHistoryLayer("attribute-picker");
+    } else {
+      this._pushBrowserHistoryLayer("attribute-picker");
+    }
+  }
+
+  private _openPendingAttributeMenu(): boolean {
+    const entityId = this._pendingAttributeEntityId;
+    if (!entityId) return false;
+    this._pendingAttributeEntityId = undefined;
+    this._entityPickerOpen = false;
+    this._openAttributeMenu(entityId);
+    return true;
+  }
+
+  private _schedulePendingAttributeMenu(): void {
+    if (!this._pendingAttributeEntityId) return;
+    if (this._pendingAttributeOpenTimer !== undefined) clearTimeout(this._pendingAttributeOpenTimer);
+    this._pendingAttributeOpenTimer = setTimeout(() => {
+      this._pendingAttributeOpenTimer = undefined;
+      this._openPendingAttributeMenu();
+    }, ATTRIBUTE_HANDOFF_DELAY_MS);
+  }
+
+  private _onTargetSelectionChanged(value: unknown, openAddedEntityAttributes = true): void {
+    const previous = this._selectedTargets;
+    const nativeNext = normalizeTargetSelection(value as HistoryTargetSelection | null | undefined);
+    const previousExplicit = new Set(explicitTargetEntityIds(previous));
+    const nativeNextExplicit = explicitTargetEntityIds(nativeNext);
+    const addedExplicit = nativeNextExplicit.filter((entityId) => !previousExplicit.has(entityId));
+    const browseEntityId = openAddedEntityAttributes
+      && addedExplicit.length === 1
+      && !groupedTargetWasRemoved(previous, nativeNext)
+      ? addedExplicit[0]
+      : undefined;
+    const next = browseEntityId
+      ? normalizeTargetSelection({
+          ...nativeNext,
+          entity_id: nativeNextExplicit.filter((entityId) => entityId !== browseEntityId),
+        })
+      : nativeNext;
+    const nextExplicit = explicitTargetEntityIds(next);
+    const previousEffective = new Set(this.hass ? resolveTargetEntityIds(this.hass, previous) : []);
+    this._selectedTargets = next;
+    const entityIds = this.hass ? resolveTargetEntityIds(this.hass, next) : [];
+    const nextEffective = new Set(entityIds);
+
+    if (browseEntityId) {
+      this._pendingAttributeEntityId = browseEntityId;
+      this._schedulePendingAttributeMenu();
+    }
+    for (const entityId of nextExplicit.filter((id) => !previousExplicit.has(id))) {
+      if (openAddedEntityAttributes) continue;
+      const source = this.hass?.states[entityId] ? entityStateSource(this.hass.states[entityId]!) : undefined;
+      if (source) this._emitSeriesEvent("series-added", { source });
+    }
+    for (const entityId of explicitTargetEntityIds(previous)) {
+      if (!nextExplicit.includes(entityId) && previousEffective.has(entityId) && !nextEffective.has(entityId)) {
+        this._emitSeriesEvent("series-removed", { sourceId: `state:${entityId}` });
+      }
+    }
+    this.dispatchEvent(new CustomEvent("target-selection-changed", {
+      detail: { targets: next, entityIds },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private _setExplicitTargetEntity(entityId: string, selected: boolean, openAttributes = true): void {
+    const current = explicitTargetEntityIds(this._selectedTargets);
+    const entityIds = selected
+      ? [...new Set([...current, entityId])]
+      : current.filter((id) => id !== entityId);
+    this._onTargetSelectionChanged({ ...this._selectedTargets, entity_id: entityIds }, openAttributes);
+  }
+
+  private _emitSeriesEvent(name: "series-added" | "series-removed", detail: Record<string, unknown>): void {
+    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
   // When the attribute browser is open, swallow outside pointer/mouse events
@@ -3215,7 +3358,7 @@ export class HaBetterHistory extends LitElement {
     const menu = this.renderRoot?.querySelector(".entity-menu");
     if (menu && this._pathContainsElement(path, menu)) return true;
 
-    const trigger = this.renderRoot?.querySelector(".entity-trigger");
+    const trigger = this.renderRoot?.querySelector(".target-picker, .entity-trigger");
     if (trigger && this._pathContainsElement(path, trigger)) return true;
 
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
@@ -3233,7 +3376,10 @@ export class HaBetterHistory extends LitElement {
       const tag = el.localName;
       if (
         tag === "ha-generic-picker" ||
+        tag === "ha-target-picker" ||
         tag === "ha-combo-box" ||
+        tag === "ha-picker-combo-box" ||
+        tag === "wa-popover" ||
         tag === "vaadin-combo-box-overlay" ||
         tag === "mwc-menu-surface" ||
         tag === "md-menu"
@@ -3319,6 +3465,11 @@ export class HaBetterHistory extends LitElement {
       return;
     }
 
+    if (source.kind === "entity_state") {
+      this._setExplicitTargetEntity(source.entityId, true, false);
+      return;
+    }
+
     if (this._selectedSources.some((selected) => selected.id === source.id)) {
       return;
     }
@@ -3382,6 +3533,14 @@ export class HaBetterHistory extends LitElement {
           composed: true
         })
       );
+      return;
+    }
+
+    if (sourceId.startsWith("state:")) {
+      const entityId = sourceId.slice("state:".length);
+      if (explicitTargetEntityIds(this._selectedTargets).includes(entityId)) {
+        this._setExplicitTargetEntity(entityId, false);
+      }
       return;
     }
 

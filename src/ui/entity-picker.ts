@@ -5,6 +5,7 @@ import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { ResolvedConfig, ResolvedSeries } from "../types/config.js";
 import { ensureHaComponents } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
+import type { NormalizedHistoryTargetSelection } from "../data/targets.js";
 
 const ATTRIBUTE_SEARCH_DEPTH_LIMIT = 8;
 const ATTRIBUTE_SEARCH_RESULT_LIMIT = 50;
@@ -194,7 +195,7 @@ export async function preloadEntityPickerComponents(): Promise<void> {
   componentsLoaded = entityPickerAvailable();
 }
 
-interface EntityPickerRenderOpts {
+export interface EntityPickerRenderOpts {
   hass?: HomeAssistant;
   menuOpen: boolean;
   entityPickerOpen: boolean;
@@ -202,6 +203,11 @@ interface EntityPickerRenderOpts {
   entitySearch?: string;
   path: string[];
   selectedSources: HistorySource[];
+  targetSelection?: NormalizedHistoryTargetSelection;
+  targetPickerReady?: boolean;
+  disableTargetPickerWhileLoading?: boolean;
+  targetEntityIds?: string[];
+  explicitTargetEntityIds?: string[];
   draggingSourceId?: string;
   resolved?: ResolvedConfig;
   loading: boolean;
@@ -211,6 +217,9 @@ interface EntityPickerRenderOpts {
   onEntityPickerOpened(): void;
   onEntityPickerClosed(): void;
   onEntitySelected(entityId: string): void;
+  onTargetSelectionChanged?(value: unknown): void;
+  onEntityStateAdded?(entityId: string): void;
+  onEntityStateRemoved?(entityId: string): void;
   onEntitySearchChanged?(value: string): void;
   onAttributeSearchChanged(value: string): void;
   onSourceAdded(source: HistorySource): void;
@@ -263,10 +272,12 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
         @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
       >
-        ${opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
+        ${opts.targetPickerReady
+          ? renderNativeTargetPicker(opts)
+          : opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
         ${rowSources.map((source) => renderChip(source, opts))}
       </div>
-      ${opts.hideEmptyPickerState ? renderEmptyStateEntityMenu(opts) : nothing}
+      ${opts.hideEmptyPickerState && !opts.targetPickerReady ? renderEmptyStateEntityMenu(opts) : nothing}
       ${opts.loading
         ? html`
             <div class="history-loading-indicator" role="status" aria-label=${localize(opts.hass, "loading")}>
@@ -277,6 +288,36 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         : nothing}
       ${renderSourceSettingsPopup(opts)}
     </div>
+  `;
+}
+
+function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult {
+  if (!opts.disableTargetPickerWhileLoading) {
+    return html`
+      <ha-target-picker
+        class="target-picker"
+        .hass=${opts.hass}
+        .value=${opts.targetSelection ?? {}}
+        .compact=${true}
+        .addOnTop=${true}
+        @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
+          (event.detail as { value?: unknown } | undefined)?.value,
+        )}
+      ></ha-target-picker>
+    `;
+  }
+  return html`
+    <ha-target-picker
+      class="target-picker"
+      .hass=${opts.hass}
+      .value=${opts.targetSelection ?? {}}
+      .compact=${true}
+      .addOnTop=${true}
+      .disabled=${opts.loading}
+      @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
+        (event.detail as { value?: unknown } | undefined)?.value,
+      )}
+    ></ha-target-picker>
   `;
 }
 
@@ -636,7 +677,7 @@ function pickerRowSources(opts: EntityPickerRenderOpts): HistorySource[] {
     ...(opts.resolved?.series ?? [])
       .filter((series) => series.forced === false)
       .map(resolvedSeriesToPickerSource),
-    ...opts.selectedSources
+    ...opts.selectedSources.filter((source) => source.kind === "entity_attribute")
   ];
   const seen = new Set<string>();
   return sources.filter((source) => {
@@ -647,6 +688,7 @@ function pickerRowSources(opts: EntityPickerRenderOpts): HistorySource[] {
 }
 
 function isEntityAlreadyPresent(entityId: string, opts: EntityPickerRenderOpts): boolean {
+  if (opts.targetEntityIds?.includes(entityId)) return true;
   const inSelected = opts.selectedSources.some((s) => s.entityId === entityId);
   const inResolved = (opts.resolved?.series ?? []).some((s) => s.entity === entityId);
   return inSelected || inResolved;
@@ -670,6 +712,22 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   if (hasConflictingClimate(entity, opts)) {
     return html`
       <div class="entity-browser-entity entity-browser-entity--disabled">
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
+      </div>
+    `;
+  }
+
+  if (opts.explicitTargetEntityIds?.includes(entity.entity_id)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--removable" @click=${() => opts.onEntityStateRemoved?.(entity.entity_id)}>
+        <span class="entity-browser-entry-label">${entity.entity_id}</span>
+      </div>
+    `;
+  }
+
+  if (opts.targetEntityIds?.includes(entity.entity_id)) {
+    return html`
+      <div class="entity-browser-entity entity-browser-entity--present entity-browser-entity--forced">
         <span class="entity-browser-entry-label">${entity.entity_id}</span>
       </div>
     `;
@@ -708,7 +766,7 @@ function renderEntityHeader(entity: HassEntity, opts: EntityPickerRenderOpts): T
   }
 
   return html`
-    <div class="entity-browser-entity" @click=${() => opts.onSourceAdded(source)}>
+    <div class="entity-browser-entity" @click=${() => opts.onEntityStateAdded ? opts.onEntityStateAdded(entity.entity_id) : opts.onSourceAdded(source)}>
       <span class="entity-browser-entry-label">${entity.entity_id}</span>
     </div>
   `;

@@ -1,6 +1,6 @@
 {
   "name": "@kipk/ha-better-history",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Standalone web component for Home Assistant history charts.",
   "type": "module",
   "author": "@KipK",
@@ -46,6 +46,7 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "vite --config vite.config.dev.ts"
   },
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }
