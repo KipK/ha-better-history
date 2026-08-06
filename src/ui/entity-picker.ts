@@ -290,14 +290,23 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         ${renderBrowser(opts)}
       </div>
       <div
-        class="entity-picker-row"
+        class="entity-picker-row ${opts.targetPickerReady ? "entity-picker-row--native" : ""}"
         @dragover=${(e: DragEvent) => opts.onSourceDragOver(undefined, e)}
         @drop=${(e: DragEvent) => opts.onSourceDrop(undefined, e)}
       >
         ${opts.targetPickerReady
-          ? renderNativeTargetPicker(opts)
-          : opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
-        ${rowSources.map((source) => renderChip(source, opts))}
+          ? html`
+              ${renderNativeTargetPicker(opts)}
+              ${rowSources.length > 0
+                ? html`<div class="source-chip-row">
+                    ${rowSources.map((source) => renderChip(source, opts))}
+                  </div>`
+                : nothing}
+            `
+          : html`
+              ${opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
+              ${rowSources.map((source) => renderChip(source, opts))}
+            `}
       </div>
       ${opts.hideEmptyPickerState && !opts.targetPickerReady ? renderEmptyStateEntityMenu(opts) : nothing}
       ${opts.loading

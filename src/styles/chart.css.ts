@@ -954,6 +954,19 @@ export const chartStyles = css`
     max-width: 100%;
   }
 
+  .entity-picker-row--native {
+    display: block;
+  }
+
+  .source-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+  }
+
   .entity-trigger {
     flex: 0 0 auto;
     max-width: 100%;
@@ -962,9 +975,7 @@ export const chartStyles = css`
 
   .target-picker {
     display: block;
-    flex: 1 1 0;
     width: 100%;
-    min-width: 0;
     max-width: 100%;
     --ha-generic-picker-max-width: 400px;
   }
