@@ -96,6 +96,12 @@ All properties are camelCase in JS and kebab-case as HTML attributes (for boolea
 | `endDate`        | `Date`                | `undefined` | Upper bound (default: now)                    |
 | `attributeUnits` | `AttributeUnitMap`    | `undefined` | Map from attribute dot-paths to display units |
 
+### Runtime configuration snapshots
+
+Call `getRuntimeConfigSnapshot()` to capture the component's current configurable sources, visible range, runtime line mode, and imported-data marker. The returned `BetterHistoryRuntimeConfigSnapshot` is detached from component state and contains no historical points or network side effects.
+
+An unzoomed rolling window remains relative (`hours`); a fixed picker range or zoomed view becomes an absolute range matching the visible chart. Runtime target selections are resolved to concrete entity series. Series hidden temporarily through the legend remain present because legend visibility has no public configuration field. Axis overrides applied only to an auto-expanded climate child cannot be represented when there is no corresponding public series.
+
 If `endDate` is in the future, the component fetches and renders only up to the current time. The visible time axis then advances live until the requested end is reached, using current `hass.states` updates for entity and attribute points instead of refetching Home Assistant history for every update.
 
 ## `BetterHistoryConfig`

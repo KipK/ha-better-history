@@ -58,6 +58,8 @@ import {
   type NormalizedHistoryTargetSelection,
 } from "./data/targets.js";
 import { logPerformance, performanceNow } from "./utils/performance.js";
+import { buildRuntimeConfigSnapshot } from "./data/runtime-config-snapshot.js";
+import type { BetterHistoryRuntimeConfigSnapshot } from "./types/config.js";
 
 const SOURCE_ADD_BATCH_MS = 60;
 const LIVE_NOW_UPDATE_MS = 1000;
@@ -341,6 +343,26 @@ export class HaBetterHistory extends LitElement {
   private _graphMouseDrag?: GraphMouseDrag;
   private _graphTouchPointers = new Map<number, GraphPointerState>();
   private _graphTouchGesture?: GraphTouchGesture;
+
+  getRuntimeConfigSnapshot(): BetterHistoryRuntimeConfigSnapshot {
+    return buildRuntimeConfigSnapshot({
+      config: this.config,
+      entities: this.entities,
+      targetSources: this._targetSources(),
+      selectedSources: this._selectedSources,
+      pendingSources: this._pendingAddedSources,
+      removedConfigSourceIds: this._removedConfigSourceIds,
+      scalePreferences: this._scalePreferences,
+      rollingRelativeRange: this._usesRollingRelativeRange(),
+      viewRangeZoomed: this._isViewRangeZoomed(),
+      hours: this.config?.hours ?? this.hours ?? 24,
+      viewRange: this._effectiveViewRange(),
+      loadedRange: this._effectiveDateRange(),
+      runtimeLineMode: this._runtimeLineMode,
+      lineMode: this.lineMode,
+      importedData: this._importedDataActive,
+    });
+  }
 
   connectedCallback(): void {
     super.connectedCallback();

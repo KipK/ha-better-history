@@ -55,6 +55,24 @@ export interface BetterHistoryConfig {
   attributeUnits?: AttributeUnitMap;
 }
 
+export type BetterHistorySnapshotRange =
+  | {
+      mode: "relative";
+      hours: number;
+    }
+  | {
+      mode: "absolute";
+      startDate: Date;
+      endDate: Date;
+    };
+
+export interface BetterHistoryRuntimeConfigSnapshot {
+  series: SeriesConfig[];
+  range: BetterHistorySnapshotRange;
+  lineMode: BetterHistoryLineMode;
+  importedData: boolean;
+}
+
 export interface ResolvedSeries {
   id: string;
   entity: string;
