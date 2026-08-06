@@ -13,6 +13,7 @@ const HA_KEYS: Record<string, string> = {
 
 const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   en: {
+    select_attributes: "Select attributes",
     no_series: "No series configured",
     no_entity_selected: "No entity selected",
     error_timeout: "The request timed out. Please try again.",
@@ -37,6 +38,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   fr: {
+    select_attributes: "Sélectionner les attributs",
     no_series: "Aucune série configurée",
     no_entity_selected: "Aucune entité sélectionnée",
     error_timeout: "La requête a expiré. Veuillez réessayer.",
@@ -61,6 +63,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   cs: {
+    select_attributes: "Vybrat atributy",
     no_series: "Není nakonfigurována žádná série",
     no_entity_selected: "Nebyla vybrána žádná entita",
     error_timeout: "Požadavek vypršel. Zkuste to prosím znovu.",
@@ -79,6 +82,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   de: {
+    select_attributes: "Attribute auswählen",
     no_series: "Keine Serie konfiguriert",
     no_entity_selected: "Keine Entität ausgewählt",
     error_timeout: "Die Anfrage ist abgelaufen. Bitte erneut versuchen.",
@@ -103,6 +107,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   el: {
+    select_attributes: "Επιλογή χαρακτηριστικών",
     no_series: "Δεν έχει ρυθμιστεί σειρά",
     no_entity_selected: "Δεν έχει επιλεγεί οντότητα",
     error_timeout: "Το αίτημα έληξε χρονικά. Παρακαλώ δοκιμάστε ξανά.",
@@ -127,6 +132,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   it: {
+    select_attributes: "Seleziona attributi",
     no_series: "Nessuna serie configurata",
     no_entity_selected: "Nessuna entità selezionata",
     error_timeout: "La richiesta è scaduta. Riprova.",
@@ -151,6 +157,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   pl: {
+    select_attributes: "Wybierz atrybuty",
     no_series: "Nie skonfigurowano serii",
     no_entity_selected: "Nie wybrano encji",
     error_timeout: "Upłynął limit czasu żądania. Spróbuj ponownie.",
@@ -175,6 +182,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   ru: {
+    select_attributes: "Выбрать атрибуты",
     no_series: "Серии не настроены",
     no_entity_selected: "Сущность не выбрана",
     error_timeout: "Время ожидания запроса истекло. Повторите попытку.",
@@ -199,6 +207,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   sk: {
+    select_attributes: "Vybrať atribúty",
     no_series: "Nie je nakonfigurovaná žiadna séria",
     no_entity_selected: "Nie je vybraná žiadna entita",
     error_timeout: "Časový limit požiadavky vypršal. Skúste to znova.",

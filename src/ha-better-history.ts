@@ -103,6 +103,15 @@ interface BrowserHistoryEntry {
   layer: BrowserHistoryLayer;
 }
 
+interface ViewportRectSnapshot {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
 interface GraphAxisGutters {
   left: string;
   right: string;
@@ -301,6 +310,7 @@ export class HaBetterHistory extends LitElement {
   @state() private _draggingAxisSeriesId?: string;
   @state() private _axisDropTarget?: "left" | "right";
   @state() private _sourceSettingsSourceId?: string;
+  @state() private _entityActionsEntityId?: string;
   @state() private _pendingAddedSources: HistorySource[] = [];
 
   private readonly _data = new DataController(this);
@@ -319,6 +329,7 @@ export class HaBetterHistory extends LitElement {
   private _liveNowTimer?: ReturnType<typeof setInterval>;
   private _dragStartSourceIds?: string[];
   private _dragDropCommitted = false;
+  private _entityActionsAnchorRect?: ViewportRectSnapshot;
   private _lastPickerOverlayOpen = false;
   private _lastPointerDownInside = false;
   private _syncingBrowserHistory = false;
@@ -403,6 +414,7 @@ export class HaBetterHistory extends LitElement {
       clearTimeout(this._pendingAttributeOpenTimer);
       this._pendingAttributeOpenTimer = undefined;
     }
+    this._closeEntityActions();
     this._stopLiveClock();
   }
 
@@ -729,6 +741,7 @@ export class HaBetterHistory extends LitElement {
     this._entityPickerOpen = false;
     this._attributeSearch = "";
     this._sourceSettingsSourceId = undefined;
+    this._closeEntityActions();
   }
 
   private _closeDatePickerOverlay(): void {
@@ -1066,11 +1079,16 @@ export class HaBetterHistory extends LitElement {
     if (changed.has("_sourceSettingsSourceId") && this._sourceSettingsSourceId) {
       this._positionSourceSettingsPopover();
     }
+    if (changed.has("_entityActionsEntityId") && this._entityActionsEntityId) {
+      this._positionEntityActionsPopover();
+      this.renderRoot.querySelector<HTMLElement>(".entity-actions-item")?.focus();
+    }
     if (
       changed.has("_attributeMenuOpen") ||
       changed.has("_entityPickerOpen") ||
       changed.has("_datePickerOpen") ||
-      changed.has("_sourceSettingsSourceId")
+      changed.has("_sourceSettingsSourceId") ||
+      changed.has("_entityActionsEntityId")
     ) {
       this._emitPickerOverlayState();
     }
@@ -1082,7 +1100,11 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _emitPickerOverlayState(): void {
-    const open = this._datePickerOpen || this._attributeMenuOpen || this._entityPickerOpen || this._sourceSettingsSourceId !== undefined;
+    const open = this._datePickerOpen
+      || this._attributeMenuOpen
+      || this._entityPickerOpen
+      || this._sourceSettingsSourceId !== undefined
+      || this._entityActionsEntityId !== undefined;
     if (open === this._lastPickerOverlayOpen) return;
 
     this._lastPickerOverlayOpen = open;
@@ -2165,6 +2187,7 @@ export class HaBetterHistory extends LitElement {
       onEntityPickerClosed: () => this._onEntityPickerClosed(),
       onEntitySelected: (entityId) => this._onEntitySelected(entityId),
       onTargetSelectionChanged: (value) => this._onTargetSelectionChanged(value),
+      onEntityActionsOpen: (entityId, anchor, event) => this._openEntityActions(entityId, anchor, event),
       onEntityStateAdded: (entityId) => this._setExplicitTargetEntity(entityId, true, false),
       onEntityStateRemoved: (entityId) => this._setExplicitTargetEntity(entityId, false, false),
       onAttributeSearchChanged: (value) => { this._attributeSearch = value; },
@@ -2177,6 +2200,9 @@ export class HaBetterHistory extends LitElement {
       sourceSettingsSourceId: this._sourceSettingsSourceId,
       sourceSettingsUnit: this._sourceSettingsSource()?.unit,
       sourceSettingsGroup: this._sourceSettingsSource() ? sourceGroup(this._sourceSettingsSource()!) : undefined,
+      entityActionsEntityId: this._entityActionsEntityId,
+      onEntityActionsClose: () => this._closeEntityActions(),
+      onEntityAttributesSelect: () => this._selectAttributesFromEntityActions(),
       onSourceSettingsOpen: (source) => this._openSourceSettings(source),
       onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
       onSourceSettingsUnitChanged: (value) => {
@@ -3204,6 +3230,70 @@ export class HaBetterHistory extends LitElement {
     popover.style.top = `${topVp - originRect.top}px`;
   }
 
+  private _openEntityActions(entityId: string, anchor: HTMLElement, _event: MouseEvent): boolean {
+    if (!this.hass?.states[entityId]) return false;
+    if (!explicitTargetEntityIds(this._selectedTargets).includes(entityId)) return false;
+
+    const rect = anchor.getBoundingClientRect();
+    this._sourceSettingsSourceId = undefined;
+    this._entityActionsAnchorRect = {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+    this._entityActionsEntityId = entityId;
+    return true;
+  }
+
+  private _closeEntityActions(): void {
+    this._entityActionsEntityId = undefined;
+    this._entityActionsAnchorRect = undefined;
+  }
+
+  private _selectAttributesFromEntityActions(): void {
+    const entityId = this._entityActionsEntityId;
+    if (!entityId) return;
+
+    this._closeEntityActions();
+    this._openAttributeMenu(entityId);
+  }
+
+  private _positionEntityActionsPopover(): void {
+    const anchorRect = this._entityActionsAnchorRect;
+    const popover = this.renderRoot.querySelector<HTMLElement>("[data-entity-actions-popover]");
+    if (!anchorRect || !popover) return;
+
+    popover.style.top = "0";
+    popover.style.left = "0";
+    const originRect = popover.getBoundingClientRect();
+    const margin = 8;
+    const gap = 6;
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
+    const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+    const width = popover.offsetWidth;
+    const height = popover.offsetHeight;
+    const leftVp = Math.max(
+      viewportLeft + margin,
+      Math.min(anchorRect.left, viewportRight - margin - width),
+    );
+    const belowTop = anchorRect.bottom + gap;
+    const aboveTop = anchorRect.top - gap - height;
+    const preferredTop = belowTop + height <= viewportBottom - margin ? belowTop : aboveTop;
+    const topVp = Math.max(
+      viewportTop + margin,
+      Math.min(preferredTop, viewportBottom - margin - height),
+    );
+
+    popover.style.left = `${leftVp - originRect.left}px`;
+    popover.style.top = `${topVp - originRect.top}px`;
+  }
+
   private _closeAttributeMenu(): void {
     this._closeBrowserHistoryLayer("attribute-picker", () => this._closePickerOverlay());
   }
@@ -3302,6 +3392,9 @@ export class HaBetterHistory extends LitElement {
     const nextExplicit = explicitTargetEntityIds(next);
     const previousEffective = new Set(this.hass ? resolveTargetEntityIds(this.hass, previous) : []);
     this._selectedTargets = next;
+    if (this._entityActionsEntityId && !nextExplicit.includes(this._entityActionsEntityId)) {
+      this._closeEntityActions();
+    }
     const entityIds = this.hass ? resolveTargetEntityIds(this.hass, next) : [];
     const nextEffective = new Set(entityIds);
 
@@ -3344,14 +3437,14 @@ export class HaBetterHistory extends LitElement {
   // only meant to dismiss the attribute browser.
   private _handleDocumentPointerDown = (event: Event): void => {
     this._lastPointerDownInside = this._isEventInsideAttributeOverlay(event);
-    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId) return;
+    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId && !this._entityActionsEntityId) return;
     if (this._lastPointerDownInside) return;
     event.stopPropagation();
     event.stopImmediatePropagation();
   };
 
   private _handleDocumentClick = (event: Event): void => {
-    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId) {
+    if (!this._attributeMenuOpen && !this._sourceSettingsSourceId && !this._entityActionsEntityId) {
       this._lastPointerDownInside = false;
       return;
     }
@@ -3359,6 +3452,14 @@ export class HaBetterHistory extends LitElement {
     this._lastPointerDownInside = false;
     if (pointerWasInside) return;
     if (this._isEventInsideAttributeOverlay(event)) return;
+
+    if (this._entityActionsEntityId) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this._closeEntityActions();
+      return;
+    }
 
     if (this._sourceSettingsSourceId) {
       event.preventDefault();
@@ -3385,6 +3486,9 @@ export class HaBetterHistory extends LitElement {
 
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
     if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
+
+    const entityActionsPopover = this.renderRoot?.querySelector("[data-entity-actions-popover]");
+    if (entityActionsPopover && this._pathContainsElement(path, entityActionsPopover)) return true;
 
     if (this._sourceSettingsSourceId) {
       const chips = Array.from(this.renderRoot?.querySelectorAll(".source-chip") ?? []) as HTMLElement[];
@@ -3590,6 +3694,7 @@ export class HaBetterHistory extends LitElement {
 
   private _openSourceSettings(source: HistorySource): void {
     if (source.kind !== "entity_attribute" && source.kind !== "entity_state") return;
+    this._closeEntityActions();
     this._sourceSettingsSourceId = source.id;
   }
 

@@ -269,9 +269,11 @@ All events bubble and are composed.
 | `target-selection-changed` | `{ targets: NormalizedHistoryTargetSelection, entityIds: string[] }` | Native target selection changes; grouped changes do not emit a series-event burst |
 | `data-imported`          | `{ start: Date, end: Date, seriesCount: number }`  | A `ha-better-history-series-v1` JSON file is imported                 |
 | `tooltip-changed`        | `{ time: number, values: TooltipValue[] } \| null` | Pointer moves over chart (useful for syncing multiple charts)         |
-| `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, target picker, or attribute browser overlay opens/closes |
+| `picker-overlay-changed` | `{ open: boolean }`                                | Date picker, target picker, entity action menu, or attribute browser overlay opens/closes |
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
+
+When the native Home Assistant target picker is available, right-click a directly selected entity ribbon and choose **Select attributes** to reopen the existing attribute browser without removing the entity state. This action is limited to direct entity ribbons; device, area, floor, label, fallback-picker, and attribute ribbons keep their existing behavior.
 
 On touch screens, the tooltip is anchored away from the active finger position so values stay readable while scrubbing the chart.
 

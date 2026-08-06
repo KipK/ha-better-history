@@ -28,6 +28,24 @@ export interface EntityPickerComboBoxItem {
   search_labels: Record<string, string | null>;
 }
 
+export interface EntityTargetChip {
+  host: HTMLElement;
+  entityId: string;
+}
+
+export function entityTargetChipFromEvent(event: Pick<Event, "composedPath">): EntityTargetChip | undefined {
+  for (const target of event.composedPath()) {
+    if (!target || typeof target !== "object") continue;
+    const chip = target as { localName?: unknown; type?: unknown; itemId?: unknown };
+    if (chip.localName !== "ha-target-picker-value-chip") continue;
+    if (chip.type !== "entity" || typeof chip.itemId !== "string" || chip.itemId.trim() === "") {
+      return undefined;
+    }
+    return { host: target as HTMLElement, entityId: chip.itemId };
+  }
+  return undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -218,6 +236,7 @@ export interface EntityPickerRenderOpts {
   onEntityPickerClosed(): void;
   onEntitySelected(entityId: string): void;
   onTargetSelectionChanged?(value: unknown): void;
+  onEntityActionsOpen?(entityId: string, anchor: HTMLElement, event: MouseEvent): boolean;
   onEntityStateAdded?(entityId: string): void;
   onEntityStateRemoved?(entityId: string): void;
   onEntitySearchChanged?(value: string): void;
@@ -231,6 +250,9 @@ export interface EntityPickerRenderOpts {
   sourceSettingsSourceId?: string;
   sourceSettingsUnit?: string;
   sourceSettingsGroup?: string;
+  entityActionsEntityId?: string;
+  onEntityActionsClose?(): void;
+  onEntityAttributesSelect?(entityId: string): void;
   onSourceSettingsOpen(source: HistorySource, event: Event): void;
   onSourceSettingsClose(): void;
   onSourceSettingsUnitChanged(value: string): void;
@@ -287,11 +309,19 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
           `
         : nothing}
       ${renderSourceSettingsPopup(opts)}
+      ${renderEntityActionsPopover(opts)}
     </div>
   `;
 }
 
 function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult {
+  const onContextMenu = (event: MouseEvent): void => {
+    const chip = entityTargetChipFromEvent(event);
+    if (!chip || !opts.explicitTargetEntityIds?.includes(chip.entityId)) return;
+    if (!opts.onEntityActionsOpen?.(chip.entityId, chip.host, event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
   if (!opts.disableTargetPickerWhileLoading) {
     return html`
       <ha-target-picker
@@ -300,6 +330,7 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
         .value=${opts.targetSelection ?? {}}
         .compact=${true}
         .addOnTop=${true}
+        @contextmenu=${onContextMenu}
         @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
           (event.detail as { value?: unknown } | undefined)?.value,
         )}
@@ -314,6 +345,7 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
       .compact=${true}
       .addOnTop=${true}
       .disabled=${opts.loading}
+      @contextmenu=${onContextMenu}
       @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
         (event.detail as { value?: unknown } | undefined)?.value,
       )}
@@ -536,6 +568,33 @@ function renderSourceSettingsPopup(opts: EntityPickerRenderOpts): TemplateResult
       </label>
       <button class="source-settings-close" @click=${opts.onSourceSettingsClose}>
         ${localize(opts.hass, "done")}
+      </button>
+    </div>
+  `;
+}
+
+function renderEntityActionsPopover(opts: EntityPickerRenderOpts): TemplateResult | typeof nothing {
+  const entityId = opts.entityActionsEntityId;
+  if (!entityId) return nothing;
+
+  return html`
+    <div
+      class="entity-actions-popover"
+      data-entity-actions-popover
+      role="menu"
+      @click=${(event: Event) => event.stopPropagation()}
+      @pointerdown=${(event: Event) => event.stopPropagation()}
+      @keydown=${(event: KeyboardEvent) => {
+        event.stopPropagation();
+        if (event.key === "Escape") opts.onEntityActionsClose?.();
+      }}
+    >
+      <button
+        class="entity-actions-item"
+        role="menuitem"
+        @click=${() => opts.onEntityAttributesSelect?.(entityId)}
+      >
+        ${localize(opts.hass, "select_attributes")}
       </button>
     </div>
   `;

@@ -1233,6 +1233,41 @@ export const chartStyles = css`
     z-index: 110;
   }
 
+  .entity-actions-popover {
+    position: fixed;
+    top: -9999px;
+    left: -9999px;
+    min-width: max-content;
+    padding: 4px;
+    border: var(--wa-panel-border-width, 1px) var(--wa-panel-border-style, solid) var(--wa-color-surface-border, var(--divider-color, rgba(0, 0, 0, 0.12)));
+    border-radius: var(--better-history-radius, 8px);
+    background: var(--wa-color-surface-raised, var(--card-background-color, #fff));
+    box-shadow: var(--wa-shadow-m, var(--ha-box-shadow-m, 0 4px 8px rgba(0, 0, 0, 0.08)));
+    box-sizing: border-box;
+    z-index: 110;
+  }
+
+  .entity-actions-item {
+    display: block;
+    width: 100%;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: calc(var(--better-history-radius, 8px) - 2px);
+    background: transparent;
+    color: var(--wa-color-text-normal, var(--primary-text-color, #111));
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .entity-actions-item:hover,
+  .entity-actions-item:focus-visible {
+    background: color-mix(in srgb, var(--primary-text-color, #111) 10%, transparent);
+    outline: none;
+  }
+
   .source-settings-field {
     display: flex;
     flex-direction: column;
