@@ -277,6 +277,8 @@ When the native Home Assistant target picker is available, right-click a directl
 
 On touch screens, the tooltip is anchored away from the active finger position so values stay readable while scrubbing the chart.
 
+Selecting or cancelling a date range closes the native date picker while keeping the containing history dialog open. Restoring focus to the date field does not reopen the picker. Browser Back/Forward closes and reopens the date picker when Home Assistant does not already own the parent dialog's navigation; inside a native Home Assistant dialog, the date picker preserves that navigation instead of adding its own history entry.
+
 ## Default behaviour (no config)
 
 When both `config` and `entities` are undefined:

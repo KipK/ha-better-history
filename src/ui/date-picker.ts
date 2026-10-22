@@ -43,13 +43,7 @@ export function renderDatePicker(
   return html`
     <div
       class="date-picker-wrapper"
-      @focusin=${onOpen}
-      @pointerdown=${onOpen}
-      @keydown=${(event: KeyboardEvent) => {
-        if (event.key === "Escape") {
-          opts.onClose?.();
-        }
-      }}
+      @click=${onOpen}
     >
       <ha-date-range-picker
         .hass=${opts.hass}
@@ -57,6 +51,8 @@ export function renderDatePicker(
         .endDate=${opts.endDate}
         time-picker
         extended-presets
+        @wa-show=${onOpen}
+        @picker-closed=${() => opts.onClose?.()}
         @value-changed=${(event: CustomEvent) => {
           const detail = event.detail as {
             value?: { startDate?: unknown; endDate?: unknown };
@@ -67,7 +63,6 @@ export function renderDatePicker(
           const end = detail.value?.endDate ?? detail.endDate;
           if (start instanceof Date && end instanceof Date) {
             opts.onChange(start, end);
-            opts.onClose?.();
           }
         }}
       ></ha-date-range-picker>

@@ -333,6 +333,7 @@ export class HaBetterHistory extends LitElement {
   private _lastPickerOverlayOpen = false;
   private _lastPointerDownInside = false;
   private _syncingBrowserHistory = false;
+  private _datePickerHistoryClosing = false;
   private _selectingEntityForAttributeMenu = false;
   private _pendingAttributeEntityId?: string;
   private _pendingAttributeOpenTimer?: ReturnType<typeof setTimeout>;
@@ -401,6 +402,7 @@ export class HaBetterHistory extends LitElement {
     document.removeEventListener("pointerdown", this._handleDocumentPointerDown, true);
     document.removeEventListener("click", this._handleDocumentClick, true);
     window.removeEventListener("popstate", this._handleBrowserPopState);
+    this._datePickerHistoryClosing = false;
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     this._surfaceHeaderObserver?.disconnect();
@@ -704,6 +706,7 @@ export class HaBetterHistory extends LitElement {
   private readonly _handleBrowserPopState = (event: PopStateEvent): void => {
     const entry = this._browserHistoryEntry(event.state);
 
+    this._datePickerHistoryClosing = false;
     this._syncingBrowserHistory = true;
     try {
       if (!entry) {
@@ -721,6 +724,11 @@ export class HaBetterHistory extends LitElement {
     this._datePickerOpen = layer === "date-picker";
     this._entityPickerOpen = layer === "target-picker";
     this._attributeMenuOpen = layer === "attribute-picker";
+
+    if (layer === "date-picker") {
+      const picker = this.renderRoot.querySelector("ha-date-range-picker") as (HTMLElement & { open?: () => void }) | null;
+      picker?.open?.();
+    }
 
     if (layer !== "attribute-picker") {
       this._attributeSearch = "";
@@ -750,14 +758,10 @@ export class HaBetterHistory extends LitElement {
     this._datePickerOpen = false;
 
     const picker = this.renderRoot.querySelector("ha-date-range-picker") as HTMLElement | null;
-    picker?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    picker?.blur();
-
-    const root = this.getRootNode();
-    const active = root instanceof Document || root instanceof ShadowRoot
-      ? root.activeElement
-      : undefined;
-    if (active instanceof HTMLElement) active.blur();
+    // Use HA's cancellation event instead of Escape, which can dismiss a parent dialog.
+    picker?.shadowRoot?.querySelector("date-range-picker")?.dispatchEvent(
+      new Event("cancel-date-picker", { bubbles: true, composed: true })
+    );
   }
 
   private _effectiveLineMode(): BetterHistoryLineMode | undefined {
@@ -1135,14 +1139,28 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _onDatePickerOpened(): void {
-    if (this._datePickerOpen) return;
+    if (this._datePickerOpen || this._datePickerHistoryClosing) return;
 
     this._datePickerOpen = true;
+
+    const state = window.history.state;
+    // HA interprets these markers on popstate and can close the parent dialog.
+    if (typeof state === "object" && state !== null
+      && ("dialog" in state || "dialogData" in state || "opensDialog" in state)) return;
+
     this._pushBrowserHistoryLayer("date-picker");
   }
 
   private _onDatePickerClosed(): void {
-    this._closeBrowserHistoryLayer("date-picker", () => this._closeDatePickerOverlay());
+    if (!this._datePickerOpen) return;
+
+    // Consume the native close before the asynchronous history traversal.
+    this._datePickerOpen = false;
+    this._datePickerHistoryClosing = !this._syncingBrowserHistory
+      && this._browserHistoryEntry()?.layer === "date-picker";
+    if (this._datePickerHistoryClosing) {
+      window.history.back();
+    }
   }
 
   private _pickScaleGroup(source: HistorySource, existing: RenderableSeries[], aliasGraphKeys?: string[]): string {

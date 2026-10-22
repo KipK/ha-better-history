@@ -72,6 +72,7 @@ class MockDateRangePicker extends HTMLElement {
         bubbles: true,
         composed: true
       }));
+      this.dispatchEvent(new CustomEvent("picker-closed", { bubbles: true, composed: true }));
     };
     this._start!.addEventListener("change", emit);
     this._end!.addEventListener("change", emit);

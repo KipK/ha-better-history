@@ -51,12 +51,12 @@
     "dev": "vite --config vite.config.dev.ts"
   },
   "dependencies": {
-    "@kipk/load-ha-components": "^2.0.0",
+    "@kipk/load-ha-components": "^2.1.0",
     "lit": "^3.3.3"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
   }
 }
