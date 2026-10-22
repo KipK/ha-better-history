@@ -11,6 +11,7 @@ export interface SeriesConfig {
   label?: string;
   color?: string;
   unit?: string;
+  decimals?: number;
   group?: string;
   /** @deprecated Use `group` instead. */
   scaleGroup?: string;
@@ -81,6 +82,7 @@ export interface ResolvedSeries {
   label: string;
   color: string;
   unit?: string;
+  decimals?: number;
   scaleGroupKey: string;
   scaleMode: "auto" | "manual";
   scaleMin?: number;

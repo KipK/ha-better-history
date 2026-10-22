@@ -6,6 +6,7 @@ import type { HistoryValueType } from "./value-type.js";
 import { isAttributeTemperatureUnit, unitForAttributePath } from "./attribute-units.js";
 import { isSameTemperatureUnit, isTemperatureUnit } from "./temperature-units.js";
 import { isUnavailableState } from "./format.js";
+import { normalizeDecimals } from "./decimal-precision.js";
 
 export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
   return {
@@ -16,6 +17,7 @@ export function resolvedSeriesToSource(s: ResolvedSeries): HistorySource {
     path: s.attribute,
     valueType: s.valueType,
     unit: s.unit,
+    decimals: s.decimals,
     scalePreference: s.scalePreference
   };
 }
@@ -182,6 +184,7 @@ function seriesFromConfig(
     label: resolveLabel(hass, cfg.entity, attribute, cfg.label),
     color: cfg.color ?? paletteColor(index),
     unit,
+    decimals: normalizeDecimals(cfg.decimals),
     scaleGroupKey: scaleGroupKey(id, unit, scaleGroup, vt),
     scaleMode: cfg.scaleMode ?? "auto",
     scaleMin: cfg.scaleMin,

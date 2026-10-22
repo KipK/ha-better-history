@@ -13,6 +13,7 @@ const HA_KEYS: Record<string, string> = {
 
 const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   en: {
+    decimals: "Decimals",
     select_attributes: "Select attributes",
     no_series: "No series configured",
     no_entity_selected: "No entity selected",
@@ -38,6 +39,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   fr: {
+    decimals: "Décimales",
     select_attributes: "Sélectionner les attributs",
     no_series: "Aucune série configurée",
     no_entity_selected: "Aucune entité sélectionnée",
@@ -63,6 +65,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   cs: {
+    decimals: "Desetinná místa",
     select_attributes: "Vybrat atributy",
     no_series: "Není nakonfigurována žádná série",
     no_entity_selected: "Nebyla vybrána žádná entita",
@@ -82,6 +85,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   de: {
+    decimals: "Dezimalstellen",
     select_attributes: "Attribute auswählen",
     no_series: "Keine Serie konfiguriert",
     no_entity_selected: "Keine Entität ausgewählt",
@@ -107,6 +111,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   el: {
+    decimals: "Δεκαδικά ψηφία",
     select_attributes: "Επιλογή χαρακτηριστικών",
     no_series: "Δεν έχει ρυθμιστεί σειρά",
     no_entity_selected: "Δεν έχει επιλεγεί οντότητα",
@@ -132,6 +137,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   it: {
+    decimals: "Decimali",
     select_attributes: "Seleziona attributi",
     no_series: "Nessuna serie configurata",
     no_entity_selected: "Nessuna entità selezionata",
@@ -157,6 +163,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   pl: {
+    decimals: "Miejsca dziesiętne",
     select_attributes: "Wybierz atrybuty",
     no_series: "Nie skonfigurowano serii",
     no_entity_selected: "Nie wybrano encji",
@@ -182,6 +189,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   ru: {
+    decimals: "Знаки после запятой",
     select_attributes: "Выбрать атрибуты",
     no_series: "Серии не настроены",
     no_entity_selected: "Сущность не выбрана",
@@ -207,6 +215,7 @@ const CUSTOM_STRINGS: Record<string, Record<string, string>> = {
   },
 
   sk: {
+    decimals: "Desatinné miesta",
     select_attributes: "Vybrať atribúty",
     no_series: "Nie je nakonfigurovaná žiadna séria",
     no_entity_selected: "Nie je vybraná žiadna entita",

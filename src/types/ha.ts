@@ -8,6 +8,7 @@ export interface HassEntity {
 
 export interface HassEntityRegistryEntry {
   entity_id: string;
+  display_precision?: number;
   device_id?: string | null;
   area_id?: string | null;
   labels?: string[];
@@ -50,6 +51,7 @@ export interface HomeAssistant {
   language?: string;
   locale?: {
     language?: string;
+    number_format?: string;
   };
   localize?(key: string): string;
   callApi?<T>(method: string, path: string, parameters?: Record<string, unknown>): Promise<T>;

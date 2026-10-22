@@ -2,11 +2,13 @@ import { html, nothing, type TemplateResult } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { PLOT_LEFT, PLOT_RIGHT, PLOT_WIDTH, xFor } from "../render/chart.js";
 import type { HistorySeries } from "../data/history.js";
+import { formatNumericValue } from "../data/decimal-precision.js";
 
 export interface SyncedSeries {
   id: string;
   label: string;
   color: string;
+  decimals?: number;
 }
 
 export interface TooltipValue {
@@ -39,6 +41,7 @@ interface InternalSeries {
   id: string;
   label: string;
   color: string;
+  decimals?: number;
   points: TooltipPoint[];
 }
 
@@ -64,6 +67,7 @@ export class TooltipController implements ReactiveController {
   private _series: InternalSeries[] = [];
   private _fetchedRef?: HistorySeries[];
   private _cacheKey = "";
+  private _language?: string;
   private _frame?: number;
   private _pendingPoint?: PointerChartPoint;
   private _timeBounds = { start: 0, end: 1 };
@@ -106,9 +110,11 @@ export class TooltipController implements ReactiveController {
     fetched: HistorySeries[],
     hiddenIds: string[],
     _chartHeight: number,
-    timeBounds: { start: number; end: number }
+    timeBounds: { start: number; end: number },
+    language?: string,
   ): void {
     this._timeBounds = timeBounds;
+    this._language = language;
     this._rebuildCache(series, fetched, hiddenIds);
   }
 
@@ -117,7 +123,7 @@ export class TooltipController implements ReactiveController {
     fetched: HistorySeries[],
     hiddenIds: string[]
   ): void {
-    const key = `${fetched.map((s) => `${s.source.id}:${s.points.length}`).join("|")}::${hiddenIds.join("|")}`;
+    const key = JSON.stringify([series, hiddenIds, this._language, fetched.map((s) => s.points.length)]);
 
     if (this._fetchedRef === fetched && this._cacheKey === key) return;
 
@@ -129,8 +135,9 @@ export class TooltipController implements ReactiveController {
       .flatMap((s) => {
         const f = fetched.find((fs) => fs.source.id === s.id);
         if (!f || f.points.length === 0) return [];
-        return [{ id: s.id, label: s.label, color: s.color, points: f.points }];
+        return [{ id: s.id, label: s.label, color: s.color, decimals: s.decimals, points: f.points }];
       });
+    this._clear();
   }
 
   handlePointerMove(event: PointerEvent): void {
@@ -185,7 +192,7 @@ export class TooltipController implements ReactiveController {
     const selectedTime = selectedPoint.time;
     const values: TooltipValue[] = activeSeries.flatMap((s) => {
       const p = this._pointAtOrBefore(s.points, selectedTime);
-      return p ? [{ label: s.label, color: s.color, value: String(p.value) }] : [];
+      return p ? [{ label: s.label, color: s.color, value: formatNumericValue(p.value, s.decimals, this._language) }] : [];
     });
     const rowCount = values.length;
     const tooltipHeight = this._tooltipHeight(rowCount);

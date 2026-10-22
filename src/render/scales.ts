@@ -105,11 +105,9 @@ export function tickPrecision(ticks: number[]): number {
   let maxDecimals = 0;
 
   for (const t of ticks) {
-    const s = String(t);
-    const dot = s.indexOf(".");
-    if (dot !== -1) {
-      maxDecimals = Math.max(maxDecimals, s.length - dot - 1);
-    }
+    const [coefficient, exponent = "0"] = String(t).toLowerCase().split("e");
+    const decimals = coefficient.split(".")[1]?.length ?? 0;
+    maxDecimals = Math.max(maxDecimals, decimals - Number(exponent));
   }
 
   return maxDecimals;

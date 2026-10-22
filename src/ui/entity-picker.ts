@@ -250,7 +250,12 @@ export interface EntityPickerRenderOpts {
   sourceSettingsSourceId?: string;
   sourceSettingsUnit?: string;
   sourceSettingsGroup?: string;
+  sourceSettingsNumeric?: boolean;
+  sourceSettingsDecimals?: number;
+  onSourceSettingsDecimalsChanged?(value: string): void;
   entityActionsEntityId?: string;
+  entityActionsDecimals?: number;
+  onEntityDecimalsChanged?(entityId: string, value: string): void;
   onEntityActionsClose?(): void;
   onEntityAttributesSelect?(entityId: string): void;
   onSourceSettingsOpen(source: HistorySource, event: Event): void;
@@ -323,6 +328,8 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
   `;
 }
 
+const nativePresses = new WeakMap<EventTarget, { timer?: ReturnType<typeof setTimeout>; x: number; y: number; suppressClick: boolean }>();
+
 function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult {
   const onContextMenu = (event: MouseEvent): void => {
     const chip = entityTargetChipFromEvent(event);
@@ -330,6 +337,39 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
     if (!opts.onEntityActionsOpen?.(chip.entityId, chip.host, event)) return;
     event.preventDefault();
     event.stopPropagation();
+  };
+  const cancelPress = (event: PointerEvent): void => {
+    const press = event.currentTarget && nativePresses.get(event.currentTarget);
+    if (press?.timer !== undefined) clearTimeout(press.timer);
+  };
+  const onPointerDown = (event: PointerEvent): void => {
+    cancelPress(event);
+    if (event.button !== 0 || event.pointerType === "mouse") return;
+    const chip = entityTargetChipFromEvent(event);
+    const target = event.currentTarget;
+    if (!target || !chip || !opts.explicitTargetEntityIds?.includes(chip.entityId)) return;
+    const press = { x: event.clientX, y: event.clientY, suppressClick: false, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+    press.timer = setTimeout(() => {
+      press.timer = undefined;
+      if (!chip.host.isConnected) return;
+      press.suppressClick = opts.onEntityActionsOpen?.(chip.entityId, chip.host, event) === true;
+      setTimeout(() => { press.suppressClick = false; }, 1000);
+    }, 560);
+    nativePresses.set(target, press);
+  };
+  const onPointerMove = (event: PointerEvent): void => {
+    const press = event.currentTarget && nativePresses.get(event.currentTarget);
+    if (press && (Math.abs(event.clientX - press.x) > 8 || Math.abs(event.clientY - press.y) > 8)) cancelPress(event);
+  };
+  const onClick = {
+    capture: true,
+    handleEvent(event: Event): void {
+      const press = event.currentTarget && nativePresses.get(event.currentTarget);
+      if (!press?.suppressClick) return;
+      press.suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
   };
   if (!opts.disableTargetPickerWhileLoading) {
     return html`
@@ -340,6 +380,12 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
         .compact=${true}
         .addOnTop=${true}
         @contextmenu=${onContextMenu}
+        @pointerdown=${onPointerDown}
+        @pointermove=${onPointerMove}
+        @pointerup=${cancelPress}
+        @pointercancel=${cancelPress}
+        @pointerleave=${cancelPress}
+        @click=${onClick}
         @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
           (event.detail as { value?: unknown } | undefined)?.value,
         )}
@@ -355,6 +401,12 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
       .addOnTop=${true}
       .disabled=${opts.loading}
       @contextmenu=${onContextMenu}
+      @pointerdown=${onPointerDown}
+      @pointermove=${onPointerMove}
+      @pointerup=${cancelPress}
+      @pointercancel=${cancelPress}
+      @pointerleave=${cancelPress}
+      @click=${onClick}
       @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
         (event.detail as { value?: unknown } | undefined)?.value,
       )}
@@ -557,6 +609,9 @@ function renderSourceSettingsPopup(opts: EntityPickerRenderOpts): TemplateResult
         if (event.key === "Escape") opts.onSourceSettingsClose();
       }}
     >
+      ${opts.sourceSettingsNumeric
+        ? renderDecimalsField(opts, opts.sourceSettingsDecimals, (value) => opts.onSourceSettingsDecimalsChanged?.(value))
+        : nothing}
       <label class="source-settings-field">
         <span>${localize(opts.hass, "attribute_unit")}</span>
         <input
@@ -582,6 +637,27 @@ function renderSourceSettingsPopup(opts: EntityPickerRenderOpts): TemplateResult
   `;
 }
 
+function renderDecimalsField(opts: EntityPickerRenderOpts, decimals: number | undefined, onChange: (value: string) => void): TemplateResult {
+  return html`
+    <label class="source-settings-field">
+      <span>${localize(opts.hass, "decimals")}</span>
+      <input
+        class="source-settings-input"
+        type="number"
+        min="0"
+        max="20"
+        step="1"
+        .value=${decimals === undefined ? "" : String(decimals)}
+        placeholder=${localize(opts.hass, "attribute_unit_placeholder")}
+        @change=${(event: Event) => {
+          const input = event.target as HTMLInputElement;
+          if (input.validity.valid) onChange(input.value);
+        }}
+      />
+    </label>
+  `;
+}
+
 function renderEntityActionsPopover(opts: EntityPickerRenderOpts): TemplateResult | typeof nothing {
   const entityId = opts.entityActionsEntityId;
   if (!entityId) return nothing;
@@ -598,6 +674,9 @@ function renderEntityActionsPopover(opts: EntityPickerRenderOpts): TemplateResul
         if (event.key === "Escape") opts.onEntityActionsClose?.();
       }}
     >
+      ${opts.hass?.states[entityId] && entityStateSource(opts.hass.states[entityId]!)?.valueType === "number" && opts.onEntityDecimalsChanged
+        ? renderDecimalsField(opts, opts.entityActionsDecimals, (value) => opts.onEntityDecimalsChanged?.(entityId, value))
+        : nothing}
       <button
         class="entity-actions-item"
         role="menuitem"
@@ -605,6 +684,7 @@ function renderEntityActionsPopover(opts: EntityPickerRenderOpts): TemplateResul
       >
         ${localize(opts.hass, "select_attributes")}
       </button>
+      <button class="entity-actions-item" @click=${opts.onEntityActionsClose}>${localize(opts.hass, "done")}</button>
     </div>
   `;
 }

@@ -159,6 +159,7 @@ interface SeriesConfig {
   label?: string;                    // Legend label; default = friendly_name or attribute path
   color?: string;                    // CSS color; default = automatic palette
   unit?: string;                     // Override unit (for axis grouping and label)
+  decimals?: number;                 // Numeric tooltip decimals, integer 0–20; omit = automatic
 
   group?: string;                    // Series with same group share a graph
   scaleGroup?: string;               // Deprecated alias for group
@@ -171,6 +172,18 @@ interface SeriesConfig {
   pointRadius?: number;              // default: 2.5, clamped to 1–8
 }
 ```
+
+Numeric tooltip precision uses an explicit `decimals` override first, then the Home Assistant
+entity registry's `display_precision` for sensor states. Without either, values keep their full
+precision. Attributes never inherit their parent entity's precision. Numeric formatting follows
+the Home Assistant number-format preference. Clear the decimal field to return to automatic mode.
+
+Y-axis labels independently use the precision needed by their tick spacing and omit trailing zeros.
+Tick density adapts to graph height, with at least 36 pixels between displayed labels, while label
+gutters adapt to text width. Tooltip decimals do not change historical points, curve geometry, or
+scale bounds. Right-click or long-press runtime attribute chips or direct entity ribbons to edit
+decimals; explicit session overrides are included in runtime snapshots and dashboard YAML exports.
+History JSON export includes effective tooltip precision so imported data keeps its presentation.
 
 ## Attribute units
 

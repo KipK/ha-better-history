@@ -1,4 +1,5 @@
 import type { HistorySource } from "./history.js";
+import { normalizeDecimals } from "./decimal-precision.js";
 import type {
   BetterHistoryConfig,
   BetterHistoryLineMode,
@@ -62,6 +63,7 @@ function sourceToSeries(source: HistorySource): SeriesConfig {
     forced: true,
     label: source.label,
     ...(source.unit !== undefined ? { unit: source.unit } : {}),
+    ...(normalizeDecimals(source.decimals) !== undefined ? { decimals: source.decimals } : {}),
     ...(group !== undefined ? { group } : {}),
     ...(scalePreference ? { scalePreference } : {}),
   };

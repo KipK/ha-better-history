@@ -22,6 +22,7 @@ import {
 } from "../data/targets.js";
 import { ensureTargetPicker } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
+import { parseDecimals } from "../data/decimal-precision.js";
 
 const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
 const ATTRIBUTE_HANDOFF_DELAY_MS = 50;
@@ -435,7 +436,7 @@ export class SeriesPickerElement extends LitElement {
     this._sourceSettingsSourceId = source.id;
   }
 
-  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup">): void {
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup" | "decimals">): void {
     const sourceId = this._sourceSettingsSourceId;
     if (!sourceId) return;
 
@@ -542,6 +543,9 @@ export class SeriesPickerElement extends LitElement {
         sourceSettingsSourceId: this._sourceSettingsSourceId,
         sourceSettingsUnit: this._sourceSettingsSource()?.unit,
         sourceSettingsGroup: sourceGroup(this._sourceSettingsSource()),
+        sourceSettingsNumeric: this._sourceSettingsSource()?.valueType === "number",
+        sourceSettingsDecimals: this._sourceSettingsSource()?.decimals,
+        onSourceSettingsDecimalsChanged: (value) => this._updateSourceSettings({ decimals: parseDecimals(value) }),
         onSourceSettingsOpen: (source) => this._openSourceSettings(source),
         onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
         onSourceSettingsUnitChanged: (value) => {

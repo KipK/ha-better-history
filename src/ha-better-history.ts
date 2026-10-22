@@ -59,6 +59,7 @@ import {
 } from "./data/targets.js";
 import { logPerformance, performanceNow } from "./utils/performance.js";
 import { buildRuntimeConfigSnapshot } from "./data/runtime-config-snapshot.js";
+import { normalizeDecimals, numberFormatLanguage, parseDecimals, resolveDecimals } from "./data/decimal-precision.js";
 import type { BetterHistoryRuntimeConfigSnapshot } from "./types/config.js";
 
 const SOURCE_ADD_BATCH_MS = 60;
@@ -251,6 +252,7 @@ export class HaBetterHistory extends LitElement {
   static styles = chartStyles;
 
   @property({ attribute: false }) hass?: HomeAssistant;
+  @state() private _targetDecimals: Record<string, number> = {};
   @property({ attribute: false }) config?: BetterHistoryConfig;
   @property({ attribute: false }) entities?: string[];
   @property({ attribute: false }) attributeUnits?: AttributeUnitMap;
@@ -857,7 +859,10 @@ export class HaBetterHistory extends LitElement {
   }
 
   private _targetSources(): HistorySource[] {
-    return this.hass ? targetEntitySources(this.hass, this._selectedTargets) : [];
+    return this.hass ? targetEntitySources(this.hass, this._selectedTargets).map((source) => ({
+      ...source,
+      decimals: this._targetDecimals[source.entityId],
+    })) : [];
   }
 
   private _isDefaultSource(source: HistorySource): boolean {
@@ -1247,6 +1252,7 @@ export class HaBetterHistory extends LitElement {
       label: source.label,
       color: importedMeta?.color ?? (climateAttr ? CLIMATE_ATTR_COLORS[climateAttr] : undefined) ?? paletteColor(colorIndex),
       unit,
+      decimals: source.decimals,
       scaleGroupKey,
       scaleMode: "auto",
       scalePreference: this._effectiveScalePreference(source.id, source.scalePreference ?? importedMeta?.scalePreference),
@@ -1346,6 +1352,7 @@ export class HaBetterHistory extends LitElement {
           label: resolved.label,
           color: resolved.color,
           unit: resolved.unit,
+          decimals: resolved.decimals,
           scaleGroupKey: resolved.scaleGroupKey,
           scaleMode: resolved.scaleMode,
           scaleMin: resolved.scaleMin,
@@ -1419,6 +1426,7 @@ export class HaBetterHistory extends LitElement {
         source.label,
         source.color,
         source.unit ?? "",
+        source.decimals ?? "",
         source.scaleGroupKey,
         source.scaleMode,
         source.scaleMin ?? "",
@@ -1436,6 +1444,7 @@ export class HaBetterHistory extends LitElement {
           effectiveSource.label,
           effectiveSource.kind,
           effectiveSource.unit ?? "",
+          effectiveSource.decimals ?? "",
           sourceGroup(effectiveSource) ?? "",
           this._effectiveScalePreference(effectiveSource.id, effectiveSource.scalePreference),
           effectiveSource.valueType,
@@ -2130,7 +2139,12 @@ export class HaBetterHistory extends LitElement {
 
     if (hasData && showTooltip) {
       const tooltipSeries: SyncedSeries[] = groups.flatMap((group) =>
-        group.allSeries.map((s) => ({ id: s.id, label: s.label, color: s.color }))
+        group.allSeries.map((s) => ({
+          id: s.id,
+          label: s.label,
+          color: s.color,
+          decimals: resolveDecimals(this.hass, s.entity, s.id.startsWith("attr:"), s.decimals),
+        }))
       );
 
       this._tooltip.sync(
@@ -2138,7 +2152,8 @@ export class HaBetterHistory extends LitElement {
         this._data.series,
         this._hiddenSeriesIds,
         totalHeight,
-        chartData.timeBounds
+        chartData.timeBounds,
+        numberFormatLanguage(this.hass, this.language),
       );
     }
 
@@ -2218,11 +2233,18 @@ export class HaBetterHistory extends LitElement {
       sourceSettingsSourceId: this._sourceSettingsSourceId,
       sourceSettingsUnit: this._sourceSettingsSource()?.unit,
       sourceSettingsGroup: this._sourceSettingsSource() ? sourceGroup(this._sourceSettingsSource()!) : undefined,
+      sourceSettingsNumeric: this._sourceSettingsSource()?.valueType === "number",
+      sourceSettingsDecimals: this._sourceSettingsSource()?.decimals,
       entityActionsEntityId: this._entityActionsEntityId,
       onEntityActionsClose: () => this._closeEntityActions(),
       onEntityAttributesSelect: () => this._selectAttributesFromEntityActions(),
+      entityActionsDecimals: this._entityActionsEntityId ? this._targetDecimals[this._entityActionsEntityId] : undefined,
+      onEntityDecimalsChanged: this._activeResolvedSeries().some((source) => source.id === `state:${this._entityActionsEntityId}`)
+        ? undefined
+        : (entityId, value) => this._updateTargetDecimals(entityId, value),
       onSourceSettingsOpen: (source) => this._openSourceSettings(source),
       onSourceSettingsClose: () => { this._sourceSettingsSourceId = undefined; },
+      onSourceSettingsDecimalsChanged: (value) => this._updateSourceSettings({ decimals: parseDecimals(value) }),
       onSourceSettingsUnitChanged: (value) => {
         const unit = value.trim();
         this._updateSourceSettings({ unit: unit || undefined });
@@ -2788,6 +2810,7 @@ export class HaBetterHistory extends LitElement {
         attribute: item.id.startsWith("attr:") ? item.id.slice(5).split(":").slice(1).join(":") : undefined,
         label: item.label,
         unit: item.unit,
+        decimals: resolveDecimals(this.hass, item.entity, item.id.startsWith("attr:"), item.decimals),
         valueType: item.valueType,
         lineMode: item.lineMode,
         showPoints: item.showPoints,
@@ -2866,6 +2889,7 @@ export class HaBetterHistory extends LitElement {
     this._importedSeriesMeta = imported.meta;
     this._importedDataActive = true;
     this._importedSources = imported.series.map((item) => item.source);
+    this._targetDecimals = {};
     this._selectedSources = [];
     this._selectedTargets = {};
     this._removedConfigSourceIds = [];
@@ -2922,6 +2946,7 @@ export class HaBetterHistory extends LitElement {
         path: attribute?.split("."),
         valueType,
         unit: typeof record.unit === "string" ? record.unit : undefined,
+        decimals: normalizeDecimals(record.decimals),
         scalePreference: record.scalePreference === "primary" || record.scalePreference === "secondary" ? record.scalePreference : "auto"
       };
       const parsedPoints = points
@@ -3415,6 +3440,9 @@ export class HaBetterHistory extends LitElement {
     }
     const entityIds = this.hass ? resolveTargetEntityIds(this.hass, next) : [];
     const nextEffective = new Set(entityIds);
+    this._targetDecimals = Object.fromEntries(
+      Object.entries(this._targetDecimals).filter(([entityId]) => nextEffective.has(entityId)),
+    );
 
     if (browseEntityId) {
       this._pendingAttributeEntityId = browseEntityId;
@@ -3716,7 +3744,16 @@ export class HaBetterHistory extends LitElement {
     this._sourceSettingsSourceId = source.id;
   }
 
-  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup">): void {
+  private _updateTargetDecimals(entityId: string, value: string): void {
+    if (!explicitTargetEntityIds(this._selectedTargets).includes(entityId)) return;
+    const decimals = parseDecimals(value);
+    const next = { ...this._targetDecimals };
+    if (decimals === undefined) delete next[entityId];
+    else next[entityId] = decimals;
+    this._targetDecimals = next;
+  }
+
+  private _updateSourceSettings(patch: Pick<HistorySource, "unit" | "group" | "scaleGroup" | "decimals">): void {
     const sourceId = this._sourceSettingsSourceId;
     if (!sourceId) return;
 

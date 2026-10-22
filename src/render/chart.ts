@@ -15,6 +15,7 @@ export const PLOT_TOP = 18;
 export const SEGMENT_ROW_HEIGHT = 14;
 export const SEGMENT_HEIGHT = 9;
 export const X_AXIS_LABEL_SPACE = 16;
+const MIN_Y_LABEL_SPACING_PX = 36;
 
 export interface RenderableSeries {
   id: string;
@@ -22,6 +23,7 @@ export interface RenderableSeries {
   label: string;
   color: string;
   unit?: string;
+  decimals?: number;
   scaleGroupKey: string;
   scaleMode: "auto" | "manual";
   scaleMin?: number;
@@ -374,7 +376,7 @@ function buildYAxisLabels(scales: NumericScale[]): YAxisLabelRenderData[] {
 
     return scale.ticks.map((v) => ({
       y: scale.top + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
-      value: formatTickValue(v, scale.precision)
+      value: formatTickValue(v, tickPrecision(scale.ticks))
     }));
   });
 }
@@ -440,8 +442,9 @@ function toLinePath(
 }
 
 function formatTickValue(value: number, precision: number): string {
-  if (precision <= 0 && Number.isInteger(value)) return String(value);
-  return value.toFixed(precision);
+  const formatted = value.toFixed(Math.min(20, Math.max(0, precision)));
+  const compact = formatted.includes(".") ? formatted.replace(/\.?0+$/, "") : formatted;
+  return compact === "-0" ? "0" : compact;
 }
 
 const MINUTE = 60 * 1000;
@@ -776,24 +779,22 @@ function buildGroupSegments(
 }
 
 function yTickCount(graphHeight: number): number {
-  if (graphHeight >= 160) return 5;
-  if (graphHeight >= 100) return 4;
-  if (graphHeight >= 64) return 3;
-  return 2;
+  return Math.max(2, Math.min(5, Math.floor((graphHeight - 2 * PLOT_PADDING) / MIN_Y_LABEL_SPACING_PX) + 1));
 }
 
 function buildGroupYLabels(scale: NumericScale, graphHeight: number): YAxisLabelRenderData[] {
   const drawHeight = graphHeight - 2 * PLOT_PADDING;
   const desiredCount = yTickCount(graphHeight);
-  const ticks = scale.ticks.length <= desiredCount
-    ? scale.ticks
-    : computeNiceTicks(scale.min, scale.max, desiredCount);
+  const ticks = computeNiceTicks(scale.min, scale.max, desiredCount);
   const tickTolerance = Math.max(Math.abs(scale.max - scale.min), 1) * 1e-9;
   const visibleTicks = ticks.filter((v) => v >= scale.min - tickTolerance && v <= scale.max + tickTolerance);
-  const renderTicks = visibleTicks.length > 0 ? visibleTicks : [scale.min, scale.max];
-  const precision = scale.ticks === ticks
-    ? scale.precision
-    : Math.max(scale.precision, tickPrecision(renderTicks));
+  const candidates = visibleTicks.length > 0 ? visibleTicks : [scale.min, scale.max];
+  const spacing = candidates.length > 1
+    ? Math.abs(candidates[1] - candidates[0]) / (scale.max - scale.min) * drawHeight
+    : drawHeight;
+  const stride = Math.max(1, Math.ceil(MIN_Y_LABEL_SPACING_PX / Math.max(spacing, 1e-9)));
+  const renderTicks = candidates.filter((_, index) => index % stride === 0);
+  const precision = tickPrecision(renderTicks);
 
   return renderTicks.map((v) => ({
     y: GRAPH_TOP + PLOT_PADDING + drawHeight - ((v - scale.min) / (scale.max - scale.min)) * drawHeight,
