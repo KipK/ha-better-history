@@ -958,6 +958,10 @@ export const chartStyles = css`
     display: block;
   }
 
+  .entity-picker-row--native .target-chip-row {
+    margin-top: 6px;
+  }
+
   .source-chip-row {
     display: flex;
     flex-wrap: wrap;
@@ -1175,6 +1179,14 @@ export const chartStyles = css`
     border-color: var(--ha-color-amber-80, #ffb74d);
   }
 
+  .source-chip.group-target-chip {
+    border-color: var(--secondary-text-color, #888);
+  }
+
+  .group-target-chip .source-chip-icon {
+    background: color-mix(in srgb, var(--secondary-text-color, #888) 20%, transparent);
+  }
+
   .source-chip-icon {
     display: flex;
     align-items: center;
@@ -1220,6 +1232,11 @@ export const chartStyles = css`
     padding: 0;
     font-size: 12px;
     line-height: 1;
+  }
+
+  .source-chip-remove:disabled {
+    cursor: default;
+    opacity: 0.4;
   }
 
   .source-chip-remove:hover {

@@ -5,7 +5,15 @@ import type { HassEntity, HomeAssistant } from "../types/ha.js";
 import type { ResolvedConfig, ResolvedSeries } from "../types/config.js";
 import { ensureHaComponents } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
-import type { NormalizedHistoryTargetSelection } from "../data/targets.js";
+import {
+  mergeTargetSelection,
+  normalizeTargetSelection,
+  removeTargetFromSelection,
+  sameTargetSelection,
+  type HistoryTargetKey,
+  type HistoryTargetSelection,
+  type NormalizedHistoryTargetSelection,
+} from "../data/targets.js";
 
 const ATTRIBUTE_SEARCH_DEPTH_LIMIT = 8;
 const ATTRIBUTE_SEARCH_RESULT_LIMIT = 50;
@@ -36,12 +44,12 @@ export interface EntityTargetChip {
 export function entityTargetChipFromEvent(event: Pick<Event, "composedPath">): EntityTargetChip | undefined {
   for (const target of event.composedPath()) {
     if (!target || typeof target !== "object") continue;
-    const chip = target as { localName?: unknown; type?: unknown; itemId?: unknown };
-    if (chip.localName !== "ha-target-picker-value-chip") continue;
-    if (chip.type !== "entity" || typeof chip.itemId !== "string" || chip.itemId.trim() === "") {
+    const dataset = (target as { dataset?: { targetType?: unknown; targetId?: unknown } }).dataset;
+    if (!dataset || dataset.targetType === undefined) continue;
+    if (dataset.targetType !== "entity" || typeof dataset.targetId !== "string" || dataset.targetId.trim() === "") {
       return undefined;
     }
-    return { host: target as HTMLElement, entityId: chip.itemId };
+    return { host: target as HTMLElement, entityId: dataset.targetId };
   }
   return undefined;
 }
@@ -302,11 +310,7 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
         ${opts.targetPickerReady
           ? html`
               ${renderNativeTargetPicker(opts)}
-              ${rowSources.length > 0
-                ? html`<div class="source-chip-row">
-                    ${rowSources.map((source) => renderChip(source, opts))}
-                  </div>`
-                : nothing}
+              ${renderTargetChipRow(opts, rowSources)}
             `
           : html`
               ${opts.hideEmptyPickerState ? renderEmptyStateEntityTrigger(opts) : renderGenericEntityTrigger(opts)}
@@ -330,7 +334,94 @@ export function renderEntityPicker(opts: EntityPickerRenderOpts): TemplateResult
 
 const nativePresses = new WeakMap<EventTarget, { timer?: ReturnType<typeof setTimeout>; x: number; y: number; suppressClick: boolean }>();
 
-function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult {
+// The native picker only serves as the "Add target" control: HA 2026.9 removed its compact chip mode,
+// so selected targets are rendered as local chips and the picker always receives an empty value.
+const EMPTY_TARGET_VALUE: HistoryTargetSelection = Object.freeze({});
+
+const TARGET_CHIP_KEYS: readonly HistoryTargetKey[] = ["entity_id", "device_id", "area_id", "floor_id", "label_id"];
+
+const TARGET_CHIP_TYPES: Record<HistoryTargetKey, string> = {
+  entity_id: "entity",
+  device_id: "device",
+  area_id: "area",
+  floor_id: "floor",
+  label_id: "label",
+};
+
+interface TargetChipItem {
+  key: HistoryTargetKey;
+  id: string;
+  label: string;
+  secondary?: string;
+  icon: string;
+}
+
+function humanizeId(id: string): string {
+  return id.replace(/_/g, " ");
+}
+
+function targetChipItem(hass: HomeAssistant | undefined, key: HistoryTargetKey, id: string): TargetChipItem {
+  switch (key) {
+    case "entity_id": {
+      const entity = hass?.states[id];
+      return {
+        key, id,
+        label: entity ? entityLabel(entity) : id,
+        secondary: entity ? id : undefined,
+        icon: entity ? entityDomainIcon(entity) : "mdi:shape-outline",
+      };
+    }
+    case "device_id": {
+      const device = hass?.devices?.[id];
+      return { key, id, label: firstString(device?.name_by_user, device?.name) ?? id, icon: "mdi:devices" };
+    }
+    case "area_id": {
+      const area = hass?.areas?.[id];
+      return { key, id, label: firstString(area?.name) ?? humanizeId(id), icon: "mdi:texture-box" };
+    }
+    case "floor_id": {
+      const floor = hass?.floors?.[id];
+      return { key, id, label: firstString(floor?.name) ?? humanizeId(id), icon: "mdi:home-floor-1" };
+    }
+    case "label_id":
+      return { key, id, label: humanizeId(id), icon: "mdi:label-outline" };
+  }
+}
+
+function targetChipItems(opts: EntityPickerRenderOpts): TargetChipItem[] {
+  const selection = normalizeTargetSelection(opts.targetSelection);
+  return TARGET_CHIP_KEYS.flatMap((key) => (selection[key] ?? []).map((id) => targetChipItem(opts.hass, key, id)));
+}
+
+function renderTargetChip(item: TargetChipItem, opts: EntityPickerRenderOpts): TemplateResult {
+  const removeDisabled = Boolean(opts.disableTargetPickerWhileLoading && opts.loading);
+  const kindClass = item.key === "entity_id" ? "entity-source-chip" : "group-target-chip";
+  return html`
+    <div
+      class="source-chip target-chip ${kindClass}"
+      data-target-type=${TARGET_CHIP_TYPES[item.key]}
+      data-target-id=${item.id}
+      title=${item.secondary ?? item.label}
+    >
+      <span class="source-chip-icon"><ha-icon .icon=${item.icon}></ha-icon></span>
+      <span class="source-chip-label">${item.label}</span>
+      <button
+        class="source-chip-remove"
+        ?disabled=${removeDisabled}
+        @click=${(event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          opts.onTargetSelectionChanged?.(removeTargetFromSelection(opts.targetSelection, item.key, item.id));
+        }}
+      >&#x2715;</button>
+    </div>
+  `;
+}
+
+function renderTargetChipRow(opts: EntityPickerRenderOpts, rowSources: HistorySource[]): TemplateResult | typeof nothing {
+  const targets = targetChipItems(opts);
+  if (targets.length === 0 && rowSources.length === 0) return nothing;
+
   const onContextMenu = (event: MouseEvent): void => {
     const chip = entityTargetChipFromEvent(event);
     if (!chip || !opts.explicitTargetEntityIds?.includes(chip.entityId)) return;
@@ -371,35 +462,10 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
       event.stopPropagation();
     },
   };
-  if (!opts.disableTargetPickerWhileLoading) {
-    return html`
-      <ha-target-picker
-        class="target-picker"
-        .hass=${opts.hass}
-        .value=${opts.targetSelection ?? {}}
-        .compact=${true}
-        .addOnTop=${true}
-        @contextmenu=${onContextMenu}
-        @pointerdown=${onPointerDown}
-        @pointermove=${onPointerMove}
-        @pointerup=${cancelPress}
-        @pointercancel=${cancelPress}
-        @pointerleave=${cancelPress}
-        @click=${onClick}
-        @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
-          (event.detail as { value?: unknown } | undefined)?.value,
-        )}
-      ></ha-target-picker>
-    `;
-  }
+
   return html`
-    <ha-target-picker
-      class="target-picker"
-      .hass=${opts.hass}
-      .value=${opts.targetSelection ?? {}}
-      .compact=${true}
-      .addOnTop=${true}
-      .disabled=${opts.loading}
+    <div
+      class="source-chip-row target-chip-row"
       @contextmenu=${onContextMenu}
       @pointerdown=${onPointerDown}
       @pointermove=${onPointerMove}
@@ -407,9 +473,27 @@ function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult 
       @pointercancel=${cancelPress}
       @pointerleave=${cancelPress}
       @click=${onClick}
-      @value-changed=${(event: CustomEvent) => opts.onTargetSelectionChanged?.(
-        (event.detail as { value?: unknown } | undefined)?.value,
-      )}
+    >
+      ${targets.map((item) => renderTargetChip(item, opts))}
+      ${rowSources.map((source) => renderChip(source, opts))}
+    </div>
+  `;
+}
+
+function renderNativeTargetPicker(opts: EntityPickerRenderOpts): TemplateResult {
+  const onValueChanged = (event: CustomEvent): void => {
+    const added = (event.detail as { value?: unknown } | undefined)?.value as HistoryTargetSelection | null | undefined;
+    const next = mergeTargetSelection(opts.targetSelection, added);
+    if (sameTargetSelection(next, opts.targetSelection)) return;
+    opts.onTargetSelectionChanged?.(next);
+  };
+  return html`
+    <ha-target-picker
+      class="target-picker"
+      .hass=${opts.hass}
+      .value=${EMPTY_TARGET_VALUE}
+      .disabled=${Boolean(opts.disableTargetPickerWhileLoading && opts.loading)}
+      @value-changed=${onValueChanged}
     ></ha-target-picker>
   `;
 }

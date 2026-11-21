@@ -181,7 +181,7 @@ the Home Assistant number-format preference. Clear the decimal field to return t
 Y-axis labels independently use the precision needed by their tick spacing and omit trailing zeros.
 Tick density adapts to graph height, with at least 36 pixels between displayed labels, while label
 gutters adapt to text width. Tooltip decimals do not change historical points, curve geometry, or
-scale bounds. Right-click or long-press runtime attribute chips or direct entity ribbons to edit
+scale bounds. Right-click or long-press runtime attribute chips or direct entity chips to edit
 decimals; explicit session overrides are included in runtime snapshots and dashboard YAML exports.
 History JSON export includes effective tooltip precision so imported data keeps its presentation.
 
@@ -286,7 +286,7 @@ All events bubble and are composed.
 
 Legend toggles only keep visible series in the automatic numeric Y scale. Hidden numeric series remain available in the legend, but no longer stretch the scale for the displayed curves.
 
-When the native Home Assistant target picker is available, right-click a directly selected entity ribbon and choose **Select attributes** to reopen the existing attribute browser without removing the entity state. This action is limited to direct entity ribbons; device, area, floor, label, fallback-picker, and attribute ribbons keep their existing behavior.
+When the native Home Assistant target picker is available, right-click or long-press a directly selected entity chip and choose **Select attributes** to reopen the existing attribute browser without removing the entity state. This action is limited to direct entity chips; device, area, floor, label, fallback-picker, and attribute chips keep their existing behavior.
 
 On touch screens, the tooltip is anchored away from the active finger position so values stay readable while scrubbing the chart.
 
@@ -369,9 +369,9 @@ chart.config = {
 </script>
 ```
 
-The date picker, target picker, and attribute browser participate in browser history: Back closes the open overlay before leaving the current Home Assistant view, and Forward restores it when possible.
+The date picker, target picker, and attribute browser participate in browser history: Back closes the open overlay before leaving the current Home Assistant view, and Forward restores it when possible. Inside Home Assistant dialogs (for example the card editor preview), overlays add no history entries so Back and closing stay owned by the dialog.
 
-When `showEntityPicker` is enabled, recent Home Assistant versions provide their native target picker for entities, devices, areas, floors, and labels. Grouped targets stay grouped in the picker while the component resolves them locally to concrete entity-state series. If Home Assistant cannot load `ha-target-picker`, the existing entity-only picker remains available. Selecting exactly one direct entity uses it as an attribute-browser context rather than immediately adding its state: the state, attributes, or both are added only when explicitly selected in that browser. Grouped targets and their expansions remain effective state selections.
+When `showEntityPicker` is enabled, recent Home Assistant versions provide their native target picker for entities, devices, areas, floors, and labels. The native picker supplies the **Add target** button; selected targets are shown as removable chips below it, next to attribute chips. Grouped targets stay single chips while the component resolves them locally to concrete entity-state series. If Home Assistant cannot load `ha-target-picker`, the existing entity-only picker remains available. Selecting exactly one direct entity uses it as an attribute-browser context rather than immediately adding its state: the state, attributes, or both are added only when explicitly selected in that browser. Grouped targets and their expansions remain effective state selections.
 
 The attribute browser includes a local search field that finds top-level attributes, nested dotted paths, and primitive values inside attribute dictionaries. Attribute chips remain independent of target state selection. Non-default series are removable via chip buttons. Configured series are fixed by default; set `forced: false` on a `SeriesConfig` to show it as a removable chip in the graph picker. Selected attribute chips can be dragged to reorder user-added graphs without refetching history; the chip order previews while dragging and is restored if the drag is cancelled.
 

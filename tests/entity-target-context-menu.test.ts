@@ -8,9 +8,8 @@ function eventWithPath(...path: unknown[]): Pick<Event, "composedPath"> {
 
 function chip(type: string, itemId: unknown): HTMLElement {
   return {
-    localName: "ha-target-picker-value-chip",
-    type,
-    itemId,
+    localName: "div",
+    dataset: { targetType: type, targetId: itemId },
   } as unknown as HTMLElement;
 }
 
@@ -33,7 +32,7 @@ describe("entity target context-menu chip resolution", () => {
   });
 
   it("ignores a chip-like element with an incomplete contract", () => {
-    const incomplete = { localName: "ha-target-picker-value-chip", itemId: "sensor.kitchen" };
+    const incomplete = { localName: "div", dataset: { targetId: "sensor.kitchen" } };
 
     expect(entityTargetChipFromEvent(eventWithPath(incomplete))).toBeUndefined();
   });
@@ -43,7 +42,7 @@ describe("entity target context-menu chip resolution", () => {
 
     expect(entityTargetChipFromEvent(eventWithPath(
       { localName: "button" },
-      { localName: "wa-tag" },
+      { localName: "span", dataset: {} },
       host,
     ))?.host).toBe(host);
   });
@@ -60,6 +59,10 @@ function nativePicker(opts: EntityPickerRenderOpts): TemplateResult {
   return templates(renderEntityPicker(opts)).find((template) => template.strings.join("").includes("<ha-target-picker"))!;
 }
 
+function targetChipRow(opts: EntityPickerRenderOpts): TemplateResult {
+  return templates(renderEntityPicker(opts)).find((template) => template.strings.join("").includes("target-chip-row"))!;
+}
+
 function handler(template: TemplateResult, event: string): (value: unknown) => void {
   const index = template.strings.findIndex((part) => part.endsWith(`@${event}=`));
   return template.values[index] as (value: unknown) => void;
@@ -69,6 +72,7 @@ function options(): EntityPickerRenderOpts {
   const noop = () => {};
   return {
     menuOpen: false, entityPickerOpen: false, path: [], selectedSources: [], targetPickerReady: true,
+    targetSelection: { entity_id: ["sensor.room"] },
     explicitTargetEntityIds: ["sensor.room"], loading: false, attributeSearch: "", getItems: () => [], getAdditionalItems: () => [],
     onEntityPickerOpened: noop, onEntityPickerClosed: noop, onEntitySelected: noop, onAttributeSearchChanged: noop,
     onSourceAdded: noop, onSourceRemoved: noop, onSourceDragStart: noop, onSourceDragOver: noop, onSourceDragEnd: noop,
@@ -80,6 +84,30 @@ function options(): EntityPickerRenderOpts {
 
 afterEach(() => vi.useRealTimers());
 
+describe("native target picker add control", () => {
+  it("always receives an empty value and merges the picked target into the selection", () => {
+    const opts = { ...options(), onTargetSelectionChanged: vi.fn() };
+    const picker = nativePicker(opts);
+    const valueIndex = picker.strings.findIndex((part) => part.endsWith(".value="));
+    expect(picker.values[valueIndex]).toEqual({});
+    handler(picker, "value-changed")({ detail: { value: { area_id: "kitchen" } } });
+    expect(opts.onTargetSelectionChanged).toHaveBeenCalledWith({ entity_id: ["sensor.room"], area_id: ["kitchen"] });
+  });
+
+  it("ignores a pick that is already selected", () => {
+    const opts = { ...options(), onTargetSelectionChanged: vi.fn() };
+    handler(nativePicker(opts), "value-changed")({ detail: { value: { entity_id: "sensor.room" } } });
+    expect(opts.onTargetSelectionChanged).not.toHaveBeenCalled();
+  });
+
+  it("renders selected targets as local chips", () => {
+    const opts = { ...options(), targetSelection: { entity_id: ["sensor.room"], device_id: ["dev1"] } };
+    const row = targetChipRow(opts);
+    const chips = templates(row).filter((template) => template.strings.join("").includes("data-target-type="));
+    expect(chips.map((template) => template.values.slice(1, 3))).toEqual([["entity", "sensor.room"], ["device", "dev1"]]);
+  });
+});
+
 describe("native entity ribbon touch settings", () => {
   it("opens on long press, survives rerender, and consumes the following click", () => {
     vi.useFakeTimers();
@@ -90,10 +118,10 @@ describe("native entity ribbon touch settings", () => {
       ...eventWithPath(host), currentTarget: target, button: 0, pointerType: "touch", clientX: 10, clientY: 20,
       preventDefault: vi.fn(), stopPropagation: vi.fn(),
     };
-    handler(nativePicker(opts), "pointerdown")(event);
+    handler(targetChipRow(opts), "pointerdown")(event);
     vi.advanceTimersByTime(560);
     expect(opts.onEntityActionsOpen).toHaveBeenCalledWith("sensor.room", host, event);
-    const rerendered = nativePicker(opts);
+    const rerendered = targetChipRow(opts);
     const index = rerendered.strings.findIndex((part) => part.endsWith("@click="));
     const clickHandler = rerendered.values[index] as EventListenerObject & { capture: boolean };
     expect(clickHandler.capture).toBe(true);
@@ -109,8 +137,8 @@ describe("native entity ribbon touch settings", () => {
       ...eventWithPath({ ...chip("entity", "sensor.room"), isConnected: true }), currentTarget: {},
       button: 0, pointerType: "touch", clientX: 10, clientY: 20,
     };
-    handler(nativePicker(opts), "pointerdown")(event);
-    handler(nativePicker(opts), "pointermove")({ ...event, clientY: 40 });
+    handler(targetChipRow(opts), "pointerdown")(event);
+    handler(targetChipRow(opts), "pointermove")({ ...event, clientY: 40 });
     vi.advanceTimersByTime(1000);
     expect(opts.onEntityActionsOpen).not.toHaveBeenCalled();
   });

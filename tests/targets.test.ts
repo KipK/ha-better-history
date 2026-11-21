@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeTargetSelection,
   groupedTargetWasRemoved,
+  mergeTargetSelection,
+  removeTargetFromSelection,
+  sameTargetSelection,
   resolveTargetEntityIds,
   targetEntitySources,
 } from "../src/data/targets.js";
@@ -100,5 +103,22 @@ describe("history targets", () => {
       { device_id: "device-a" },
       { entity_id: ["sensor.device_a", "sensor.overlap"] },
     )).toBe(true);
+  });
+});
+
+describe("local target chip selection helpers", () => {
+  it("merges a picked target without duplicates", () => {
+    expect(mergeTargetSelection({ entity_id: ["sensor.a"] }, { entity_id: "sensor.a", area_id: ["kitchen"] }))
+      .toEqual({ entity_id: ["sensor.a"], area_id: ["kitchen"] });
+  });
+
+  it("removes one target and drops empty kinds", () => {
+    expect(removeTargetFromSelection({ entity_id: ["sensor.a"], area_id: ["kitchen"] }, "area_id", "kitchen"))
+      .toEqual({ entity_id: ["sensor.a"] });
+  });
+
+  it("compares normalized selections", () => {
+    expect(sameTargetSelection({ entity_id: "sensor.a" }, { entity_id: ["sensor.a"] })).toBe(true);
+    expect(sameTargetSelection({ entity_id: ["sensor.a"] }, { entity_id: ["sensor.b"] })).toBe(false);
   });
 });

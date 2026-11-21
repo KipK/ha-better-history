@@ -55,6 +55,40 @@ export function targetSelectionIsEmpty(value: HistoryTargetSelection | null | un
   return TARGET_KEYS.every((key) => normalizedValues(value?.[key]) === undefined);
 }
 
+export type HistoryTargetKey = typeof TARGET_KEYS[number];
+
+/** Adds `added` to `current`; the native picker reports only the new target because it always receives an empty value. */
+export function mergeTargetSelection(
+  current: HistoryTargetSelection | null | undefined,
+  added: HistoryTargetSelection | null | undefined,
+): NormalizedHistoryTargetSelection {
+  const base = normalizeTargetSelection(current);
+  const extra = normalizeTargetSelection(added);
+  const merged: HistoryTargetSelection = {};
+  for (const key of TARGET_KEYS) {
+    merged[key] = [...(base[key] ?? []), ...(extra[key] ?? [])];
+  }
+  return normalizeTargetSelection(merged);
+}
+
+export function removeTargetFromSelection(
+  current: HistoryTargetSelection | null | undefined,
+  key: HistoryTargetKey,
+  id: string,
+): NormalizedHistoryTargetSelection {
+  const normalized = normalizeTargetSelection(current);
+  return normalizeTargetSelection({ ...normalized, [key]: (normalized[key] ?? []).filter((item) => item !== id) });
+}
+
+export function sameTargetSelection(
+  left: HistoryTargetSelection | null | undefined,
+  right: HistoryTargetSelection | null | undefined,
+): boolean {
+  const a = normalizeTargetSelection(left);
+  const b = normalizeTargetSelection(right);
+  return TARGET_KEYS.every((key) => (a[key] ?? []).join("\n") === (b[key] ?? []).join("\n"));
+}
+
 export function explicitTargetEntityIds(value: HistoryTargetSelection | null | undefined): string[] {
   return normalizeTargetSelection(value).entity_id ?? [];
 }

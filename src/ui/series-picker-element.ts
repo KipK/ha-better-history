@@ -22,6 +22,7 @@ import {
 } from "../data/targets.js";
 import { ensureTargetPicker } from "../load-ha-components.js";
 import { localize } from "../localize/localize.js";
+import { haDialogOwnsHistory } from "./browser-history.js";
 import { parseDecimals } from "../data/decimal-precision.js";
 
 const BROWSER_HISTORY_STATE_KEY = "haBetterHistory";
@@ -158,6 +159,9 @@ export class SeriesPickerElement extends LitElement {
 
     const trigger = this.renderRoot?.querySelector(".target-picker, .entity-trigger");
     if (trigger && this._pathContainsElement(path, trigger)) return true;
+
+    const targetChips = Array.from(this.renderRoot?.querySelectorAll(".target-chip") ?? []);
+    if (targetChips.some((chip) => this._pathContainsElement(path, chip))) return true;
 
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
     if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
@@ -311,6 +315,7 @@ export class SeriesPickerElement extends LitElement {
     if (!this.browserHistory) return;
     if (this._syncingBrowserHistory) return;
     if (this._browserHistoryEntry()?.layer === layer) return;
+    if (haDialogOwnsHistory()) return;
 
     window.history.pushState(this._browserHistoryState(layer), "", window.location.href);
   }
@@ -318,6 +323,7 @@ export class SeriesPickerElement extends LitElement {
   private _replaceBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
     if (!this.browserHistory) return;
     if (this._syncingBrowserHistory) return;
+    if (haDialogOwnsHistory()) return;
 
     window.history.replaceState(this._browserHistoryState(layer), "", window.location.href);
   }

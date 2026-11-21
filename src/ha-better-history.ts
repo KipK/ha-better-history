@@ -39,6 +39,7 @@ import { isAttributeTemperatureUnit, unitForAttributePath } from "./data/attribu
 import { canonicalUnitKey, isSameTemperatureUnit, isTemperatureUnit } from "./data/temperature-units.js";
 import type { HassEntity, HomeAssistant } from "./types/ha.js";
 import { preloadDatePicker, renderDatePicker, datePickerAvailable } from "./ui/date-picker.js";
+import { haDialogOwnsHistory } from "./ui/browser-history.js";
 import {
   preloadEntityPickerComponents,
   entityPickerAvailable,
@@ -686,12 +687,14 @@ export class HaBetterHistory extends LitElement {
   private _pushBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
     if (this._syncingBrowserHistory) return;
     if (this._browserHistoryEntry()?.layer === layer) return;
+    if (haDialogOwnsHistory()) return;
 
     window.history.pushState(this._browserHistoryState(layer), "", window.location.href);
   }
 
   private _replaceBrowserHistoryLayer(layer: BrowserHistoryLayer): void {
     if (this._syncingBrowserHistory) return;
+    if (haDialogOwnsHistory()) return;
 
     window.history.replaceState(this._browserHistoryState(layer), "", window.location.href);
   }
@@ -1147,12 +1150,6 @@ export class HaBetterHistory extends LitElement {
     if (this._datePickerOpen || this._datePickerHistoryClosing) return;
 
     this._datePickerOpen = true;
-
-    const state = window.history.state;
-    // HA interprets these markers on popstate and can close the parent dialog.
-    if (typeof state === "object" && state !== null
-      && ("dialog" in state || "dialogData" in state || "opensDialog" in state)) return;
-
     this._pushBrowserHistoryLayer("date-picker");
   }
 
@@ -3529,6 +3526,9 @@ export class HaBetterHistory extends LitElement {
 
     const trigger = this.renderRoot?.querySelector(".target-picker, .entity-trigger");
     if (trigger && this._pathContainsElement(path, trigger)) return true;
+
+    const targetChips = Array.from(this.renderRoot?.querySelectorAll(".target-chip") ?? []);
+    if (targetChips.some((chip) => this._pathContainsElement(path, chip))) return true;
 
     const sourceSettingsPopover = this.renderRoot?.querySelector("[data-source-settings-popover]");
     if (sourceSettingsPopover && this._pathContainsElement(path, sourceSettingsPopover)) return true;
